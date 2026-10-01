@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareNames, comparePlayers, matchDedupeKey, mergeRecords, normalizeName, playersKey, suggestMerges } from "@/lib/matching/dedupe";
 import { createMatchesSchema, matchInputSchema, updateMatchSchema } from "@/lib/validation/match";
-import { settingsUpdateSchema } from "@/lib/validation/settings";
+import { SCAN_SPEED_THINKING, settingsUpdateSchema } from "@/lib/validation/settings";
 import { maskKey } from "@/lib/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, validateCandidate, type ScreenshotContext } from "@/lib/review/candidate";
 import type { SettingsDTO } from "@/lib/validation/settings";
@@ -70,6 +70,7 @@ const settings: SettingsDTO = {
   includeStatsInNotification: true,
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
+  scanSpeed: "fast",
   geminiKeySource: "none",
   geminiKeyHint: null,
 };
@@ -194,6 +195,12 @@ describe("API validation schemas", () => {
     expect(settingsUpdateSchema.safeParse({ geminiApiKey: "AIzaSyD-abcdéfghijklmnopqrstuvwxyz12345" }).success).toBe(false);
     expect(maskKey("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345")).toBe("…2345");
     expect(maskKey(null)).toBeNull();
+  });
+
+  it("validates the scan speed and maps it to a thinking level", () => {
+    expect(settingsUpdateSchema.safeParse({ scanSpeed: "fastest" }).success).toBe(true);
+    expect(settingsUpdateSchema.safeParse({ scanSpeed: "turbo" }).success).toBe(false);
+    expect(SCAN_SPEED_THINKING).toEqual({ fastest: "MINIMAL", fast: "LOW", careful: "MEDIUM" });
   });
 
   it("validates settings", () => {

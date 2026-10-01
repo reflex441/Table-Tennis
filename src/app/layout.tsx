@@ -34,6 +34,7 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   includeStatsInNotification: true,
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
+  scanSpeed: "fast",
   geminiKeySource: "none",
   geminiKeyHint: null,
 };

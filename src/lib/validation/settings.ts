@@ -39,12 +39,22 @@ export const settingsUpdateSchema = z
     includeStatsInNotification: z.boolean(),
     screenshotsAreToday: z.boolean(),
     screenshotTimesAreLocal: z.boolean(),
+    scanSpeed: z.enum(["fastest", "fast", "careful"]),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
   .partial();
 
 export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
+
+export type ScanSpeed = "fastest" | "fast" | "careful";
+
+/** How much Gemini "thinks" before answering, per scan speed. */
+export const SCAN_SPEED_THINKING: Record<ScanSpeed, "MINIMAL" | "LOW" | "MEDIUM"> = {
+  fastest: "MINIMAL",
+  fast: "LOW",
+  careful: "MEDIUM",
+};
 
 export interface SettingsDTO {
   defaultReminderMinutes: number;
@@ -57,6 +67,7 @@ export interface SettingsDTO {
   includeStatsInNotification: boolean;
   screenshotsAreToday: boolean;
   screenshotTimesAreLocal: boolean;
+  scanSpeed: ScanSpeed;
   /** Where the Gemini key comes from. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "env" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

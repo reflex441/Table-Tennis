@@ -21,6 +21,7 @@ const settings: SettingsDTO = {
   includeStatsInNotification: true,
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
+  scanSpeed: "fast",
   geminiKeySource: "settings",
   geminiKeyHint: "…0000",
 };

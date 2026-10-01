@@ -23,6 +23,7 @@ import {
 import { suggestMerges } from "@/lib/matching/dedupe";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { useBrowserTimeZone } from "@/components/useBrowserTimeZone";
+import { useNow } from "@/components/useNow";
 import type { SettingsDTO } from "@/lib/validation/settings";
 
 type Phase = "queued" | "uploading" | "uploaded" | "scanning" | "scanned" | "error";
@@ -35,6 +36,8 @@ interface UploadItem {
   phase: Phase;
   error: string | null;
   screenshot: ScreenshotDTO | null;
+  /** When the current Gemini scan started (for the elapsed-time counter). */
+  scanStartedAt?: number;
 }
 
 const ACCEPT = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"];
@@ -113,11 +116,25 @@ export function UploadReview() {
       try {
         const res = await uploadWithProgress<{ screenshot: ScreenshotDTO }>("/api/screenshots", form, (p) => patchItem(item.key, { progress: p }));
         patchItem(item.key, { phase: "uploaded", progress: 1, screenshot: res.screenshot });
+        return res.screenshot;
       } catch (err) {
         patchItem(item.key, { phase: "error", error: err instanceof Error ? err.message : String(err) });
+        return null;
       }
     },
     [patchItem],
+  );
+
+  // Scanning starts automatically after each upload (no extra click).
+  // A ref is used because scanOne is defined further down.
+  const scanOneRef = useRef<((item: UploadItem, force: boolean) => Promise<void>) | null>(null);
+  const autoScan = settings.geminiKeySource !== "none";
+  const uploadAndScan = useCallback(
+    async (item: UploadItem) => {
+      const shot = await uploadOne(item);
+      if (shot && autoScan && scanOneRef.current) await scanOneRef.current({ ...item, screenshot: shot }, false);
+    },
+    [uploadOne, autoScan],
   );
 
   const addFiles = useCallback(
@@ -135,9 +152,9 @@ export function UploadReview() {
         screenshot: null,
       }));
       setItems((prev) => [...prev, ...newItems]);
-      void runPool(newItems, UPLOAD_CONCURRENCY, uploadOne);
+      void runPool(newItems, UPLOAD_CONCURRENCY, uploadAndScan);
     },
-    [notify, uploadOne],
+    [notify, uploadAndScan],
   );
 
   // Paste screenshots straight from the clipboard.
@@ -173,7 +190,7 @@ export function UploadReview() {
         buildCandidates(shot);
         return;
       }
-      patchItem(item.key, { phase: "scanning", error: null });
+      patchItem(item.key, { phase: "scanning", error: null, scanStartedAt: Date.now() });
       try {
         const res = await api<{ screenshot: ScreenshotDTO }>(`/api/screenshots/${shot.id}/extract`, { method: "POST" });
         patchItem(item.key, { phase: "scanned", screenshot: res.screenshot });
@@ -184,6 +201,9 @@ export function UploadReview() {
     },
     [buildCandidates, patchItem],
   );
+  useEffect(() => {
+    scanOneRef.current = scanOne;
+  }, [scanOne]);
 
   const scanAll = async () => {
     const pending = items.filter((i) => i.phase === "uploaded" || (i.phase === "error" && i.screenshot));
@@ -481,7 +501,7 @@ export function UploadReview() {
                 <div className="flex flex-wrap items-center gap-2">
                   {item.phase === "scanning" ? (
                     <span className="flex items-center gap-1.5 text-sm text-accent">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Gemini is reading this screenshot…
+                      <Loader2 className="h-4 w-4 animate-spin" /> Gemini is reading this screenshot… <Elapsed since={item.scanStartedAt} />
                     </span>
                   ) : (
                     <span className="flex items-center gap-1.5 text-sm">
@@ -659,4 +679,11 @@ function CaptureTimeEditor({ item, timezone, onSave }: { item: UploadItem; timez
       <p className="mt-1 text-[11px] text-muted">Relative times like “Today” or “Starts in 45 minutes” are calculated from this capture time.</p>
     </div>
   );
+}
+
+/** Seconds since a scan started, updated every second. */
+function Elapsed({ since }: { since?: number }) {
+  const now = useNow();
+  if (!since || !now) return null;
+  return <span className="tabular text-xs text-muted">{Math.max(0, Math.round((now - since) / 1000))}s</span>;
 }

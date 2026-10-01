@@ -9,7 +9,7 @@ import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { listTimeZones } from "@/lib/format";
 import { useBrowserTimeZone } from "./useBrowserTimeZone";
-import type { SettingsUpdate } from "@/lib/validation/settings";
+import type { ScanSpeed, SettingsUpdate } from "@/lib/validation/settings";
 
 interface Health {
   database: boolean;
@@ -343,6 +343,12 @@ function Saving() {
   return <Loader2 className="ml-2 inline h-4 w-4 animate-spin text-muted" />;
 }
 
+const SPEEDS: { value: ScanSpeed; label: string; hint: string }[] = [
+  { value: "fastest", label: "Fastest", hint: "Least thinking - quickest scans" },
+  { value: "fast", label: "Fast (recommended)", hint: "Light thinking - quick and accurate" },
+  { value: "careful", label: "Careful", hint: "More thinking - slower, for tricky screenshots" },
+];
+
 /** Enter, test and remove the Gemini API key. The saved key is never sent back to the browser. */
 function GeminiKeySection() {
   const { settings, update } = useSettings();
@@ -457,6 +463,27 @@ function GeminiKeySection() {
         )}
         {result && <span className={`text-xs ${result.ok ? "text-over" : "text-under"}`}>{result.text}</span>}
       </div>
+      <div className="mt-4">
+        <span className="label">Scan speed</span>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Scan speed">
+          {SPEEDS.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              role="radio"
+              aria-checked={settings.scanSpeed === s.value}
+              onClick={() => void update({ scanSpeed: s.value })}
+              className={`rounded-lg border px-3 py-1.5 text-left text-xs ${
+                settings.scanSpeed === s.value ? "border-accent bg-accent/15 text-accent" : "border-line bg-bg text-muted hover:text-text"
+              }`}
+            >
+              <span className="block font-semibold">{s.label}</span>
+              <span className="block text-[11px] opacity-80">{s.hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <p className="mt-2 text-xs text-muted">
         The key is stored on your server and is never shown again after saving. A key saved here overrides GEMINI_API_KEY. Set APP_PASSWORD so strangers can&apos;t change it.
       </p>

@@ -239,6 +239,8 @@ model Settings {
   screenshotsAreToday        Boolean  @default(true)
   /// Times in screenshots are in `timezone`; timezone labels read from images are ignored.
   screenshotTimesAreLocal    Boolean  @default(true)
+  /// Scan speed vs care: "fastest" (minimal thinking), "fast" (low), "careful" (medium).
+  scanSpeed                  String   @default("fast")
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?

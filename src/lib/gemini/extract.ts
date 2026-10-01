@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type ThinkingLevel } from "@google/genai";
 import { EXTRACTION_JSON_SCHEMA, EXTRACTION_PROMPT } from "./schema";
 import { normalizeExtraction, parseModelJson } from "./normalize";
 import type { ExtractionResult } from "./types";
@@ -22,6 +22,12 @@ export interface ExtractOptions {
   model: string;
   /** Tried when `model` stays overloaded / rate-limited after retries. */
   fallbackModel?: string;
+  /**
+   * How much the model reasons before answering. Reading a screenshot is
+   * mostly transcription, so LOW is much faster than the default (MEDIUM)
+   * with little loss in accuracy.
+   */
+  thinkingLevel?: "MINIMAL" | "LOW" | "MEDIUM" | "HIGH";
   baseUrl?: string;
   image: Buffer;
   mimeType: string;
@@ -132,6 +138,7 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
         config: {
           responseMimeType: "application/json",
           responseJsonSchema: EXTRACTION_JSON_SCHEMA,
+          ...(opts.thinkingLevel ? { thinkingConfig: { thinkingLevel: opts.thinkingLevel as ThinkingLevel } } : {}),
           // Gemini 3.x is tuned for its default temperature (1.0); Google warns
           // that lower values can cause looping, so it is deliberately not set.
           abortSignal: AbortSignal.timeout(Math.min(opts.timeoutMs ?? 60_000, remaining)),

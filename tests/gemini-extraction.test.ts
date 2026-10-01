@@ -68,6 +68,15 @@ describe("extractFromScreenshot", () => {
     expect(out.warnings).toEqual([]);
   });
 
+  it("asks for less thinking when a thinking level is given (faster scans)", async () => {
+    generateContent.mockResolvedValue({ text: JSON.stringify(sample) });
+    await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", thinkingLevel: "LOW" });
+    expect(generateContent.mock.calls[0][0].config.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
+    generateContent.mockClear();
+    await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png" });
+    expect(generateContent.mock.calls[0][0].config.thinkingConfig).toBeUndefined();
+  });
+
   it("supports an injected client", async () => {
     const client = { models: { generateContent: vi.fn().mockResolvedValue({ text: JSON.stringify({ ...sample, matches: [] }) }) } };
     const out = await extractFromScreenshot({ apiKey: "", model: "m", image: IMAGE, mimeType: "image/jpeg", client: client as never });

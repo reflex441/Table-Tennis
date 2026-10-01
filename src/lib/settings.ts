@@ -42,6 +42,7 @@ export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
     includeStatsInNotification: s.includeStatsInNotification,
     screenshotsAreToday: s.screenshotsAreToday,
     screenshotTimesAreLocal: s.screenshotTimesAreLocal,
+    scanSpeed: s.scanSpeed === "fastest" || s.scanSpeed === "careful" ? s.scanSpeed : "fast",
     // Never include the key itself in this DTO: it is sent to the browser.
     geminiKeySource: s.geminiApiKey ? "settings" : envKey ? "env" : "none",
     geminiKeyHint: maskKey(s.geminiApiKey),
