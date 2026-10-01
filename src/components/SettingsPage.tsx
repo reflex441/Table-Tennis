@@ -344,7 +344,7 @@ function Saving() {
 }
 
 const SPEEDS: { value: ScanSpeed; label: string; hint: string }[] = [
-  { value: "fastest", label: "Fastest", hint: "Least thinking - quickest scans" },
+  { value: "fastest", label: "Fastest", hint: "Least thinking (uses Fast if the model doesn't support it)" },
   { value: "fast", label: "Fast (recommended)", hint: "Light thinking - quick and accurate" },
   { value: "careful", label: "Careful", hint: "More thinking - slower, for tricky screenshots" },
 ];

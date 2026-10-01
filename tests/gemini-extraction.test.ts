@@ -77,6 +77,27 @@ describe("extractFromScreenshot", () => {
     expect(generateContent.mock.calls[0][0].config.thinkingConfig).toBeUndefined();
   });
 
+  it("steps up the thinking level when a model rejects it (e.g. MINIMAL)", async () => {
+    const unsupported = (lvl: string) => Object.assign(new Error(`{"error":{"code":400,"message":"Thinking level ${lvl} is not supported for this model. Please retry with other thinking level.","status":"INVALID_ARGUMENT"}}`), { status: 400 });
+    generateContent.mockImplementation(async (req: { config: { thinkingConfig?: { thinkingLevel: string } } }) => {
+      const lvl = req.config.thinkingConfig?.thinkingLevel;
+      if (lvl === "MINIMAL" || lvl === "LOW") throw unsupported(lvl);
+      return { text: JSON.stringify(sample) };
+    });
+    const out = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", thinkingLevel: "MINIMAL", sleep: noWait });
+    expect(out.result.matches).toHaveLength(1);
+    expect(generateContent.mock.calls.map((c) => c[0].config.thinkingConfig?.thinkingLevel ?? "default")).toEqual(["MINIMAL", "LOW", "default"]);
+  });
+
+  it("does not blame the API key for other bad requests", async () => {
+    generateContent.mockRejectedValue(Object.assign(new Error("Request contains an invalid argument."), { status: 400 }));
+    const err = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
+    expect(err.message).not.toMatch(/API key/);
+    generateContent.mockRejectedValue(Object.assign(new Error("API key not valid. Please pass a valid API key."), { status: 400 }));
+    const err2 = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
+    expect(err2.message).toMatch(/check it in Settings/);
+  });
+
   it("supports an injected client", async () => {
     const client = { models: { generateContent: vi.fn().mockResolvedValue({ text: JSON.stringify({ ...sample, matches: [] }) }) } };
     const out = await extractFromScreenshot({ apiKey: "", model: "m", image: IMAGE, mimeType: "image/jpeg", client: client as never });

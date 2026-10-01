@@ -83,7 +83,8 @@ function friendlyMessage(status: number | undefined, raw: string, attempts: numb
   }
   if (status === undefined) return `Could not reach Gemini (network error or timeout). ${tried} Press Retry.`;
   if (status >= 500) return `Gemini had a server error (${status}). ${tried} Press Retry.`;
-  if (status === 400 || status === 401 || status === 403) return `Gemini rejected the request (${status}) - check the API key in Settings. ${raw}`;
+  if (status === 401 || status === 403 || /api key/i.test(raw)) return `Gemini rejected the API key (${status}) - check it in Settings. ${raw}`;
+  if (status === 400) return `Gemini rejected the request (400): ${raw}`;
   return `Gemini request failed (${status}): ${raw}`;
 }
 
@@ -116,13 +117,23 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
   let attempts = 0;
   const modelsTried: string[] = [];
 
-  for (const step of plan) {
+  // Not every model supports every thinking level (e.g. MINIMAL). If one is
+  // rejected, retry the same model straight away one level up.
+  type Level = NonNullable<ExtractOptions["thinkingLevel"]>;
+  const levelFor = new Map<string, Level | undefined>();
+  let i = 0;
+  let retrySameStep = false;
+  while (i < plan.length) {
+    const step = plan[i];
+    const delay = retrySameStep ? 0 : step.delayBeforeMs;
+    retrySameStep = false;
     const elapsed = Date.now() - started;
-    if (attempts > 0 && elapsed + step.delayBeforeMs + 5_000 > budgetMs) break;
-    if (step.delayBeforeMs) await wait(step.delayBeforeMs);
+    if (attempts > 0 && elapsed + delay + 5_000 > budgetMs) break;
+    if (delay) await wait(delay);
     attempts++;
     if (!modelsTried.includes(step.model)) modelsTried.push(step.model);
     const remaining = Math.max(5_000, budgetMs - (Date.now() - started));
+    const level = levelFor.has(step.model) ? levelFor.get(step.model) : opts.thinkingLevel;
     try {
       const response = await client.models.generateContent({
         model: step.model,
@@ -138,7 +149,7 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
         config: {
           responseMimeType: "application/json",
           responseJsonSchema: EXTRACTION_JSON_SCHEMA,
-          ...(opts.thinkingLevel ? { thinkingConfig: { thinkingLevel: opts.thinkingLevel as ThinkingLevel } } : {}),
+          ...(level ? { thinkingConfig: { thinkingLevel: level as ThinkingLevel } } : {}),
           // Gemini 3.x is tuned for its default temperature (1.0); Google warns
           // that lower values can cause looping, so it is deliberately not set.
           abortSignal: AbortSignal.timeout(Math.min(opts.timeoutMs ?? 60_000, remaining)),
@@ -151,10 +162,16 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
     } catch (err) {
       lastStatus = (err as { status?: number }).status;
       lastMessage = err instanceof Error ? err.message : String(err);
+      if (lastStatus === 400 && level && /thinking/i.test(lastMessage)) {
+        levelFor.set(step.model, level === "MINIMAL" ? "LOW" : undefined);
+        retrySameStep = true;
+        continue;
+      }
       if (!isRetryableStatus(lastStatus)) {
         throw new GeminiRequestError(friendlyMessage(lastStatus, lastMessage, attempts, modelsTried), false);
       }
     }
+    i++;
   }
 
   if (text === undefined) {
