@@ -9,7 +9,7 @@ import type { ExtractedMatch } from "@/lib/gemini/types";
 import { detectImageType } from "@/lib/screenshots";
 import { createSessionToken, verifySessionToken } from "@/lib/auth/session";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { registerSchema, safeNext } from "@/lib/validation/auth";
+import { registerSchema, safeNext, updateProfileSchema } from "@/lib/validation/auth";
 import { rateLimited } from "@/lib/auth/rate-limit";
 import { googleConfigured, looksLikeGoogleClientId } from "@/lib/auth/google";
 
@@ -265,6 +265,9 @@ describe("uploads and auth helpers", () => {
     expect(registerSchema.safeParse({ name: "Will", email: "not-an-email", password: "longenough" }).success).toBe(false);
     expect(registerSchema.safeParse({ name: "Will", email: "will@example.com", password: "short" }).success).toBe(false);
     expect(registerSchema.safeParse({ name: "", email: "will@example.com", password: "longenough" }).success).toBe(false);
+    expect(updateProfileSchema.parse({ name: "  New Name " })).toEqual({ name: "New Name" });
+    expect(updateProfileSchema.safeParse({ name: "   " }).success).toBe(false);
+    expect(updateProfileSchema.safeParse({ name: "x".repeat(41) }).success).toBe(false);
     expect(safeNext("/profit")).toBe("/profit");
     expect(safeNext("//evil.example")).toBe("/");
     expect(safeNext("https://evil.example")).toBe("/");

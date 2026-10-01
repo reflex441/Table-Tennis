@@ -16,7 +16,7 @@ import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 import { deleteBet, updateBet } from "@/lib/bets/service";
 import { listBetRows } from "@/lib/bets/queries";
 import { summarize } from "@/lib/bets/profit";
-import { authenticate, registerUser, signInWithGoogle } from "@/lib/auth/accounts";
+import { authenticate, registerUser, signInWithGoogle, updateDisplayName } from "@/lib/auth/accounts";
 import { getMatch, listMatches } from "@/lib/alarms/queries";
 import { deleteMatch } from "@/lib/alarms/service";
 import { getLeaderboard } from "@/lib/leaderboard";
@@ -293,7 +293,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(inApp).toEqual([{ userId }]); // Bob turned in-app notifications off
   });
 
-  it("ranks accounts by units and ROI with a minimum number of settled bets", async () => {
+  it("ranks everyone by units, and by ROI only with enough settled bets", async () => {
     const mk = async (email: string, name: string) => (await prisma.user.create({ data: { email, name } })).id;
     const ann = await mk("ann@example.com", "Ann");
     const ben = await mk("ben@example.com", "Ben");
@@ -322,14 +322,30 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await bets(cat, [{ stake: 1, profit: 50, result: "WON" }, { stake: 1, profit: 50, result: "WON" }]);
 
     const board = await getLeaderboard(prisma, { currentUserId: cat, minBets: 3 });
-    expect(board.byProfit.map((r) => [r.name, r.profit, r.rank])).toEqual([["Ben", 4, 1], ["Ann", 3, 2]]);
+    // Units: no minimum, so Cat (2 bets) leads. ROI: only accounts with enough bets.
+    expect(board.byProfit.map((r) => [r.name, r.profit, r.rank])).toEqual([["Cat", 100, 1], ["Ben", 4, 2], ["Ann", 3, 3]]);
     expect(board.byRoi.map((r) => [r.name, r.roi])).toEqual([["Ann", 30], ["Ben", 20]]);
-    expect(board.me).toMatchObject({ name: "Cat", bets: 2, rankProfit: null, hidden: false });
+    expect(board.me).toMatchObject({ name: "Cat", bets: 2, rankProfit: 1, rankRoi: null, hidden: false });
     expect(JSON.stringify(board)).not.toContain("@example.com");
+
+    // Emails in LEADERBOARD_ALWAYS_SHOW are ranked by ROI below the minimum (others still need it).
+    process.env.LEADERBOARD_ALWAYS_SHOW = "someone@else.com, CAT@example.com";
+    try {
+      const withCat = await getLeaderboard(prisma, { currentUserId: cat, minBets: 3 });
+      expect(withCat.byRoi.map((r) => r.name)).toEqual(["Cat", "Ann", "Ben"]);
+      expect(withCat.me).toMatchObject({ rankProfit: 1, rankRoi: 1 });
+      expect(JSON.stringify(withCat)).not.toContain("@example.com");
+    } finally {
+      delete process.env.LEADERBOARD_ALWAYS_SHOW;
+    }
+
+    // A new display name shows on the leaderboard straight away.
+    await updateDisplayName(prisma, ben, "  Benny  ");
+    expect((await getLeaderboard(prisma, { currentUserId: cat, minBets: 3 })).byProfit[1].name).toBe("Benny");
 
     // Opting out hides the account; filtering by play type uses only those bets.
     await updateSettings(prisma, ben, { showOnLeaderboard: false });
-    expect((await getLeaderboard(prisma, { currentUserId: ann, minBets: 3 })).byProfit.map((r) => r.name)).toEqual(["Ann"]);
+    expect((await getLeaderboard(prisma, { currentUserId: ann, minBets: 3 })).byProfit.map((r) => r.name)).toEqual(["Cat", "Ann"]);
     expect((await getLeaderboard(prisma, { currentUserId: ann, minBets: 1, playType: "PERSONAL" })).byProfit.map((r) => r.name)).toEqual(["Ann"]);
     expect((await getLeaderboard(prisma, { currentUserId: ann })).minBets).toBe(100);
   });

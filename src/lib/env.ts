@@ -21,6 +21,8 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   /** Public URL of the app, e.g. https://tt.example.com (used for the Google redirect URL). */
   APP_URL: z.string().optional().default(""),
+  /** Comma-separated emails ranked on the leaderboard even below the 100-bet minimum. */
+  LEADERBOARD_ALWAYS_SHOW: z.string().optional().default(""),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

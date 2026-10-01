@@ -2,7 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
 import { round2 } from "@/lib/bets/profit";
 
-/** Accounts need this many settled bets to be ranked. */
+/** Accounts need this many settled bets to be ranked by ROI (the units ranking has no minimum). */
 export const LEADERBOARD_MIN_BETS = 100;
 
 export interface LeaderboardRow {
@@ -28,7 +28,17 @@ export interface Leaderboard {
   me: (LeaderboardRow & { rankProfit: number | null; rankRoi: number | null; hidden: boolean }) | null;
 }
 
-type RawRow = { userId: string; name: string; bets: number; won: number; lost: number; staked: number | null; profit: number | null; visible: boolean };
+/** Emails always ranked by ROI, even below the minimum (LEADERBOARD_ALWAYS_SHOW, comma-separated). */
+export function alwaysShownEmails(): Set<string> {
+  return new Set(
+    (process.env.LEADERBOARD_ALWAYS_SHOW ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+type RawRow = { userId: string; name: string; email: string; bets: number; won: number; lost: number; staked: number | null; profit: number | null; visible: boolean };
 
 function toRow(r: RawRow): LeaderboardRow {
   const staked = round2(Number(r.staked ?? 0));
@@ -48,9 +58,10 @@ function toRow(r: RawRow): LeaderboardRow {
 }
 
 /**
- * Rank accounts by units profited and by ROI. Only settled bets count, only
- * accounts with at least `minBets` of them are ranked, and accounts that
- * turned off "Show me on the leaderboard" are left out.
+ * Rank accounts by units profited (no minimum) and by ROI (at least `minBets`
+ * settled bets, except emails listed in LEADERBOARD_ALWAYS_SHOW). Only settled
+ * bets count, and accounts that turned off "Show me on the leaderboard" are
+ * left out.
  */
 export async function getLeaderboard(
   prisma: PrismaClient,
@@ -61,6 +72,7 @@ export async function getLeaderboard(
   const raw = await prisma.$queryRaw<RawRow[]>(Prisma.sql`
     SELECT u."id" AS "userId",
            u."name" AS "name",
+           u."email" AS "email",
            COUNT(*)::int AS "bets",
            COUNT(*) FILTER (WHERE b."result" = 'WON')::int AS "won",
            COUNT(*) FILTER (WHERE b."result" = 'LOST')::int AS "lost",
@@ -72,15 +84,19 @@ export async function getLeaderboard(
       JOIN "User" u ON u."id" = m."userId"
       LEFT JOIN "Settings" s ON s."userId" = u."id"
      WHERE b."result" <> 'PENDING' AND b."profit" IS NOT NULL ${typeFilter}
-     GROUP BY u."id", u."name"`);
+     GROUP BY u."id", u."name", u."email"`);
 
-  const rows = raw.map((r) => ({ ...toRow(r), visible: r.visible }));
-  const ranked = rows.filter((r) => r.visible && r.bets >= minBets);
+  const always = alwaysShownEmails();
+  // Emails are only used here and never leave this function.
+  const rows = raw.map((r) => ({ ...toRow(r), visible: r.visible, exempt: always.has(r.email.toLowerCase()) }));
+  const visible = rows.filter((r) => r.visible);
+  // Units: everyone with a settled bet. ROI: only with enough bets to mean something.
+  const roiEligible = visible.filter((r) => r.bets >= minBets || r.exempt);
   const limit = opts.limit ?? 50;
-  const strip = ({ visible, ...r }: (typeof rows)[number]) => (void visible, r);
+  const strip = ({ visible, exempt, ...r }: (typeof rows)[number]) => (void visible, void exempt, r);
 
-  const byProfit = [...ranked].sort((a, b) => b.profit - a.profit || b.bets - a.bets).map((r, i) => ({ ...strip(r), rank: i + 1 }));
-  const byRoi = [...ranked]
+  const byProfit = [...visible].sort((a, b) => b.profit - a.profit || b.bets - a.bets).map((r, i) => ({ ...strip(r), rank: i + 1 }));
+  const byRoi = [...roiEligible]
     .filter((r) => r.roi !== null)
     .sort((a, b) => b.roi! - a.roi! || b.bets - a.bets)
     .map((r, i) => ({ ...strip(r), rank: i + 1 }));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle } from "lucide-react";
 import { startSiren, unlockAudio } from "@/lib/siren";
 import { useSettings } from "./SettingsProvider";
@@ -733,14 +734,41 @@ function ModelFields({ available }: { available: string[] }) {
 /** Who is signed in, leaderboard visibility and sign out. */
 function AccountSection() {
   const { settings, update } = useSettings();
+  const router = useRouter();
   const [user, setUser] = useState<PublicUser | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void api<{ user: PublicUser | null }>("/api/auth/me").then((r) => !cancelled && setUser(r.user)).catch(() => {});
+    void api<{ user: PublicUser | null }>("/api/auth/me")
+      .then((r) => {
+        if (cancelled || !r.user) return;
+        setUser(r.user);
+        setName(r.user.name);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const saveName = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await api<{ user: PublicUser }>("/api/auth/me", { method: "PATCH", json: { name } });
+      setUser(res.user);
+      setName(res.user.name);
+      setMsg({ ok: true, text: "Display name saved." });
+      router.refresh(); // update the name in the account menu
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Section title="Account">
       {user && (
@@ -749,6 +777,25 @@ function AccountSection() {
           {user.hasGoogle && <span className="ml-2 chip bg-line text-muted">Google</span>}
         </p>
       )}
+      {user && (
+        <form
+          className="mt-3 flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveName();
+          }}
+        >
+          <label className="min-w-[12rem] flex-1">
+            <span className="label">Display name</span>
+            <input className="input" aria-label="Display name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <button type="submit" className="btn-primary" disabled={busy || !name.trim() || name.trim() === user.name}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
+          </button>
+          {msg && <span className={`w-full text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</span>}
+        </form>
+      )}
+      <p className="mt-1 text-xs text-muted">Shown in the app and on the leaderboard. Your email is never shown to others.</p>
       <Toggle
         label="Show me on the leaderboard"
         hint="Only your display name and your results are shown - never your email."

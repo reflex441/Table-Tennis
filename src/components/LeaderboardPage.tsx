@@ -8,6 +8,7 @@ import { formatUnits } from "@/lib/bets/profit";
 
 type Type = "ALL" | "BOT" | "PERSONAL";
 
+const betsLabel = (n: number) => `${n} bet${n === 1 ? "" : "s"}`;
 const pct = (n: number | null) => (n === null ? "–" : `${n > 0 ? "+" : ""}${n}%`);
 
 /** Rankings across all accounts: most units profited and highest ROI. */
@@ -21,7 +22,9 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Leaderboard</h1>
-          <p className="text-sm text-muted">Accounts with at least {board.minBets} settled bets. Results in units, so different unit sizes compare fairly.</p>
+          <p className="text-sm text-muted">
+            Units ranking: everyone with a settled bet. ROI ranking: at least {board.minBets} settled bets. Results in units, so different unit sizes compare fairly.
+          </p>
         </div>
         <div className="flex rounded-lg border border-line bg-panel p-0.5 text-xs" role="radiogroup" aria-label="Play type">
           {(
@@ -54,7 +57,7 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
               <span className={`tabular font-semibold ${me.profit > 0 ? "text-over" : me.profit < 0 ? "text-under" : ""}`}>{formatUnits(me.profit)}</span>
               <span className="text-muted"> · ROI </span>
               <span className="tabular font-semibold">{pct(me.roi)}</span>
-              <span className="text-muted"> · {me.bets} bets</span>
+              <span className="text-muted"> · {betsLabel(me.bets)}</span>
             </span>
             {me.hidden ? (
               <span className="text-muted">
@@ -64,16 +67,20 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
                 </Link>
                 )
               </span>
-            ) : me.bets < board.minBets ? (
-              <span className="flex items-center gap-2 text-muted">
-                <span className="h-1.5 w-28 overflow-hidden rounded-full bg-line">
-                  <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (me.bets / board.minBets) * 100)}%` }} />
-                </span>
-                {board.minBets - me.bets} more settled bets to be ranked
-              </span>
             ) : (
-              <span className="text-muted">
-                #{me.rankProfit} for units · #{me.rankRoi ?? "–"} for ROI
+              <span className="flex flex-wrap items-center gap-2 text-muted">
+                <span>#{me.rankProfit ?? "–"} for units</span>
+                <span>·</span>
+                {me.rankRoi !== null ? (
+                  <span>#{me.rankRoi} for ROI</span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <span className="h-1.5 w-28 overflow-hidden rounded-full bg-line">
+                      <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (me.bets / board.minBets) * 100)}%` }} />
+                    </span>
+                    {Math.max(0, board.minBets - me.bets)} more settled bets to be ranked for ROI
+                  </span>
+                )}
               </span>
             )}
           </>
@@ -88,7 +95,7 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
           currentUserId={currentUserId}
           primary={(r) => <span className={`tabular font-semibold ${r.profit > 0 ? "text-over" : r.profit < 0 ? "text-under" : ""}`}>{formatUnits(r.profit)}</span>}
           secondary={(r) => `ROI ${pct(r.roi)}`}
-          minBets={board.minBets}
+          empty="No settled bets yet."
         />
         <Board
           title="Highest ROI"
@@ -97,7 +104,7 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
           currentUserId={currentUserId}
           primary={(r) => <span className={`tabular font-semibold ${(r.roi ?? 0) > 0 ? "text-over" : (r.roi ?? 0) < 0 ? "text-under" : ""}`}>{pct(r.roi)}</span>}
           secondary={(r) => formatUnits(r.profit)}
-          minBets={board.minBets}
+          empty={`Nobody has ${board.minBets} settled bets yet.`}
         />
       </div>
     </div>
@@ -111,7 +118,7 @@ function Board({
   currentUserId,
   primary,
   secondary,
-  minBets,
+  empty,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -119,7 +126,7 @@ function Board({
   currentUserId: string;
   primary: (r: LeaderboardRow) => React.ReactNode;
   secondary: (r: LeaderboardRow) => string;
-  minBets: number;
+  empty: string;
 }) {
   return (
     <section className="card overflow-hidden">
@@ -127,7 +134,7 @@ function Board({
         {icon} {title}
       </h2>
       {rows.length === 0 ? (
-        <p className="px-3 py-8 text-center text-sm text-muted">Nobody has {minBets} settled bets yet.</p>
+        <p className="px-3 py-8 text-center text-sm text-muted">{empty}</p>
       ) : (
         <ol className="divide-y divide-line">
           {rows.map((r) => (
@@ -141,7 +148,7 @@ function Board({
                   {r.userId === currentUserId && <span className="ml-1.5 chip bg-accent/20 text-accent">You</span>}
                 </span>
                 <span className="block text-[11px] text-muted">
-                  {r.bets} bets · {r.won}W-{r.lost}L{r.winRate !== null ? ` · ${r.winRate}%` : ""}
+                  {betsLabel(r.bets)} · {r.won}W-{r.lost}L{r.winRate !== null ? ` · ${r.winRate}%` : ""}
                 </span>
               </span>
               <span className="text-right">

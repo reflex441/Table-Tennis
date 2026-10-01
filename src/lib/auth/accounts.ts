@@ -15,6 +15,11 @@ export function toPublicUser(u: User): PublicUser {
   return { id: u.id, email: u.email, name: u.name, hasPassword: Boolean(u.passwordHash), hasGoogle: Boolean(u.googleId) };
 }
 
+/** Change the display name shown in the app and on the leaderboard. */
+export async function updateDisplayName(prisma: PrismaClient, userId: string, name: string): Promise<User> {
+  return prisma.user.update({ where: { id: userId }, data: { name: name.trim() } });
+}
+
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 /**

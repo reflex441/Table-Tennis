@@ -3,8 +3,12 @@ import { z } from "zod";
 export const emailSchema = z.string().trim().max(200).pipe(z.email("Enter a valid email address"));
 export const passwordSchema = z.string().min(8, "Use at least 8 characters").max(200, "Too long");
 
+export const displayNameSchema = z.string().trim().min(1, "Enter a display name").max(40, "At most 40 characters");
+
+export const updateProfileSchema = z.object({ name: displayNameSchema });
+
 export const registerSchema = z.object({
-  name: z.string().trim().min(1, "Enter a display name").max(40, "At most 40 characters"),
+  name: displayNameSchema,
   email: emailSchema,
   password: passwordSchema,
 });
