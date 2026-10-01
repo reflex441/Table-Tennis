@@ -141,6 +141,7 @@ export async function updateMatch(prisma: PrismaClient, id: string, input: Updat
         lastError: null,
         triggeredAt: null,
         completedAt: null,
+        ...CLEAR_RINGING,
       };
     } else {
       // Cancelled/completed alarms keep their status; just store the new timing.
@@ -186,9 +187,9 @@ export async function changeAlarmState(prisma: PrismaClient, matchId: string, ac
   let data: Prisma.AlarmUpdateInput;
   if (action === "cancel") {
     if (alarm.status === "CANCELLED") return match;
-    data = { status: "CANCELLED", cancelledAt: now, lockedAt: null, generation: { increment: 1 } };
+    data = { status: "CANCELLED", cancelledAt: now, lockedAt: null, generation: { increment: 1 }, nextRepeatAt: null };
   } else if (action === "complete") {
-    data = { status: "COMPLETED", completedAt: now, lockedAt: null };
+    data = { status: "COMPLETED", completedAt: now, lockedAt: null, nextRepeatAt: null };
   } else {
     const check = checkSchedule(match.startsAt, alarm.reminderMinutes, now);
     if (!check.ok) throw new ServiceError(`Cannot reactivate: ${check.reason}`, 422, "invalid_time");
@@ -203,10 +204,38 @@ export async function changeAlarmState(prisma: PrismaClient, matchId: string, ac
       cancelledAt: null,
       triggeredAt: null,
       completedAt: null,
+      ...CLEAR_RINGING,
     };
   }
   await prisma.alarm.update({ where: { id: alarm.id }, data });
   return (await prisma.match.findUnique({ where: { id: matchId }, include: matchInclude }))!;
+}
+
+/** A rescheduled alarm rings again, so any earlier confirmation is cleared. */
+const CLEAR_RINGING = { ackAt: null, ackAction: null, nextRepeatAt: null, repeatCount: 0 } as const;
+
+/**
+ * The user confirmed a ringing alarm ("I've placed the bet" or "Skip"):
+ * stops the in-app siren and the repeated notifications on every device.
+ */
+export async function acknowledgeAlarm(prisma: PrismaClient, alarmId: string, action: "placed" | "skipped", now = new Date()): Promise<MatchWithRelations> {
+  const alarm = await prisma.alarm.findUnique({ where: { id: alarmId }, select: { matchId: true, ackAt: true } });
+  if (!alarm) throw new ServiceError("Alarm not found.", 404, "not_found");
+  if (!alarm.ackAt) {
+    await prisma.alarm.updateMany({ where: { id: alarmId, ackAt: null }, data: { ackAt: now, ackAction: action, nextRepeatAt: null } });
+  }
+  return (await prisma.match.findUnique({ where: { id: alarm.matchId }, include: matchInclude }))!;
+}
+
+/** Alarms that are ringing right now: notified, not confirmed, match not started. */
+export async function listRingingAlarms(prisma: PrismaClient, now = new Date()) {
+  const rows = await prisma.match.findMany({
+    where: { startsAt: { gt: now }, alarm: { status: "TRIGGERED", ackAt: null } },
+    include: matchInclude,
+    orderBy: { startsAt: "asc" },
+    take: 20,
+  });
+  return rows.map(toMatchDTO);
 }
 
 export async function deleteMatch(prisma: PrismaClient, id: string): Promise<void> {
@@ -245,6 +274,8 @@ export function toMatchDTO(m: MatchWithRelations): MatchDTO {
           triggeredAt: m.alarm.triggeredAt?.toISOString() ?? null,
           completedAt: m.alarm.completedAt?.toISOString() ?? null,
           cancelledAt: m.alarm.cancelledAt?.toISOString() ?? null,
+          ackAt: m.alarm.ackAt?.toISOString() ?? null,
+          ackAction: m.alarm.ackAction === "placed" || m.alarm.ackAction === "skipped" ? m.alarm.ackAction : null,
         }
       : null,
   };

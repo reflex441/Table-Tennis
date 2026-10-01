@@ -6,16 +6,24 @@ import { handle, parseJson } from "@/lib/api";
 const subscribeSchema = z.object({
   endpoint: z.url().max(2000),
   keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+  /** Sent by the browser; falls back to the user agent. */
+  deviceType: z.enum(["desktop", "mobile"]).optional(),
 });
+
+/** Phones get one normal notification; computers ring until confirmed. */
+function deviceTypeFrom(userAgent: string | null): "desktop" | "mobile" {
+  return userAgent && /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent) ? "mobile" : "desktop";
+}
 
 /** Register (or refresh) this browser's push subscription. */
 export const POST = handle(async (request: Request) => {
   const sub = await parseJson(request, subscribeSchema);
   const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? null;
+  const deviceType = sub.deviceType ?? deviceTypeFrom(userAgent);
   const row = await db().pushSubscription.upsert({
     where: { endpoint: sub.endpoint },
-    create: { endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, userAgent },
-    update: { p256dh: sub.keys.p256dh, auth: sub.keys.auth, userAgent, active: true, failureCount: 0, lastError: null },
+    create: { endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, userAgent, deviceType },
+    update: { p256dh: sub.keys.p256dh, auth: sub.keys.auth, userAgent, deviceType, active: true, failureCount: 0, lastError: null },
     select: { id: true },
   });
   return NextResponse.json({ id: row.id }, { status: 201 });
@@ -32,7 +40,7 @@ export const DELETE = handle(async (request: Request) => {
 export const GET = handle(async () => {
   const rows = await db().pushSubscription.findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, createdAt: true, userAgent: true, active: true, failureCount: true, lastSuccessAt: true, lastError: true, endpoint: true },
+    select: { id: true, createdAt: true, userAgent: true, deviceType: true, active: true, failureCount: true, lastSuccessAt: true, lastError: true, endpoint: true },
   });
   return NextResponse.json({
     subscriptions: rows.map((r) => ({ ...r, endpoint: undefined, endpointHost: safeHost(r.endpoint) })),

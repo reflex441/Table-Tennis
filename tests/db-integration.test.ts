@@ -10,7 +10,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { createPrismaStore } from "@/lib/alarms/prisma-store";
 import { dispatchDueAlarms, type PushSender } from "@/lib/alarms/dispatcher";
-import { changeAlarmState, createMatchWithAlarm, updateMatch } from "@/lib/alarms/service";
+import { acknowledgeAlarm, changeAlarmState, createMatchWithAlarm, listRingingAlarms, updateMatch } from "@/lib/alarms/service";
 import { matchInputSchema } from "@/lib/validation/match";
 import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 
@@ -108,6 +108,43 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await getGeminiApiKey(prisma)).toBe(key);
     const removed = await updateSettings(prisma, { geminiApiKey: null });
     expect(removed.geminiKeySource).toBe(process.env.GEMINI_API_KEY ? "env" : "none");
+  });
+
+  it("rings until confirmed: repeats are claimed once and stop after 'bet placed'", async () => {
+    const now = new Date("2030-09-21T17:00:00Z");
+    const res = await createMatchWithAlarm(prisma, input(), now);
+    if (res.status !== "created") throw new Error("not created");
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/laptop", p256dh: "k", auth: "a", deviceType: "desktop" } });
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/phone", p256dh: "k", auth: "a", deviceType: "mobile" } });
+    const sent: { endpoint: string; requireAck: boolean }[] = [];
+    const push: PushSender = {
+      async send(sub, payload) {
+        sent.push({ endpoint: sub.endpoint, requireAck: Boolean(payload.requireAck) });
+        return { ok: true };
+      },
+    };
+    await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:55:00Z") });
+    expect(sent).toHaveLength(2);
+    expect((await listRingingAlarms(prisma, new Date("2030-09-21T17:55:05Z"))).map((m) => m.id)).toEqual([res.match.id]);
+
+    // Two dispatchers race for the same repeat: only one sends it, and only to the laptop.
+    const at = () => new Date("2030-09-21T17:55:31Z");
+    await Promise.all([
+      dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: at }),
+      dispatchDueAlarms({ store: createPrismaStore(other), push, now: at }),
+    ]);
+    expect(sent.slice(2)).toEqual([{ endpoint: "https://push.example/laptop", requireAck: true }]);
+
+    const alarmId = res.match.alarm!.id;
+    const acked = await acknowledgeAlarm(prisma, alarmId, "placed", new Date("2030-09-21T17:55:40Z"));
+    expect(acked.alarm?.ackAction).toBe("placed");
+    expect(await listRingingAlarms(prisma, new Date("2030-09-21T17:55:45Z"))).toEqual([]);
+    await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:56:30Z") });
+    expect(sent).toHaveLength(3);
+
+    // Rescheduling clears the confirmation so the alarm rings again.
+    const updated = await updateMatch(prisma, res.match.id, { reminderMinutes: 4 }, new Date("2030-09-21T17:55:50Z"));
+    expect(updated.alarm?.ackAt).toBeNull();
   });
 
   it("reschedules on edit and ignores cancelled alarms", async () => {

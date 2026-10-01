@@ -16,17 +16,27 @@ self.addEventListener("push", (event) => {
     data = { title: "TT Alarms", body: event.data ? event.data.text() : "" };
   }
   const title = data.title || "Match reminder";
+  // Computers: keep the notification on screen, re-alert on repeats and offer
+  // "Bet placed" / "Skip" buttons. Phones: one normal notification.
+  const ring = Boolean(data.requireAck);
   const options = {
     body: data.body || "",
     icon: "/icons/icon-192.png",
     badge: "/icons/badge-72.png",
     // Same tag => the OS replaces rather than duplicates a notification.
     tag: data.tag || undefined,
-    renotify: false,
-    requireInteraction: true,
-    vibrate: [200, 100, 200, 100, 400],
+    renotify: ring && Boolean(data.tag),
+    requireInteraction: ring,
+    silent: false,
+    vibrate: ring ? [400, 150, 400, 150, 400] : [200, 100, 200],
     timestamp: Date.now(),
-    data: { url: data.url || "/", matchId: data.matchId || null },
+    actions: ring && data.alarmId
+      ? [
+          { action: "placed", title: "✅ Bet placed" },
+          { action: "skip", title: "Skip" },
+        ]
+      : [],
+    data: { url: data.url || "/", matchId: data.matchId || null, alarmId: data.alarmId || null },
   };
 
   event.waitUntil(
@@ -41,7 +51,29 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin).href;
+  const data = event.notification.data || {};
+
+  // "Bet placed" / "Skip" buttons: confirm the alarm without opening the app.
+  if ((event.action === "placed" || event.action === "skip") && data.alarmId) {
+    event.waitUntil(
+      (async () => {
+        try {
+          await fetch(`/api/alarms/${data.alarmId}/ack`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: event.action === "placed" ? "placed" : "skipped" }),
+          });
+        } catch (err) {
+          console.warn("ack failed", err);
+        }
+        const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        clients.forEach((c) => c.postMessage({ type: "alarm-acknowledged", alarmId: data.alarmId }));
+      })(),
+    );
+    return;
+  }
+
+  const target = new URL(data.url || "/", self.location.origin).href;
   event.waitUntil(
     (async () => {
       const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

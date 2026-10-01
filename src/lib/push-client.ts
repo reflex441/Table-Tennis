@@ -76,7 +76,7 @@ export async function subscribeToPush(): Promise<PushSubscription> {
     }
   }
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-  await api("/api/push/subscriptions", { method: "POST", json: sub.toJSON() });
+  await api("/api/push/subscriptions", { method: "POST", json: { ...sub.toJSON(), deviceType: detectDeviceType() } });
   return sub;
 }
 
@@ -103,4 +103,17 @@ export async function detectPushState(): Promise<PushState> {
   if (Notification.permission === "denied") return "denied";
   const sub = await getCurrentSubscription().catch(() => null);
   return sub && Notification.permission === "granted" ? "subscribed" : "prompt";
+}
+
+/**
+ * Phones get one normal notification; computers ring until the bet is
+ * confirmed. iPads report a Mac user agent, so touch support is checked too.
+ */
+export function detectDeviceType(): "desktop" | "mobile" {
+  if (typeof navigator === "undefined") return "desktop";
+  const ua = navigator.userAgent;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return "mobile";
+  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return "mobile";
+  const uaData = (navigator as unknown as { userAgentData?: { mobile?: boolean } }).userAgentData;
+  return uaData?.mobile ? "mobile" : "desktop";
 }

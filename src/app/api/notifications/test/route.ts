@@ -24,7 +24,7 @@ export const POST = handle(async () => {
   const results = [];
   if (sender) {
     for (const sub of subs) {
-      const result = await sender.send(sub, payload, 300);
+      const result = await sender.send({ id: sub.id, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth }, payload, 300);
       await store.markSubscription(sub.id, result, new Date());
       results.push({ id: sub.id, ok: result.ok, error: result.ok ? null : result.error, statusCode: result.ok ? null : result.statusCode ?? null });
     }

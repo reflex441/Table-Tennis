@@ -60,9 +60,12 @@ interface MemAlarm {
   triggeredAt: Date | null;
   reminderMinutes: number;
   startsAt: Date;
+  ackAt?: Date | null;
+  nextRepeatAt?: Date | null;
+  repeatCount?: number;
 }
 
-function createMemoryStore(opts: { alarms: MemAlarm[]; subs?: SubscriptionRecord[]; inAppEnabled?: boolean; pushEnabled?: boolean }) {
+function createMemoryStore(opts: { alarms: MemAlarm[]; subs?: SubscriptionRecord[]; inAppEnabled?: boolean; pushEnabled?: boolean; ringUntilAck?: boolean; repeatSeconds?: number }) {
   const alarms = new Map(opts.alarms.map((a) => [a.id, a]));
   const subs = new Map((opts.subs ?? []).map((s) => [s.id, { ...s, active: true }]));
   const deliveries = new Map<string, { status: "SENT" | "FAILED"; attempts: number }>();
@@ -97,7 +100,14 @@ function createMemoryStore(opts: { alarms: MemAlarm[]; subs?: SubscriptionRecord
       });
     },
     async getSettings() {
-      return { timezone: "UTC", pushEnabled: opts.pushEnabled ?? true, inAppEnabled: opts.inAppEnabled ?? true, includeStatsInNotification: true };
+      return {
+        timezone: "UTC",
+        pushEnabled: opts.pushEnabled ?? true,
+        inAppEnabled: opts.inAppEnabled ?? true,
+        includeStatsInNotification: true,
+        ringUntilAck: opts.ringUntilAck ?? false,
+        repeatSeconds: opts.repeatSeconds ?? 30,
+      };
     },
     async getActiveSubscriptions() {
       return [...subs.values()].filter((s) => s.active);
@@ -129,7 +139,33 @@ function createMemoryStore(opts: { alarms: MemAlarm[]; subs?: SubscriptionRecord
       a.lastError = update.lastError;
       if (update.nextAttemptAt) a.nextAttemptAt = update.nextAttemptAt;
       if (update.triggeredAt) a.triggeredAt = update.triggeredAt;
+      if (update.nextRepeatAt !== undefined) a.nextRepeatAt = update.nextRepeatAt;
       return true;
+    },
+    async claimRepeats(now, limit, intervalMs) {
+      const due = [...alarms.values()]
+        .filter((a) => a.status === "TRIGGERED" && !a.ackAt && a.nextRepeatAt && a.nextRepeatAt <= now && a.startsAt > now)
+        .slice(0, limit);
+      return due.map((a) => {
+        a.nextRepeatAt = new Date(now.getTime() + intervalMs);
+        a.repeatCount = (a.repeatCount ?? 0) + 1;
+        return {
+          id: a.id,
+          generation: a.generation,
+          attempts: a.attempts,
+          reminderMinutes: a.reminderMinutes,
+          fireAt: a.fireAt,
+          repeatCount: a.repeatCount,
+          match: {
+            id: `m-${a.id}`,
+            player1: "Varcl J",
+            player2: "Jan S",
+            competition: "Czech Liga Pro",
+            startsAt: a.startsAt,
+            statistics: { selection: "OVER" as const, pointsLine: null, ouStats: "20/9", ouHitRate: 69, edge: 47 },
+          },
+        };
+      });
     },
     async completeStartedAlarms(now) {
       let n = 0;
@@ -156,10 +192,10 @@ function alarm(id: string, reminderMinutes = 5, startsAt = START): MemAlarm {
 }
 
 function pushSender(behaviour: (sub: SubscriptionRecord, call: number) => PushResult) {
-  const calls: { sub: string; title: string; ttl: number }[] = [];
+  const calls: { sub: string; title: string; ttl: number; requireAck: boolean }[] = [];
   const sender: PushSender = {
     async send(sub, payload, ttl) {
-      calls.push({ sub: sub.id, title: payload.title, ttl });
+      calls.push({ sub: sub.id, title: payload.title, ttl, requireAck: Boolean(payload.requireAck) });
       return behaviour(sub, calls.length);
     },
   };
@@ -306,6 +342,57 @@ describe("dispatchDueAlarms", () => {
     const report = await dispatchDueAlarms({ store: mem.store, push: null, now: at("2026-09-21T18:00:00Z") });
     expect(report.completed).toBe(1);
     expect(mem.alarms.get("a1")!.status).toBe("COMPLETED");
+  });
+});
+
+describe("ring until the bet is confirmed (computers) / one notification (phones)", () => {
+  const laptop: SubscriptionRecord = { ...sub("laptop"), deviceType: "desktop" };
+  const phone: SubscriptionRecord = { ...sub("phone"), deviceType: "mobile" };
+
+  it("sends a lingering alert to computers and a normal one to phones", async () => {
+    const mem = createMemoryStore({ alarms: [alarm("a1")], subs: [laptop, phone], ringUntilAck: true });
+    const { sender, calls } = pushSender(() => ({ ok: true }));
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:55:00Z") });
+    expect(calls.map((c) => [c.sub, c.requireAck])).toEqual([
+      ["laptop", true],
+      ["phone", false],
+    ]);
+    expect(mem.alarms.get("a1")!.nextRepeatAt?.toISOString()).toBe("2026-09-21T17:55:30.000Z");
+  });
+
+  it("repeats every 30 s on computers only, until confirmed", async () => {
+    const mem = createMemoryStore({ alarms: [alarm("a1")], subs: [laptop, phone], ringUntilAck: true });
+    const { sender, calls } = pushSender(() => ({ ok: true }));
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:55:00Z") });
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:55:20Z") }); // not due yet
+    const r1 = await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:55:30Z") });
+    const r2 = await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:56:00Z") });
+    expect(r1.repeated + r2.repeated).toBe(2);
+    const repeats = calls.slice(2);
+    expect(repeats.map((c) => c.sub)).toEqual(["laptop", "laptop"]); // phone never repeated
+    expect(repeats.every((c) => c.requireAck && c.title.startsWith("⏰"))).toBe(true);
+
+    mem.alarms.get("a1")!.ackAt = new Date("2026-09-21T17:56:10Z"); // "I've placed the bet"
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:56:30Z") });
+    expect(calls).toHaveLength(4);
+  });
+
+  it("stops ringing when the match starts", async () => {
+    const mem = createMemoryStore({ alarms: [alarm("a1", 1)], subs: [laptop], ringUntilAck: true });
+    const { sender, calls } = pushSender(() => ({ ok: true }));
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:59:00Z") });
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T18:00:01Z") });
+    expect(calls).toHaveLength(1);
+    expect(mem.alarms.get("a1")!.status).toBe("COMPLETED");
+  });
+
+  it("sends a single normal alert everywhere when ringing is switched off", async () => {
+    const mem = createMemoryStore({ alarms: [alarm("a1")], subs: [laptop, phone], ringUntilAck: false });
+    const { sender, calls } = pushSender(() => ({ ok: true }));
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:55:00Z") });
+    await dispatchDueAlarms({ store: mem.store, push: sender, now: at("2026-09-21T17:56:00Z") });
+    expect(calls.map((c) => c.requireAck)).toEqual([false, false]);
+    expect(mem.alarms.get("a1")!.nextRepeatAt).toBeNull();
   });
 });
 

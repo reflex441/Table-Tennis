@@ -136,6 +136,16 @@ npm start                  # SCHEDULER_MODE=inprocess
 
 **HTTPS is required for service workers and push** everywhere except `localhost`. Use your platform's TLS or a reverse proxy such as Caddy, nginx or Cloudflare Tunnel.
 
+## Alarm until the bet is placed (computers) vs one notification (phones)
+
+Each device that enables notifications is marked as a **computer** or a **phone** (auto-detected; switchable in Settings → devices).
+
+- **Computer:** when a reminder fires, every open TT Alarms tab shows a full-screen alert and plays a **continuous siren** until you click **"I've placed the bet"** (or **Skip**). The system notification stays on screen with **✅ Bet placed / Skip** buttons and is re-sent every 15/30/60 s (Settings) until you confirm or the match starts.
+- **Phone:** one normal notification. No siren, no repeats.
+- Confirming on any device stops the alarm everywhere. The match card then shows **Bet placed ✓** or **Skipped**.
+- The siren can only play from an open browser tab (it can be in the background). Keep a TT Alarms tab open on the computer. Browsers block sound until you've clicked the page once; use **Settings → Test alarm sound**.
+- Turn it off with **Settings → Alarm on computers → Ring until I confirm the bet**.
+
 ## Notifications: what browsers and phones can and cannot do
 
 These are **notifications, not native phone alarms**:

@@ -71,6 +71,8 @@ const settings: SettingsDTO = {
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
   scanSpeed: "fast",
+  ringUntilAck: true,
+  repeatSeconds: 30,
   geminiKeySource: "none",
   geminiKeyHint: null,
 };

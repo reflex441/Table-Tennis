@@ -22,6 +22,9 @@ export interface AlarmDTO {
   triggeredAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
+  /** When the user confirmed the alarm. */
+  ackAt: string | null;
+  ackAction: "placed" | "skipped" | null;
 }
 
 export interface MatchDTO {

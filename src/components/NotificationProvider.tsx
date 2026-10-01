@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { BellRing, X } from "lucide-react";
 import type { InAppNotificationDTO } from "@/lib/types";
 import { api } from "@/lib/client-api";
-import { getCurrentSubscription, registerServiceWorker } from "@/lib/push-client";
+import { detectDeviceType, getCurrentSubscription, registerServiceWorker } from "@/lib/push-client";
 import { useSettings } from "./SettingsProvider";
 
 interface Toast {
@@ -115,7 +115,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       await registerServiceWorker();
       const sub = await getCurrentSubscription().catch(() => null);
       if (sub && Notification.permission === "granted") {
-        await api("/api/push/subscriptions", { method: "POST", json: sub.toJSON() }).catch(() => {});
+        await api("/api/push/subscriptions", { method: "POST", json: { ...sub.toJSON(), deviceType: detectDeviceType() } }).catch(() => {});
       }
     })();
     const onMessage = (event: MessageEvent) => {

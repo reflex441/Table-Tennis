@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, XCircle } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle } from "lucide-react";
+import { startSiren, unlockAudio } from "@/lib/siren";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { ReminderPicker } from "./ReminderPicker";
@@ -23,6 +24,7 @@ interface Device {
   id: string;
   createdAt: string;
   userAgent: string | null;
+  deviceType: "desktop" | "mobile";
   active: boolean;
   failureCount: number;
   lastSuccessAt: string | null;
@@ -241,6 +243,17 @@ export function SettingsPage() {
                     </p>
                     {d.lastError && <p className="truncate text-under">{d.lastError}</p>}
                   </div>
+                  <button
+                    className="btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                    title="Computers ring until you confirm the bet; phones get one normal notification"
+                    onClick={async () => {
+                      const next = d.deviceType === "mobile" ? "desktop" : "mobile";
+                      await api(`/api/push/subscriptions/${d.id}`, { method: "PATCH", json: { deviceType: next } }).catch(() => {});
+                      await refreshDevices();
+                    }}
+                  >
+                    {d.deviceType === "mobile" ? "📱 Phone" : "💻 Computer"}
+                  </button>
                 </li>
               ))}
             </ul>
@@ -248,10 +261,12 @@ export function SettingsPage() {
         )}
       </Section>
 
+      <AlarmSection />
+
       <Section title="Notification preferences">
         <Toggle label="Browser push notifications" hint="Send reminders to subscribed devices, even when the app is closed." checked={settings.pushEnabled} onChange={(v) => void save({ pushEnabled: v }, "push")} />
         <Toggle label="In-app notifications" hint="Show reminders in the notification centre and as pop-ups while the app is open." checked={settings.inAppEnabled} onChange={(v) => void save({ inAppEnabled: v }, "inapp")} />
-        <Toggle label="Sound in the app" hint="Play a chime when an in-app reminder arrives (the browser may require you to interact with the page first)." checked={settings.soundEnabled} onChange={(v) => void save({ soundEnabled: v }, "sound")} />
+        <Toggle label="Alarm sound" hint="Siren on computers until you confirm the bet (phones never play it)." checked={settings.soundEnabled} onChange={(v) => void save({ soundEnabled: v }, "sound")} />
         <Toggle label="Include statistics" hint="Show OVER/UNDER, O/U and EDGE in the notification text." checked={settings.includeStatsInNotification} onChange={(v) => void save({ includeStatsInNotification: v }, "stats")} />
       </Section>
 
@@ -486,6 +501,62 @@ function GeminiKeySection() {
 
       <p className="mt-2 text-xs text-muted">
         The key is stored on your server and is never shown again after saving. A key saved here overrides GEMINI_API_KEY. Set APP_PASSWORD so strangers can&apos;t change it.
+      </p>
+    </Section>
+  );
+}
+
+/** Computer alarm: ring until the bet is confirmed. */
+function AlarmSection() {
+  const { settings, update } = useSettings();
+  const [testing, setTesting] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+
+  const testAlarm = async () => {
+    const ok = await unlockAudio();
+    setBlocked(!ok);
+    if (!ok) return;
+    setTesting(true);
+    const stop = startSiren();
+    setTimeout(() => {
+      stop();
+      setTesting(false);
+    }, 4000);
+  };
+
+  return (
+    <Section
+      title="Alarm on computers"
+      description="On a computer, a reminder shows a full-screen alert and keeps ringing until you click &quot;I've placed the bet&quot;. Phones only get one normal notification."
+    >
+      <Toggle
+        label="Ring until I confirm the bet"
+        hint="Full-screen alert + continuous siren in the TT Alarms tab, and the computer's notification stays on screen with Bet placed / Skip buttons."
+        checked={settings.ringUntilAck}
+        onChange={(v) => void update({ ringUntilAck: v })}
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted">Repeat the notification every</span>
+        {[15, 30, 60].map((sec) => (
+          <button
+            key={sec}
+            type="button"
+            onClick={() => void update({ repeatSeconds: sec })}
+            className={`rounded-md border px-2 py-1 text-xs ${settings.repeatSeconds === sec ? "border-accent bg-accent/15 text-accent" : "border-line bg-bg text-muted hover:text-text"}`}
+          >
+            {sec}s
+          </button>
+        ))}
+        <span className="text-xs text-muted">(computers only, until you confirm or the match starts)</span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button className="btn-ghost" disabled={testing} onClick={() => void testAlarm()}>
+          <Volume2 className="h-4 w-4" /> {testing ? "Ringing…" : "Test alarm sound"}
+        </button>
+        {blocked && <span className="text-xs text-warn">The browser blocked sound - click the button again.</span>}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        Keep a TT Alarms tab open on your computer (it can be in the background) - the siren plays from that tab. Websites can&apos;t play a continuous sound when the browser is closed; then you&apos;ll still get the repeating notification.
       </p>
     </Section>
   );

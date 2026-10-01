@@ -162,11 +162,19 @@ model Alarm {
   triggeredAt     DateTime?   @db.Timestamptz(3)
   completedAt     DateTime?   @db.Timestamptz(3)
   cancelledAt     DateTime?   @db.Timestamptz(3)
+  /// When the user confirmed the alarm ("bet placed" / "skipped"); stops ringing.
+  ackAt           DateTime?   @db.Timestamptz(3)
+  /// "placed" or "skipped".
+  ackAction       String?
+  /// Next time the push notification is repeated while the alarm rings.
+  nextRepeatAt    DateTime?   @db.Timestamptz(3)
+  repeatCount     Int         @default(0)
 
   deliveries    NotificationDelivery[]
   notifications InAppNotification[]
 
   @@index([status, nextAttemptAt])
+  @@index([status, nextRepeatAt])
 }
 
 model PushSubscription {
@@ -176,6 +184,8 @@ model PushSubscription {
   endpoint      String    @unique
   p256dh        String
   auth          String
+  /// "desktop" rings until the bet is confirmed; "mobile" gets one normal notification.
+  deviceType    String    @default("desktop")
   userAgent     String?
   active        Boolean   @default(true)
   failureCount  Int       @default(0)
@@ -241,6 +251,10 @@ model Settings {
   screenshotTimesAreLocal    Boolean  @default(true)
   /// Scan speed vs care: "fastest" (minimal thinking), "fast" (low), "careful" (medium).
   scanSpeed                  String   @default("fast")
+  /// Keep alerting (in-app siren + repeated push) until the user confirms the bet.
+  ringUntilAck               Boolean  @default(true)
+  /// Seconds between repeated push notifications while an alarm rings.
+  repeatSeconds              Int      @default(30)
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?

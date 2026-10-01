@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { NotificationProvider } from "@/components/NotificationProvider";
+import { AlarmRinger } from "@/components/AlarmRinger";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import type { SettingsDTO } from "@/lib/validation/settings";
@@ -35,6 +36,8 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
   scanSpeed: "fast",
+  ringUntilAck: true,
+  repeatSeconds: 30,
   geminiKeySource: "none",
   geminiKeyHint: null,
 };
@@ -56,6 +59,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <SettingsProvider initial={settings}>
           <NotificationProvider>
             <AppShell dbError={dbError}>{children}</AppShell>
+            <AlarmRinger />
           </NotificationProvider>
         </SettingsProvider>
       </body>

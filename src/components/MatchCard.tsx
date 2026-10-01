@@ -44,7 +44,10 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Countdown target={match.startsAt} status={status} />
-          <StatusBadge status={status} />
+          <div className="flex items-center gap-1">
+            <AckBadge match={match} now={now} />
+            <StatusBadge status={status} />
+          </div>
         </div>
       </div>
 
@@ -116,4 +119,16 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
       </div>
     </article>
   );
+}
+
+/** "Bet placed" / "Skipped" once confirmed; "Ringing" while waiting for confirmation. */
+export function AckBadge({ match, now }: { match: MatchDTO; now: number }) {
+  const alarm = match.alarm;
+  if (!alarm) return null;
+  if (alarm.ackAction === "placed") return <span className="chip bg-over/15 text-over">Bet placed ✓</span>;
+  if (alarm.ackAction === "skipped") return <span className="chip bg-line text-muted">Skipped</span>;
+  if (alarm.status === "TRIGGERED" && now > 0 && new Date(match.startsAt).getTime() > now) {
+    return <span className="chip animate-pulse bg-under/20 text-under">Ringing</span>;
+  }
+  return null;
 }

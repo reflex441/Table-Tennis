@@ -40,6 +40,8 @@ export const settingsUpdateSchema = z
     screenshotsAreToday: z.boolean(),
     screenshotTimesAreLocal: z.boolean(),
     scanSpeed: z.enum(["fastest", "fast", "careful"]),
+    ringUntilAck: z.boolean(),
+    repeatSeconds: z.number().int().min(15, "At least 15 seconds").max(300, "At most 5 minutes"),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -68,6 +70,10 @@ export interface SettingsDTO {
   screenshotsAreToday: boolean;
   screenshotTimesAreLocal: boolean;
   scanSpeed: ScanSpeed;
+  /** Keep alerting until the user confirms the bet. */
+  ringUntilAck: boolean;
+  /** Seconds between repeated push notifications while ringing. */
+  repeatSeconds: number;
   /** Where the Gemini key comes from. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "env" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

@@ -34,13 +34,20 @@ export interface SubscriptionRecord {
   endpoint: string;
   p256dh: string;
   auth: string;
+  /** "desktop" rings until confirmed; "mobile" gets one normal notification. */
+  deviceType?: "desktop" | "mobile";
 }
+
+const isDesktop = (sub: SubscriptionRecord) => sub.deviceType !== "mobile";
 
 export interface DispatchSettings {
   timezone: string;
   pushEnabled: boolean;
   inAppEnabled: boolean;
   includeStatsInNotification: boolean;
+  /** Keep re-sending the push until the user confirms the bet. */
+  ringUntilAck: boolean;
+  repeatSeconds: number;
 }
 
 export type PushResult =
@@ -56,6 +63,8 @@ export interface FinishUpdate {
   nextAttemptAt?: Date;
   lastError: string | null;
   triggeredAt?: Date;
+  /** When to repeat the push while the alarm rings (null = never). */
+  nextRepeatAt?: Date | null;
 }
 
 export interface DispatcherStore {
@@ -71,6 +80,11 @@ export interface DispatcherStore {
   finishAlarm(alarmId: string, generation: number, update: FinishUpdate): Promise<boolean>;
   /** Move TRIGGERED alarms whose match has started to COMPLETED. */
   completeStartedAlarms(now: Date): Promise<number>;
+  /**
+   * Atomically claim triggered, unconfirmed alarms whose repeat is due and
+   * whose match hasn't started, moving their next repeat `intervalMs` ahead.
+   */
+  claimRepeats(now: Date, limit: number, intervalMs: number): Promise<(ClaimedAlarm & { repeatCount: number })[]>;
   nextDueAt(): Promise<Date | null>;
 }
 
@@ -82,6 +96,8 @@ export interface DispatchReport {
   pushSent: number;
   pushFailed: number;
   completed: number;
+  /** Repeated "still ringing" pushes sent this pass. */
+  repeated: number;
 }
 
 export function retryDelayMs(attempt: number): number {
@@ -97,13 +113,16 @@ export async function dispatchDueAlarms(deps: {
 }): Promise<DispatchReport> {
   const nowFn = deps.now ?? (() => new Date());
   const log = deps.log ?? (() => {});
-  const report: DispatchReport = { claimed: 0, triggered: 0, retried: 0, failed: 0, pushSent: 0, pushFailed: 0, completed: 0 };
+  const report: DispatchReport = { claimed: 0, triggered: 0, retried: 0, failed: 0, pushSent: 0, pushFailed: 0, completed: 0, repeated: 0 };
 
   const claimed = await deps.store.claimDue(nowFn(), deps.batchSize ?? 50);
   report.claimed = claimed.length;
 
+  let settingsCache: DispatchSettings | null = null;
+  const getSettings = async () => (settingsCache ??= await deps.store.getSettings());
+
   if (claimed.length) {
-    const settings = await deps.store.getSettings();
+    const settings = await getSettings();
     const subscriptions = settings.pushEnabled && deps.push ? await deps.store.getActiveSubscriptions() : [];
 
     for (const alarm of claimed) {
@@ -127,6 +146,42 @@ export async function dispatchDueAlarms(deps: {
           .catch(() => {});
         if (canRetry) report.retried++;
         else report.failed++;
+      }
+    }
+  }
+
+  // "Ring until confirmed": re-send the push for triggered alarms nobody has
+  // confirmed yet, so a locked phone keeps alerting until the bet is placed.
+  const settings = await getSettings();
+  if (settings.ringUntilAck && settings.pushEnabled && deps.push) {
+    const repeats = await deps.store.claimRepeats(nowFn(), deps.batchSize ?? 50, settings.repeatSeconds * 1000);
+    if (repeats.length) {
+      // Repeats go to computers only: phones get a single notification.
+      const subscriptions = (await deps.store.getActiveSubscriptions()).filter(isDesktop);
+      for (const alarm of repeats) {
+        const now = nowFn();
+        const payload = buildAlarmNotification({
+          match: alarm.match,
+          alarmId: alarm.id,
+          generation: alarm.generation,
+          timezone: settings.timezone,
+          includeStats: settings.includeStatsInNotification,
+          now,
+          repeat: alarm.repeatCount,
+        });
+        const ttlSeconds = Math.max(30, Math.round((alarm.match.startsAt.getTime() - now.getTime()) / 1000));
+        for (const sub of subscriptions) {
+          let result: PushResult;
+          try {
+            result = await deps.push.send(sub, { ...payload, requireAck: true }, ttlSeconds);
+          } catch (err) {
+            result = { ok: false, permanent: false, error: err instanceof Error ? err.message : String(err) };
+          }
+          await deps.store.markSubscription(sub.id, result, now);
+          if (result.ok) report.pushSent++;
+          else report.pushFailed++;
+        }
+        report.repeated++;
       }
     }
   }
@@ -185,7 +240,8 @@ async function processAlarm(
       }
       let result: PushResult;
       try {
-        result = await push.send(sub, payload, ttlSeconds);
+        // Computers get a lingering "confirm your bet" alert; phones a normal one.
+        result = await push.send(sub, { ...payload, requireAck: settings.ringUntilAck && isDesktop(sub) }, ttlSeconds);
       } catch (err) {
         result = { ok: false, permanent: false, error: err instanceof Error ? err.message : String(err) };
       }
@@ -220,7 +276,8 @@ async function processAlarm(
     return { status: "FAILED", pushSent, pushFailed };
   }
 
-  await store.finishAlarm(alarm.id, alarm.generation, { status: "TRIGGERED", triggeredAt: now, lastError });
+  const nextRepeatAt = settings.ringUntilAck ? new Date(now.getTime() + settings.repeatSeconds * 1000) : null;
+  await store.finishAlarm(alarm.id, alarm.generation, { status: "TRIGGERED", triggeredAt: now, lastError, nextRepeatAt });
   log(`alarm ${alarm.id}: triggered (push sent ${pushSent}, failed ${pushFailed})`);
   return { status: "TRIGGERED", pushSent, pushFailed };
 }

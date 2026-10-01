@@ -22,6 +22,10 @@ export interface NotificationPayload {
   tag: string;
   matchId: string;
   alarmId: string | null;
+  /** Ask the device to keep alerting (re-notify) and offer "Bet placed" buttons. */
+  requireAck?: boolean;
+  /** How many times this alert has been repeated (0 = first). */
+  repeat?: number;
 }
 
 export function formatClock(date: Date, timezone: string): string {
@@ -55,6 +59,8 @@ export function buildAlarmNotification(opts: {
   timezone: string;
   includeStats: boolean;
   now?: Date;
+  /** Repeat number for "still ringing" re-sends (undefined/0 = first alert). */
+  repeat?: number;
 }): NotificationPayload {
   const now = opts.now ?? new Date();
   const { match } = opts;
@@ -65,12 +71,14 @@ export function buildAlarmNotification(opts: {
     const s = statsLine(match.statistics);
     if (s) lines.push(s);
   }
+  if (opts.repeat) lines.push("Still waiting - tap \"Bet placed\" to stop the alarm");
   return {
-    title: `${match.player1} vs ${match.player2}`,
+    title: `${opts.repeat ? "⏰ " : ""}${match.player1} vs ${match.player2}`,
     body: lines.join("\n"),
     url: `/matches/${match.id}`,
     tag: `alarm-${opts.alarmId}-${opts.generation}`,
     matchId: match.id,
     alarmId: opts.alarmId,
+    repeat: opts.repeat ?? 0,
   };
 }
