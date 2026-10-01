@@ -32,10 +32,14 @@ export interface OddsPolicy {
   averageOdds: number;
 }
 
-/** Odds used for profit: the average odds from Settings when switched on, else the bet's own. */
+/**
+ * Odds used for profit: the bet's own odds when it has them (never
+ * overridden), otherwise the average odds from Settings when switched on.
+ */
 export function effectiveOdds(odds: number | null | undefined, policy: OddsPolicy | null | undefined): number | null {
+  if (odds && odds > 1) return odds;
   if (policy?.useAverageOdds && policy.averageOdds > 1) return policy.averageOdds;
-  return odds ?? null;
+  return null;
 }
 
 export function round2(n: number): number {

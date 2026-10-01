@@ -34,7 +34,7 @@ export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
   const { settings } = useSettings();
   // With "average odds for all bets" on, show the odds profit is based on.
   const initial = useMemo(
-    () => (settings.useAverageOdds ? rows.map((r) => ({ ...r, odds: effectiveOdds(r.odds, settings) })) : rows),
+    () => rows.map((r) => ({ ...r, odds: effectiveOdds(r.odds, settings), usesAverage: !r.odds && settings.useAverageOdds })),
     [rows, settings],
   );
   const tz = settings.timezone;
@@ -94,7 +94,7 @@ export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
           <p className="text-sm text-muted">
             In units · 1u = {settings.currency}
             {settings.unitSize}
-            {settings.useAverageOdds ? ` · all bets at average odds ${settings.averageOdds.toFixed(2)}` : ""} (change in{" "}
+            {settings.useAverageOdds ? ` · bets without odds use ${settings.averageOdds.toFixed(2)}` : ""} (change in{" "}
             <Link href="/settings#units" className="underline hover:text-text">
               Settings
             </Link>
@@ -255,7 +255,10 @@ export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
                       <PlayTypeChip playType={r.playType} />
                     </td>
                     <td className="px-3 py-1.5 text-right tabular">{formatUnits(r.stake, false)}</td>
-                    <td className="px-3 py-1.5 text-right tabular">{r.odds ? r.odds.toFixed(2) : "–"}</td>
+                    <td className="px-3 py-1.5 text-right tabular" title={r.usesAverage ? "Average odds from Settings" : undefined}>
+                      {r.odds ? r.odds.toFixed(2) : "–"}
+                      {r.usesAverage && <span className="ml-1 text-[10px] text-muted">avg</span>}
+                    </td>
                     <td className="px-3 py-1.5">
                       <ResultChip result={r.result} />
                     </td>

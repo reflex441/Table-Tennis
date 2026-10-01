@@ -69,8 +69,8 @@ describe("profit maths (units)", () => {
     ]);
   });
 
-  it("uses the average odds from Settings when switched on", () => {
-    expect(effectiveOdds(2.1, { useAverageOdds: true, averageOdds: 1.85 })).toBe(1.85);
+  it("uses the average odds from Settings only for bets without odds", () => {
+    expect(effectiveOdds(2.1, { useAverageOdds: true, averageOdds: 1.85 })).toBe(2.1);
     expect(effectiveOdds(null, { useAverageOdds: true, averageOdds: 1.85 })).toBe(1.85);
     expect(effectiveOdds(2.1, { useAverageOdds: false, averageOdds: 1.85 })).toBe(2.1);
     expect(effectiveOdds(null, { useAverageOdds: false, averageOdds: 1.85 })).toBeNull();

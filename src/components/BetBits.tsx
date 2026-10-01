@@ -97,8 +97,8 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             <span className="label">Stake (u)</span>
             <input className="input py-1 tabular" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} aria-label="Stake in units" />
           </label>
-          <label className="w-24" title={avg ? `Profit uses your average odds (${avg.toFixed(2)}) - see Settings` : undefined}>
-            <span className="label">{avg ? "Own odds" : "Odds"}</span>
+          <label className="w-24" title={avg ? `Leave blank to use your average odds (${avg.toFixed(2)})` : undefined}>
+            <span className="label">Odds</span>
             <input className="input py-1 tabular" inputMode="decimal" placeholder="1.85" value={odds} onChange={(e) => setOdds(e.target.value)} aria-label="Decimal odds" />
           </label>
           <button className="btn-primary px-2 py-1 text-xs" disabled={busy} onClick={saveEditor}>
@@ -119,7 +119,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             </button>
           )}
         </div>
-        {avg && <p className="text-[11px] text-muted">Profit uses your average odds ({avg.toFixed(2)}) from Settings.</p>}
+        {avg && <p className="text-[11px] text-muted">Leave the odds blank to use your average odds ({avg.toFixed(2)}) from Settings.</p>}
         {error && <p className="text-[11px] text-under">{error}</p>}
       </div>
     );
@@ -142,13 +142,13 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <button className="inline-flex items-center gap-1 text-muted hover:text-text" onClick={openEditor} aria-label="Edit bet">
           Bet <span className="tabular text-text">{formatUnits(bet.stake, false)}</span>
-          {avg ? (
-            <>
-              @ <span className="tabular text-text">{avg.toFixed(2)}</span> <span className="text-[10px]">avg</span>
-            </>
-          ) : bet.odds ? (
+          {bet.odds ? (
             <>
               @ <span className="tabular text-text">{bet.odds.toFixed(2)}</span>
+            </>
+          ) : avg ? (
+            <>
+              @ <span className="tabular text-text">{avg.toFixed(2)}</span> <span className="text-[10px]">avg</span>
             </>
           ) : (
             <span className="text-warn">· add odds</span>

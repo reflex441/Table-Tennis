@@ -660,11 +660,15 @@ function AverageOddsSection() {
   return (
     <Section
       title="Average odds"
-      description="Turn this on to work out the profit of every bet (past and future) with your average odds instead of the odds entered on each bet. The odds you entered are kept - turn it off to use them again."
+      description="Turn this on to use your average odds for bets that have no odds entered. Bets where you entered odds (including all past plays with odds) always keep their own odds."
     >
       <Toggle
-        label="Use average odds for all bets"
-        hint={settings.useAverageOdds ? `All wins are counted at ${settings.averageOdds.toFixed(2)}.` : "Each bet uses its own odds."}
+        label="Use average odds for bets without odds"
+        hint={
+          settings.useAverageOdds
+            ? `Wins without odds are counted at ${settings.averageOdds.toFixed(2)}. You don't need to type odds when placing a bet.`
+            : "Wins without odds aren't counted until you add the odds."
+        }
         checked={settings.useAverageOdds}
         onChange={(v) => void save({ useAverageOdds: v })}
       />

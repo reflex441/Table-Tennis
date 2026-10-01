@@ -53,13 +53,12 @@ async function oddsPolicy(prisma: PrismaClient): Promise<OddsPolicy> {
 }
 
 /**
- * Re-price every settled bet with the current odds setting: the average
- * odds from Settings when that is switched on, otherwise each bet's own odds.
- * Only wins depend on the odds; the bets' own odds are never overwritten.
+ * Re-price won bets after the average-odds setting changes. Only bets with
+ * no odds of their own are affected; bets with odds always keep them.
  */
 export async function recomputeProfits(prisma: PrismaClient): Promise<number> {
   const policy = await oddsPolicy(prisma);
-  const bets = await prisma.bet.findMany({ where: { result: "WON" }, select: { id: true, stake: true, odds: true, profit: true } });
+  const bets = await prisma.bet.findMany({ where: { result: "WON", odds: null }, select: { id: true, stake: true, odds: true, profit: true } });
   const changes = bets
     .map((b) => ({ id: b.id, profit: computeProfit(b.stake, effectiveOdds(b.odds, policy), "WON") }))
     .filter((c, i) => c.profit !== bets[i].profit);
