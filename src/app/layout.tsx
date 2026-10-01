@@ -25,8 +25,8 @@ export const viewport: Viewport = {
 
 const FALLBACK_SETTINGS: SettingsDTO = {
   defaultReminderMinutes: 5,
-  timezone: "UTC",
-  timezoneConfirmed: false,
+  timezone: "Australia/Sydney",
+  timezoneConfirmed: true,
   dateOrder: "DMY",
   pushEnabled: true,
   inAppEnabled: true,

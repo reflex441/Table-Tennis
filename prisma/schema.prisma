@@ -226,9 +226,9 @@ model Settings {
   id                         Int      @id @default(1)
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
   defaultReminderMinutes     Int      @default(5)
-  timezone                   String   @default("UTC")
-  /// False until the user has explicitly confirmed their timezone.
-  timezoneConfirmed          Boolean  @default(false)
+  timezone                   String   @default("Australia/Sydney")
+  /// Defaults to NSW (confirmed). Set to false to make extracted times always need confirmation.
+  timezoneConfirmed          Boolean  @default(true)
   /// Preferred interpretation of ambiguous numeric dates like 03/04/2026.
   dateOrder                  String   @default("DMY")
   pushEnabled                Boolean  @default(true)
