@@ -1,0 +1,17 @@
+{
+  "_comment": "Expected Gemini output for the 'MATCH / TIME (GMT+10) / LAST MATCH / STATS / EDGE' table layout (8 rows, list runs past midnight).",
+  "layout": "match table",
+  "visibleClock": null,
+  "visibleDate": null,
+  "timezoneText": "GMT+10",
+  "matches": [
+    { "player1": "Darin K.", "player2": "Varcl J.", "competition": "CZECH LIGA PRO", "timeText": "6:00 PM", "dateText": null, "selection": "OVER", "pointsLine": null, "ouStats": "24/9", "ouHitRate": 73, "edge": 47, "confidence": 0.95 },
+    { "player1": "Kosmal D.", "player2": "Minda M.", "competition": "TT ELITE", "timeText": "8:10 PM", "dateText": null, "selection": "UNDER", "pointsLine": null, "ouStats": "5/15", "ouHitRate": 25, "edge": 36, "confidence": 0.95 },
+    { "player1": "Stefek D.", "player2": "Sturma P.", "competition": "TT CUP", "timeText": "8:15 PM", "dateText": null, "selection": "OVER", "pointsLine": null, "ouStats": "19/2", "ouHitRate": 90, "edge": 63, "confidence": 0.95 },
+    { "player1": "Jarocki L.", "player2": "Kolodziej K.", "competition": "TT ELITE", "timeText": "9:15 PM", "dateText": null, "selection": "OVER", "pointsLine": null, "ouStats": "194/126", "ouHitRate": 61, "edge": 45, "confidence": 0.95 },
+    { "player1": "Olbrycht M.", "player2": "Poliniewicz G.", "competition": "TT ELITE", "timeText": "10:35 PM", "dateText": null, "selection": "OVER", "pointsLine": null, "ouStats": "12/5", "ouHitRate": 71, "edge": 41, "confidence": 0.95 },
+    { "player1": "Czerwinski B.", "player2": "Zochniak J.", "competition": "TT ELITE", "timeText": "11:30 PM", "dateText": null, "selection": "OVER", "pointsLine": null, "ouStats": "14/6", "ouHitRate": 70, "edge": 40, "confidence": 0.95 },
+    { "player1": "Poliniewicz G.", "player2": "Kolek M.", "competition": "TT ELITE", "timeText": "12:15 AM", "dateText": null, "selection": "OVER", "pointsLine": null, "ouStats": "32/9", "ouHitRate": 78, "edge": 57, "confidence": 0.95 },
+    { "player1": "Guzy K.", "player2": "Gola B.", "competition": "TT CUP", "timeText": "12:30 AM", "dateText": null, "selection": "UNDER", "pointsLine": null, "ouStats": "35/91", "ouHitRate": 28, "edge": 65, "confidence": 0.95 }
+  ]
+}

@@ -472,6 +472,25 @@ export function UploadReview() {
 
                 <CaptureTimeEditor item={item} timezone={settings.timezone} onSave={(iso) => void setCaptureTime(item, iso)} />
 
+                {(() => {
+                  const unconfirmed = own.filter((c) => !c.result && c.include && c.startsAtLocal && !c.timeConfirmed);
+                  if (unconfirmed.length < 2) return null;
+                  return (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-warn/10 px-2.5 py-2 text-xs text-warn">
+                      <span className="flex-1">{unconfirmed.length} start times need a quick check (shown in amber below).</span>
+                      <button
+                        className="btn-ghost px-2 py-1 text-xs"
+                        onClick={() => {
+                          const ids = new Set(unconfirmed.map((c) => c.id));
+                          setCandidates((prev) => prev.map((c) => (ids.has(c.id) ? { ...c, timeConfirmed: true } : c)));
+                        }}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" /> I checked them - confirm all {unconfirmed.length}
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 {ex && ex.warnings.length > 0 && (
                   <details className="rounded-lg bg-warn/10 px-2 py-1.5 text-xs text-warn">
                     <summary className="cursor-pointer">{ex.warnings.length} value(s) were discarded during validation</summary>

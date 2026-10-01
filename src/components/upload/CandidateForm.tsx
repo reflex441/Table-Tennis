@@ -77,6 +77,10 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
         </div>
       </div>
 
+      {!c.include && validation.errors.startsAt === "Start time is in the past" && (
+        <p className="mb-2 rounded-lg bg-panel-2 px-2 py-1.5 text-xs text-muted">Not included: this start time has already passed. Fix the time and tick the box if that&apos;s wrong.</p>
+      )}
+
       {c.result && c.result.status !== "created" && (
         <div className={`mb-2 flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs ${c.result.status === "similar" ? "bg-warn/10 text-warn" : "bg-under/10 text-under"}`}>
           {c.result.status === "similar" ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}

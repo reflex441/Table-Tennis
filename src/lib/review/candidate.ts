@@ -82,7 +82,12 @@ export function candidateFromExtraction(m: ExtractedMatch, shot: ScreenshotConte
     allowSimilar: false,
     result: null,
   };
-  return applyTimeResolution(c, shot, settings, now);
+  const resolved = applyTimeResolution(c, shot, settings, now);
+  // A match that has already started can't get a reminder: leave it unticked
+  // so it doesn't block creating alarms for the rest of the screenshot.
+  const iso = fromLocalInputValue(resolved.startsAtLocal, settings.timezone);
+  if (iso && new Date(iso).getTime() <= (now ?? new Date()).getTime()) return { ...resolved, include: false };
+  return resolved;
 }
 
 export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Candidate {

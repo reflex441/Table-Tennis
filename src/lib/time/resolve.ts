@@ -84,6 +84,9 @@ const ABBREVIATION_OFFSETS: Record<string, string> = {
   AEDT: "UTC+11",
 };
 
+/** A time-only match this far before the capture time is assumed to be tomorrow. */
+const TIME_ONLY_PAST_TOLERANCE_MS = 60 * 60_000;
+
 const MONTHS: Record<string, number> = {
   jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
   may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9,
@@ -379,12 +382,20 @@ export function resolveMatchTime(input: ResolveInput): ResolveResult {
   }
 
   // Time only - assume the capture date, but always ask for confirmation.
+  // Upcoming-match lists often run past midnight ("11:30 PM", then "12:15 AM"):
+  // a time that had already passed when the screenshot was taken is assumed
+  // to be on the following day.
   if (!reference) {
     return emptyResult(zoneName, "time-only", "needs_confirmation", ["Only a time is shown and the capture date is unknown - choose the date."], notes);
   }
   if (referenceIssue) issues.push(referenceIssue);
-  issues.push(`Only a time is shown - assumed the capture date ${reference.toFormat("dd LLL yyyy")}.`);
-  const dt = reference.startOf("day").set({ hour: timeOfDay.hour, minute: timeOfDay.minute });
+  let dt = reference.startOf("day").set({ hour: timeOfDay.hour, minute: timeOfDay.minute });
+  if (dt.toMillis() < reference.toMillis() - TIME_ONLY_PAST_TOLERANCE_MS) {
+    dt = dt.plus({ days: 1 });
+    issues.push(`Only a time is shown - assumed the next day ${dt.toFormat("ccc dd LLL")}, because ${timeOfDay.match.trim()} had already passed when the screenshot was taken.`);
+  } else {
+    issues.push(`Only a time is shown - assumed the capture date ${reference.toFormat("ccc dd LLL")}.`);
+  }
   return finalise(dt, "time-only", zoneName, issues, notes, now);
 }
 
