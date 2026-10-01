@@ -20,6 +20,7 @@ export class GeminiRequestError extends Error {
 export interface ExtractOptions {
   apiKey: string;
   model: string;
+  baseUrl?: string;
   image: Buffer;
   mimeType: string;
   /** Injected for tests. */
@@ -38,7 +39,7 @@ export interface ExtractOutput {
 /** Send one screenshot to Gemini and return validated structured data. */
 export async function extractFromScreenshot(opts: ExtractOptions): Promise<ExtractOutput> {
   if (!opts.apiKey && !opts.client) throw new GeminiConfigError();
-  const client = opts.client ?? new GoogleGenAI({ apiKey: opts.apiKey });
+  const client = opts.client ?? new GoogleGenAI({ apiKey: opts.apiKey, ...(opts.baseUrl ? { httpOptions: { baseUrl: opts.baseUrl } } : {}) });
   const started = Date.now();
 
   let text: string | undefined;

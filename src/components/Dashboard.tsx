@@ -35,10 +35,18 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
 
   useEffect(() => {
     const timer = setInterval(() => void reload(), 20_000);
-    const onEvent = () => void reload();
+    // The in-app notification is written just before the alarm is marked
+    // triggered, so refresh again shortly after.
+    let followUp: ReturnType<typeof setTimeout> | undefined;
+    const onEvent = () => {
+      void reload();
+      clearTimeout(followUp);
+      followUp = setTimeout(() => void reload(), 4000);
+    };
     window.addEventListener(NOTIFICATION_EVENT, onEvent);
     return () => {
       clearInterval(timer);
+      clearTimeout(followUp);
       window.removeEventListener(NOTIFICATION_EVENT, onEvent);
     };
   }, [reload]);
@@ -108,18 +116,18 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel p-1" role="tablist">
+      <div className="flex gap-1 rounded-xl border border-line bg-panel p-1" role="tablist">
         {SECTIONS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             role="tab"
             aria-selected={section === key}
             onClick={() => setSection(key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-1.5 text-xs sm:gap-1.5 sm:px-3 sm:text-sm ${
               section === key ? "bg-panel-2 text-text shadow" : "text-muted hover:text-text"
             }`}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="hidden h-4 w-4 sm:block" />
             {label}
             <span className={`rounded-full px-1.5 text-[11px] tabular ${section === key ? "bg-accent/20 text-accent" : "bg-line text-muted"}`}>
               {grouped[key].length}

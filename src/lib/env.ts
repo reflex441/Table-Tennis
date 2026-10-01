@@ -8,6 +8,8 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   GEMINI_API_KEY: z.string().optional().default(""),
   GEMINI_MODEL: z.string().optional().default("gemini-flash-latest"),
+  /** Optional API base URL override (e.g. a corporate proxy or a local mock). */
+  GEMINI_BASE_URL: z.string().optional().default(""),
   VAPID_PUBLIC_KEY: z.string().optional().default(""),
   VAPID_PRIVATE_KEY: z.string().optional().default(""),
   VAPID_SUBJECT: z.string().optional().default("mailto:admin@example.com"),

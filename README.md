@@ -1,36 +1,244 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TT Alarms — screenshot-to-alarm reminders for table tennis matches
 
-## Getting Started
+Upload screenshots of upcoming table tennis matches, selections and statistics. Google Gemini reads them, you review and correct the extracted data next to the original image, and the app schedules server-side reminders that arrive as browser push and in-app notifications before each match starts.
 
-First, run the development server:
+| Review (screenshot beside extracted data) | Dashboard + in-app notification | Mobile |
+| --- | --- | --- |
+| ![Review](docs/screenshots/review.png) | ![Dashboard](docs/screenshots/dashboard-notification.png) | ![Mobile](docs/screenshots/mobile-dashboard.png) |
+
+*(Screenshots come from the automated end-to-end run, which uses a mocked Gemini API and generated sample screenshots.)*
+
+## Features
+
+- **Upload**: drag and drop, multi-select or paste from the clipboard. Image previews, per-file upload progress and duplicate-upload detection (by SHA-256 hash).
+- **Gemini extraction**: structured JSON output (`responseJsonSchema`) for player 1/2, competition, start time text, OVER/UNDER, points line, O/U record, O/U %, EDGE % and the status-bar clock. Every value is re-validated on the server. Invalid values become `null` with a warning and are never "repaired" by guessing.
+- **Review**: each screenshot is shown beside its extracted matches. Every field can be edited. One screenshot can produce several alarms. Matches can be added manually.
+- **Combining screenshots**: if two screenshots appear to show the same match (same players in either order), the app suggests combining them. Nothing is merged until you click **Combine**. Conflicting values are shown so you can pick one.
+- **Time recognition**: `Today at 6:00 PM`, `Tomorrow at 10:30 AM`, `21/09/2026 at 15:00`, `Starts in 45 minutes`, `18:00 CET`, `UTC+2` offsets, weekday names, ISO and month-name dates. Anything uncertain is flagged for confirmation (see [Time handling](#time-handling)).
+- **Alarms**: preset reminders of 1, 3, 5, 10, 15 or 30 minutes, or a custom value (0–1440 min). There is a default reminder plus a per-match override. You can edit, cancel, reactivate, mark done and delete alarms. Duplicates are refused.
+- **Dashboard**: a compact dark layout with live countdowns, colour-coded OVER/UNDER, O/U and EDGE progress bars, and Upcoming / Triggered / Completed / Cancelled sections. It is responsive on desktop and mobile.
+- **Notifications**: Web Push through a service worker (works when the app is closed), plus an in-app notification centre with pop-ups and an optional chime. Clicking a notification opens that match.
+- **Reliable scheduling**: alarms are stored in PostgreSQL and dispatched by a server-side loop that claims work atomically. Retries, crash recovery and de-duplication are covered in [Scheduling](#scheduling-architecture).
+- **Settings**: default reminder, timezone, date order, push/in-app/sound/statistics preferences, device subscriptions, test notification and server status.
+- **Optional password protection** for internet-facing deployments.
+
+## Tech stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
+
+## Credentials and external services you need to configure
+
+| What | Required? | Where to get it | Env variable(s) |
+| --- | --- | --- | --- |
+| PostgreSQL 14+ database | **Yes** | Local install, Docker (`docker compose`), or a hosted service (Neon, Supabase, Railway, RDS…) | `DATABASE_URL` |
+| Google Gemini API key | **Yes**, for scanning | <https://aistudio.google.com/apikey> (free tier available) | `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) |
+| VAPID key pair for Web Push | **Yes**, for background push | Run `npm run vapid` locally. No account is needed. | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| Cron secret | Only for `SCHEDULER_MODE=external` | `openssl rand -hex 32` | `CRON_SECRET` |
+| App password + session secret | Strongly recommended when deployed publicly | Choose a password; `openssl rand -hex 32` for the secret | `APP_PASSWORD`, `SESSION_SECRET` |
+| External cron service | Only on serverless hosts (Vercel etc.) | cron-job.org, Upstash QStash, Vercel Cron (Pro) | — |
+
+All secrets stay on the server. The browser only receives the VAPID **public** key, from `/api/push/config` at runtime. `.env` is git-ignored, and `.env.example` documents every variable.
+
+## Local setup
+
+Prerequisites: Node.js 20.19+ (22 recommended) and PostgreSQL.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Install dependencies (also generates the Prisma client)
+npm install
+
+# 2. Configure environment
+cp .env.example .env
+#    - set DATABASE_URL
+#    - set GEMINI_API_KEY
+#    - npm run vapid  -> paste both keys into VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
+
+# 3. Create the database schema
+npx prisma migrate deploy        # or: npm run db:migrate:dev while developing
+
+# 4. Run
+npm run dev                      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Open the dashboard and confirm your timezone (a banner offers your browser's timezone).
+2. Click **Enable** on the notifications banner, or use Settings → *Enable notifications*. Then use **Send test notification** to check that push works.
+3. Open **Upload**, drop your screenshots and click **Scan Screenshots**. Review and correct the results, confirm any flagged times, choose reminders and click **Create alarms**.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+No Postgres installed? Run `docker compose up -d db` and set
+`DATABASE_URL=postgresql://tt:tt@localhost:5432/table_tennis?schema=public`. The compose file does not publish the DB port by default. Add `ports: ["5432:5432"]` to the `db` service if you need it.
 
-## Learn More
+### Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` / `build` / `start` | Next.js development / production build / production server |
+| `npm run worker` | Standalone alarm scheduler process |
+| `npm test` | Vitest test suite (add `TEST_DATABASE_URL` to include the Postgres integration tests) |
+| `npm run lint` / `npm run typecheck` | ESLint / TypeScript |
+| `npm run db:migrate` | Apply migrations (`prisma migrate deploy`) |
+| `npm run db:migrate:dev` | Create/apply migrations during development |
+| `npm run db:studio` | Browse the database |
+| `npm run vapid` | Generate VAPID keys |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scheduling architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Browser timers alone cannot be trusted: tabs sleep, phones lock and servers restart. Instead:
 
-## Deploy on Vercel
+1. **Alarms live in Postgres.** Each alarm stores `fireAt = startsAt − reminderMinutes`, a `status` and `nextAttemptAt`. Nothing is held only in memory, so alarms survive restarts and deploys.
+2. **A dispatcher claims due alarms atomically.** It uses `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED) RETURNING id`, so several dispatchers (web server, worker, cron) can run at once and none of them processes the same alarm twice.
+3. **Delivery is de-duplicated.** There is a unique delivery row per `(alarm, generation, subscription)`, a unique in-app notification per `(alarm, generation)`, and a notification `tag` so the OS replaces rather than stacks notifications. Editing an alarm bumps `generation`, so a rescheduled alarm is delivered again.
+4. **Failures are handled.**
+   - Transient push errors (429/5xx/network) are retried with backoff until the match starts, without re-sending to devices that already received the push.
+   - `404`/`410` deactivate the expired subscription.
+   - A crashed dispatcher's lock is reclaimed after 2 minutes.
+   - After downtime, alarms are still delivered if the match started less than 5 minutes ago. Otherwise they are marked *Failed – missed*.
+   - Pushes carry a TTL that ends when the match starts, so a device that was offline doesn't get a stale reminder.
+5. **After the match starts**, triggered alarms move to *Completed* automatically.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Choosing a scheduler mode (`SCHEDULER_MODE`)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Mode | Use when | How it runs | Precision |
+| --- | --- | --- | --- |
+| `inprocess` (default) | One long-running Node server (`npm start` on a VPS, Railway, Render, Fly.io) | `src/instrumentation.ts` starts the loop inside the Next.js server | ~1 s (polls every `SCHEDULER_INTERVAL_MS`, and also wakes when the next alarm is due) |
+| `worker` | Docker/VPS with a separate process (**recommended**) | `npm run worker` (the `worker` service in `docker-compose.yml`) | ~1 s for existing alarms; up to one poll interval for alarms created less than 10 s before they're due |
+| `external` | Serverless (Vercel, Netlify) where background processes aren't allowed | A cron service calls `GET /api/cron/dispatch` with `Authorization: Bearer $CRON_SECRET` | Up to the cron interval (typically 1 min) |
+
+**Recommendation:** the most reliable setup for minute-level reminders is a long-running host (Docker Compose on a small VPS, Railway, Render or Fly.io) with the `worker` or `inprocess` mode. On Vercel you need an external every-minute trigger:
+
+- **Vercel Cron:** Hobby plans only allow daily jobs, so this needs the Pro plan. Add `vercel.json` with `{"crons":[{"path":"/api/cron/dispatch","schedule":"* * * * *"}]}`. Vercel sends `Authorization: Bearer $CRON_SECRET` automatically when `CRON_SECRET` is set.
+- **cron-job.org** (free): call `https://your-app/api/cron/dispatch` every minute with the header `Authorization: Bearer <CRON_SECRET>`.
+- GitHub Actions schedules are best-effort and often delayed by several minutes, so they are not suitable for 1–5 minute reminders.
+
+Running more than one mode at the same time is safe because claims are atomic.
+
+## Deployment
+
+### Docker Compose (Postgres + web + worker)
+
+```bash
+cp .env.example .env     # fill in GEMINI_API_KEY, VAPID keys, APP_PASSWORD, SESSION_SECRET
+docker compose up -d --build
+# open http://localhost:3000 (put it behind HTTPS for push - see below)
+```
+
+The web container applies migrations on start (`prisma migrate deploy`).
+
+### Any Node host
+
+```bash
+npm ci && npm run build
+npx prisma migrate deploy
+npm start                  # SCHEDULER_MODE=inprocess
+# or: SCHEDULER_MODE=worker npm start  +  npm run worker  (two processes)
+```
+
+**HTTPS is required for service workers and push** everywhere except `localhost`. Use your platform's TLS or a reverse proxy such as Caddy, nginx or Cloudflare Tunnel.
+
+## Notifications: what browsers and phones can and cannot do
+
+These are **notifications, not native phone alarms**:
+
+- They do not ring continuously. They respect Do Not Disturb/Focus and silent mode, and the OS decides how they are shown.
+- **iPhone/iPad:** Web Push only works on iOS/iPadOS 16.4+ **after adding the app to the Home Screen** (Share → Add to Home Screen) and enabling notifications from the installed app. Safari tabs cannot receive push.
+- **Android:** Chrome, Edge and Firefox deliver push in the background. Battery saver or aggressive vendor battery optimisation can delay delivery.
+- **Desktop:** the browser usually needs to be running (it can be in the background or minimised). On macOS, notifications must also be allowed for the browser in System Settings.
+- Private/incognito windows generally cannot receive push. Blocked permissions can only be re-enabled from the browser's site settings.
+- In-app notifications and the chime only work while the app is open. Browsers may block sound until you have interacted with the page.
+- Delivery depends on the browser vendor's push service (FCM, Mozilla autopush, Apple). The app records failures per device on the Settings page.
+
+## Time handling
+
+Gemini only **transcribes** the time text it sees. All date arithmetic is done by deterministic code (`src/lib/time/resolve.ts`):
+
+- **Capture time** is taken from, in order: EXIF `DateTimeOriginal` (with its offset if present), then the file's last-modified time, then nothing. A file-modified time counts as reliable only when it matches the clock visible in the screenshot's status bar (within 3 minutes). Otherwise it is flagged. On the review screen you can enter the capture time or click *Taken just now*.
+- **Timezone** comes from a label printed in the screenshot (`CET`, `UTC+2`, …) if there is one. Otherwise your confirmed timezone from Settings is used. If your timezone is not confirmed, every time needs confirmation.
+- The app **never guesses**. These cases are shown in amber and need an explicit "I checked this start time" tick or a manual edit:
+  - relative times without a reliable capture time
+  - ambiguous dates such as `03/04/2026` (the alternative reading is shown)
+  - missing years
+  - time-only text
+  - weekday names
+  - times in the past
+  - live matches
+
+  If no time is visible at all, the field stays empty and you enter it yourself.
+- Confirmed times are stored as UTC (`timestamptz`) together with the IANA timezone used, so alarms trigger correctly across DST changes.
+
+## Duplicate prevention
+
+- **Uploads:** an identical image (same SHA-256 hash) reuses the existing screenshot and its scan, so Gemini isn't called again unless you click *Rescan*.
+- **Scanning:** a screenshot that is already *processing* can't be scanned twice at the same time.
+- **Matches:** a unique `dedupeKey` (normalised player names in any order + start minute) is enforced by the database. If the same players already have a match within ±3 hours, you are asked to confirm before another one is created.
+- **Alarms:** each match has exactly one alarm (unique `matchId`), and delivery is de-duplicated as described above.
+
+## Testing
+
+```bash
+npm test                                   # unit tests (Gemini API mocked)
+TEST_DATABASE_URL=postgresql://... npm test  # + PostgreSQL integration tests (database must be migrated)
+```
+
+The suites cover:
+
+- `tests/gemini-extraction.test.ts`: request shape (image, JSON schema, temperature 0), validation and coercion, nulls for missing data, rejected/invalid output, API error handling. `@google/genai` is mocked.
+- `tests/time-resolve.test.ts`: all required time formats, timezones, DST, ambiguous dates, and every "needs confirmation" path.
+- `tests/alarm-scheduling.test.ts`: the 17:55 trigger time for an 18:00 match with a 5-min reminder, concurrent dispatchers, retries, expired subscriptions, missed alarms, crash recovery, edits during sending, auto-completion, and notification text.
+- `tests/duplicates-and-validation.test.ts`: name normalisation, duplicate keys, merge suggestions and merging, candidate validation, API schemas, image type sniffing and session tokens.
+- `tests/db-integration.test.ts`: real Postgres. Covers duplicate prevention under concurrent requests, `SKIP LOCKED` claiming across connections, rescheduling and cancelling.
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, all tests against a Postgres service, and a production build.
+
+## Project structure
+
+```
+prisma/
+  schema.prisma              # database schema
+  migrations/                # SQL migrations
+public/
+  sw.js                      # service worker: push display + click-to-open
+  icons/                     # PWA / notification icons
+src/
+  app/                       # App Router pages and API routes
+    page.tsx                 # dashboard
+    upload/                  # upload + review
+    matches/[id]/, matches/new/
+    settings/, login/
+    api/                     # screenshots, extract, matches, alarms, push, notifications, settings, cron, auth, health
+  components/                # UI (dashboard, match card, review forms, providers)
+  lib/
+    gemini/                  # prompt, JSON schema, client call, server-side validation
+    time/resolve.ts          # deterministic time resolution
+    alarms/                  # schedule maths, dispatcher, Prisma store, service layer, notification text
+    matching/dedupe.ts       # duplicate keys + merge suggestions
+    review/candidate.ts      # review-screen model, merge and validation
+    push/, scheduler/        # web-push sender, scheduler loop
+    validation/              # Zod schemas
+  instrumentation.ts         # starts the in-process scheduler
+  proxy.ts                   # optional password protection
+  worker/index.ts            # standalone scheduler worker
+tests/                       # Vitest suites
+```
+
+## Security notes
+
+- Gemini, VAPID private, cron and session secrets are read only on the server (`src/lib/env.ts`). None of them are `NEXT_PUBLIC_*`.
+- Uploads are capped at 8 MB. Their type is detected from magic bytes (PNG/JPEG/WebP/HEIC only), and images are served with `nosniff`.
+- All API input is validated with Zod. Gemini output is treated as untrusted.
+- Set `APP_PASSWORD` and `SESSION_SECRET` for any public deployment. Without them, anyone who knows the URL can use your Gemini quota and see your data.
+
+## Troubleshooting
+
+- **"Cannot reach the database" banner:** check `DATABASE_URL` and run `npx prisma migrate deploy`.
+- **Scan fails with `gemini_not_configured`:** set `GEMINI_API_KEY` and restart the server. With `gemini_unavailable` (429/5xx), wait and click *Rescan*.
+- **No push notifications:**
+  - Check Settings → Server status (VAPID keys) and the permission state.
+  - Use *Send test notification*.
+  - Make sure the site is served over HTTPS.
+  - On iOS, install the app to the Home Screen first.
+- **Alarms not firing:** make sure a scheduler is running. Look for `[scheduler] started` in the server logs, check that `npm run worker` is running, or that your cron service calls `/api/cron/dispatch`.
+
+## Note on the reference screenshots
+
+The two reference screenshots mentioned in the original brief did not arrive with the request. The dashboard design follows the written description (compact dark cards, `OVER | O/U: 20/9 - 69% | EDGE: 47%` line, colour-coded selections, progress bars). The Gemini prompt is layout-agnostic. Once real screenshots are available, scan them and adjust `src/lib/gemini/schema.ts` if any field needs extra guidance.

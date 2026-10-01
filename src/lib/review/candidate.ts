@@ -55,7 +55,7 @@ export function newCandidateId(): string {
   return `c${Date.now().toString(36)}${counter}`;
 }
 
-export function candidateFromExtraction(m: ExtractedMatch, shot: ScreenshotContext, settings: SettingsDTO): Candidate {
+export function candidateFromExtraction(m: ExtractedMatch, shot: ScreenshotContext, settings: SettingsDTO, now?: Date): Candidate {
   const c: Candidate = {
     id: newCandidateId(),
     screenshotIds: [shot.id],
@@ -82,7 +82,7 @@ export function candidateFromExtraction(m: ExtractedMatch, shot: ScreenshotConte
     allowSimilar: false,
     result: null,
   };
-  return applyTimeResolution(c, shot, settings);
+  return applyTimeResolution(c, shot, settings, now);
 }
 
 export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Candidate {

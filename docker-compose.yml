@@ -1,0 +1,45 @@
+# Local / self-hosted deployment: Postgres + web server + scheduler worker.
+#   cp .env.example .env   (fill in GEMINI_API_KEY and VAPID keys)
+#   docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tt
+      POSTGRES_PASSWORD: tt
+      POSTGRES_DB: table_tennis
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tt -d table_tennis"]
+      interval: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://tt:tt@db:5432/table_tennis?schema=public
+      SCHEDULER_MODE: worker
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://tt:tt@db:5432/table_tennis?schema=public
+      SCHEDULER_MODE: worker
+    command: ["npm", "run", "worker"]
+    depends_on:
+      web:
+        condition: service_started
+
+volumes:
+  pgdata:
