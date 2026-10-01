@@ -101,7 +101,7 @@ Browser timers alone cannot be trusted: tabs sleep, phones lock and servers rest
 
 | Mode | Use when | How it runs | Precision |
 | --- | --- | --- | --- |
-| `inprocess` (default) | One long-running Node server (`npm start` on a VPS, Railway, Render, Fly.io) | `src/instrumentation.ts` starts the loop inside the Next.js server | ~1 s (polls every `SCHEDULER_INTERVAL_MS`, and also wakes when the next alarm is due) |
+| `inprocess` (default) | One long-running Node server (`npm start` on a VPS, [Railway](#railway), Render, Fly.io) | `src/instrumentation.ts` starts the loop inside the Next.js server | ~1 s (polls every `SCHEDULER_INTERVAL_MS`, and also wakes when the next alarm is due) |
 | `worker` | Docker/VPS with a separate process (**recommended**) | `npm run worker` (the `worker` service in `docker-compose.yml`) | ~1 s for existing alarms; up to one poll interval for alarms created less than 10 s before they're due |
 | `external` | Serverless (Vercel, Netlify) where background processes aren't allowed | A cron service calls `GET /api/cron/dispatch` with `Authorization: Bearer $CRON_SECRET` | Up to the cron interval (typically 1 min) |
 
@@ -124,6 +124,24 @@ docker compose up -d --build
 ```
 
 The web container applies migrations on start (`prisma migrate deploy`).
+
+### Railway
+
+`railway.json` makes Railway build the `Dockerfile` and use `/api/health` as its health check. Database migrations run automatically on every deploy.
+
+1. **New Project → Deploy from GitHub repo** and pick this repository. Under the service's **Settings → Source**, choose the branch to deploy.
+2. **+ New → Database → PostgreSQL** in the same project.
+3. In the app service, open **Variables** and add:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (a reference to the Postgres service)
+   - `GEMINI_API_KEY`
+   - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (from `npm run vapid`) and `VAPID_SUBJECT` (`mailto:you@example.com`)
+   - `APP_PASSWORD` and `SESSION_SECRET` (strongly recommended, since the URL is public)
+   - `SCHEDULER_MODE` = `inprocess` (the default; the scheduler runs inside the web service)
+4. **Settings → Networking → Generate Domain** to get an `https://….up.railway.app` URL. HTTPS is included, so push works on phones.
+5. Make sure **Serverless / App Sleeping is OFF** for the app service. A sleeping service can't send alarms.
+
+Keep a single replica. Several replicas are safe because alarm claims are atomic, but they aren't needed. During a deploy the old and new containers overlap briefly, and that is safe for the same reason.
+Optional: run the scheduler as its own service. Add a second service from the same repo with start command `npm run worker`, and set `SCHEDULER_MODE=worker` on the web service.
 
 ### Any Node host
 
