@@ -8,6 +8,9 @@ import type { SettingsDTO } from "@/lib/validation/settings";
 import type { ExtractedMatch } from "@/lib/gemini/types";
 import { detectImageType } from "@/lib/screenshots";
 import { createSessionToken, verifySessionToken } from "@/lib/auth/session";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { registerSchema, safeNext } from "@/lib/validation/auth";
+import { rateLimited } from "@/lib/auth/rate-limit";
 
 describe("duplicate detection", () => {
   it("normalises names (case, accents, punctuation)", () => {
@@ -78,6 +81,7 @@ const settings: SettingsDTO = {
   averageOdds: 1.85,
   geminiModel: "gemini-3.5-flash-lite",
   geminiFallbackModel: "gemini-3.8-flash",
+  showOnLeaderboard: true,
   geminiKeySource: "none",
   geminiKeyHint: null,
 };
@@ -232,12 +236,44 @@ describe("uploads and auth helpers", () => {
     expect(detectImageType(Buffer.from("<svg onload=alert(1)>....."))).toBeNull();
   });
 
-  it("signs and verifies session tokens", () => {
-    process.env.SESSION_SECRET = "test-secret";
-    const token = createSessionToken(Date.now());
-    expect(verifySessionToken(token)).toBe(true);
-    expect(verifySessionToken(token.slice(0, -2) + "xx")).toBe(false);
-    expect(verifySessionToken(createSessionToken(Date.now() - 40 * 86_400_000))).toBe(false);
-    expect(verifySessionToken(undefined)).toBe(false);
+  it("signs and verifies session tokens for a user", () => {
+    const secret = "test-secret-0123456789";
+    const token = createSessionToken("cmuser123", secret, Date.now());
+    expect(verifySessionToken(token, secret)).toBe("cmuser123");
+    expect(verifySessionToken(token.slice(0, -2) + "xx", secret)).toBeNull();
+    expect(verifySessionToken(token, "another-secret-0123456789")).toBeNull();
+    // Changing the user id breaks the signature.
+    expect(verifySessionToken(token.replace("cmuser123", "cmuser999"), secret)).toBeNull();
+    expect(verifySessionToken(createSessionToken("cmuser123", secret, Date.now() - 40 * 86_400_000), secret)).toBeNull();
+    expect(verifySessionToken(undefined, secret)).toBeNull();
+    expect(verifySessionToken(token, "")).toBeNull();
+  });
+
+  it("hashes passwords with scrypt and checks them", async () => {
+    const hash = await hashPassword("correct horse battery");
+    expect(hash).toMatch(/^scrypt\$16384\$8\$1\$/);
+    expect(hash).not.toContain("correct horse");
+    expect(await verifyPassword("correct horse battery", hash)).toBe(true);
+    expect(await verifyPassword("wrong password", hash)).toBe(false);
+    expect(await verifyPassword("anything", null)).toBe(false);
+    expect(await hashPassword("same")).not.toBe(await hashPassword("same")); // salted
+  });
+
+  it("validates sign-up input and post-login redirects", () => {
+    expect(registerSchema.safeParse({ name: "Will", email: "will@example.com", password: "longenough" }).success).toBe(true);
+    expect(registerSchema.safeParse({ name: "Will", email: "not-an-email", password: "longenough" }).success).toBe(false);
+    expect(registerSchema.safeParse({ name: "Will", email: "will@example.com", password: "short" }).success).toBe(false);
+    expect(registerSchema.safeParse({ name: "", email: "will@example.com", password: "longenough" }).success).toBe(false);
+    expect(safeNext("/profit")).toBe("/profit");
+    expect(safeNext("//evil.example")).toBe("/");
+    expect(safeNext("https://evil.example")).toBe("/");
+    expect(safeNext(null)).toBe("/");
+  });
+
+  it("rate-limits repeated attempts", () => {
+    const key = `test-${Math.random()}`;
+    const results = Array.from({ length: 6 }, (_, i) => rateLimited(key, 5, 60_000, 1_000 + i));
+    expect(results).toEqual([false, false, false, false, false, true]);
+    expect(rateLimited(key, 5, 60_000, 1_000 + 120_000)).toBe(false); // window passed
   });
 });

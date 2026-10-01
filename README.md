@@ -27,15 +27,23 @@ Upload screenshots of upcoming table tennis matches, selections and statistics. 
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini 3.5 Flash-Lite, with Gemini 3.8 Flash as automatic backup) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
 
+## Accounts and leaderboard
+
+- **You need an account to use the app.** Sign up with a display name, email and password, or use **Continue with Google** (when the server has Google sign-in set up). A Google sign-in with the same email as an existing account signs into that account.
+- **Each account is separate:** its own uploads, alarms, bets, Profit page, devices, settings and **Gemini API key** (Settings → Gemini API). Alarm notifications go only to the devices of the account that created the match. Signing out also stops that browser getting your notifications.
+- **Upgrading an existing install:** the first account created takes over all matches, bets and settings that existed before accounts were added.
+- **Leaderboard:** ranks accounts by **most units profited** and **highest ROI**, counting settled bets only. To appear you need at least **100 settled bets**; until then the page shows how many more you need. You can filter to Bot or Personal plays. Only display names are shown, never emails. Turn off **Settings → Account → Show me on the leaderboard** to hide yourself.
+
 ## Credentials and external services you need to configure
 
 | What | Required? | Where to get it | Env variable(s) |
 | --- | --- | --- | --- |
 | PostgreSQL 14+ database | **Yes** | Local install, Docker (`docker compose`), or a hosted service (Neon, Supabase, Railway, RDS…) | `DATABASE_URL` |
-| Google Gemini API key | **Yes**, for scanning | <https://aistudio.google.com/apikey> (free tier available) | `GEMINI_API_KEY`, or enter it in Settings. The model and backup model are set in Settings → Gemini API |
+| Google Gemini API key | **Yes**, for scanning (one per user) | <https://aistudio.google.com/apikey> (free tier available) | None: each user enters their own key in **Settings → Gemini API** (with the model and backup model) |
 | VAPID key pair for Web Push | **Yes**, for background push | Run `npm run vapid` locally. No account is needed. | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | Cron secret | Only for `SCHEDULER_MODE=external` | `openssl rand -hex 32` | `CRON_SECRET` |
-| App password + session secret | Strongly recommended when deployed publicly | Choose a password; `openssl rand -hex 32` for the secret | `APP_PASSWORD`, `SESSION_SECRET` |
+| Session secret | Optional (one is generated and stored in the database if unset) | `openssl rand -hex 32` | `SESSION_SECRET` |
+| Google sign-in | Optional ("Continue with Google") | Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web application). Redirect URI: `<APP_URL>/api/auth/google/callback` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_URL` |
 | External cron service | Only on serverless hosts (Vercel etc.) | cron-job.org, Upstash QStash, Vercel Cron (Pro) | — |
 
 All secrets stay on the server. The browser only receives the VAPID **public** key, from `/api/push/config` at runtime. `.env` is git-ignored, and `.env.example` documents every variable.
@@ -51,7 +59,7 @@ npm install
 # 2. Configure environment
 cp .env.example .env
 #    - set DATABASE_URL
-#    - set GEMINI_API_KEY
+#    - optional: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / APP_URL for "Continue with Google"
 #    - npm run vapid  -> paste both keys into VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
 
 # 3. Create the database schema
@@ -119,7 +127,7 @@ Running more than one mode at the same time is safe because claims are atomic.
 ### Docker Compose (Postgres + web + worker)
 
 ```bash
-cp .env.example .env     # fill in GEMINI_API_KEY, VAPID keys, APP_PASSWORD, SESSION_SECRET
+cp .env.example .env     # fill in the VAPID keys (and Google sign-in, if wanted)
 docker compose up -d --build
 # open http://localhost:3000 (put it behind HTTPS for push - see below)
 ```
@@ -253,14 +261,16 @@ tests/                       # Vitest suites
 - Gemini, VAPID private, cron and session secrets are read only on the server (`src/lib/env.ts`). None of them are `NEXT_PUBLIC_*`.
 - Uploads are capped at 8 MB. Their type is detected from magic bytes (PNG/JPEG/WebP/HEIC only), and images are served with `nosniff`.
 - All API input is validated with Zod. Gemini output is treated as untrusted.
-- Set `APP_PASSWORD` and `SESSION_SECRET` for any public deployment. Without them, anyone who knows the URL can use your Gemini quota and see your data.
+- Every page and API route needs a signed-in account, and every query is limited to that account's own data. Passwords are hashed with scrypt; sessions are signed, HTTP-only cookies. Sign-in attempts are rate-limited.
+- Each user's Gemini key is stored on the server and never sent back to the browser.
 
 ## Troubleshooting
 
 - **"Cannot reach the database" banner:** check `DATABASE_URL` and run `npx prisma migrate deploy`.
 - **"Gemini is overloaded" / 503:** Google's servers are busy. The app tries the main model and then the backup model straight away, and repeats that up to 3 rounds. If all fail, wait a minute and press **Retry**, or pick a different model in **Settings → Gemini API**. You can enter several backup models separated by commas.
 - **"Gemini model not found" (404):** the model name is wrong for your key. Press **Test current key** in Settings: it lists the models your key can use. Click one to use it.
-- **Scan fails with `gemini_not_configured`:** set `GEMINI_API_KEY` and restart the server. With `gemini_unavailable` (429/5xx), wait and click *Rescan*.
+- **Scan fails with `gemini_not_configured`:** add your Gemini API key in **Settings → Gemini API** (every account needs its own). With `gemini_unavailable` (429/5xx), wait and click *Rescan*.
+- **"Continue with Google" says it isn't set up:** set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and restart. **Google says `redirect_uri_mismatch`:** add exactly `<APP_URL>/api/auth/google/callback` to the OAuth client's Authorized redirect URIs, and set `APP_URL` to the address you open the app on.
 - **No push notifications:**
   - Check Settings → Server status (VAPID keys) and the permission state.
   - Use *Send test notification*.

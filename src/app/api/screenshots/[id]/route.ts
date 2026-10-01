@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { requireUserId } from "@/lib/auth/current";
 import { handle, jsonError, parseJson } from "@/lib/api";
 import { screenshotSelect, toScreenshotDTO } from "@/lib/screenshot-dto";
 
@@ -8,7 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handle(async (_request: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
-  const row = await db().screenshot.findUnique({ where: { id }, select: screenshotSelect });
+  const row = await db().screenshot.findFirst({ where: { id, userId: await requireUserId() }, select: screenshotSelect });
   if (!row) return jsonError(404, "not_found", "Screenshot not found.");
   return NextResponse.json({ screenshot: toScreenshotDTO(row) });
 });
@@ -21,7 +22,7 @@ const patchSchema = z.object({
 export const PATCH = handle(async (request: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
   const body = await parseJson(request, patchSchema);
-  const exists = await db().screenshot.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db().screenshot.findFirst({ where: { id, userId: await requireUserId() }, select: { id: true } });
   if (!exists) return jsonError(404, "not_found", "Screenshot not found.");
   const row = await db().screenshot.update({
     where: { id },
@@ -35,7 +36,7 @@ export const PATCH = handle(async (request: Request, ctx: Ctx) => {
 
 export const DELETE = handle(async (_request: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
-  const res = await db().screenshot.deleteMany({ where: { id } });
+  const res = await db().screenshot.deleteMany({ where: { id, userId: await requireUserId() } });
   if (!res.count) return jsonError(404, "not_found", "Screenshot not found.");
   return new NextResponse(null, { status: 204 });
 });

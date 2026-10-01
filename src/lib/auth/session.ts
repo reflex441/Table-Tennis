@@ -1,46 +1,54 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { PrismaClient } from "@/generated/prisma/client";
 
 /**
- * Optional single-user password protection. When APP_PASSWORD is set every
- * page and API route (except login, the cron endpoint and static assets)
- * requires a signed session cookie.
+ * Signed session cookie: "v2.<userId>.<expires>.<signature>". The signing key
+ * is SESSION_SECRET, or a random key generated once and stored in the
+ * database, so sessions survive restarts with no configuration.
  */
 
 export const SESSION_COOKIE = "tt_session";
 export const SESSION_MAX_AGE_S = 60 * 60 * 24 * 30;
 
-export function authEnabled(): boolean {
-  return Boolean(process.env.APP_PASSWORD);
+function sign(value: string, secret: string): string {
+  return createHmac("sha256", secret).update(value).digest("base64url");
 }
 
-function secret(): string {
-  const s = process.env.SESSION_SECRET || process.env.APP_PASSWORD || "";
-  return s;
-}
-
-function sign(value: string): string {
-  return createHmac("sha256", secret()).update(value).digest("base64url");
-}
-
-export function createSessionToken(now = Date.now()): string {
+export function createSessionToken(userId: string, secret: string, now = Date.now()): string {
+  if (!secret) throw new Error("Session secret missing");
   const expires = Math.floor(now / 1000) + SESSION_MAX_AGE_S;
-  const payload = `v1.${expires}`;
-  return `${payload}.${sign(payload)}`;
+  const payload = `v2.${userId}.${expires}`;
+  return `${payload}.${sign(payload, secret)}`;
 }
 
-export function verifySessionToken(token: string | undefined, now = Date.now()): boolean {
-  if (!token) return false;
+/** The user id in a valid, unexpired token; otherwise null. */
+export function verifySessionToken(token: string | undefined, secret: string, now = Date.now()): string | null {
+  if (!token || !secret) return null;
   const parts = token.split(".");
-  if (parts.length !== 3 || parts[0] !== "v1") return false;
-  const payload = `${parts[0]}.${parts[1]}`;
-  const expected = Buffer.from(sign(payload));
-  const actual = Buffer.from(parts[2]);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return false;
-  return Number(parts[1]) * 1000 > now;
+  if (parts.length !== 4 || parts[0] !== "v2" || !/^[a-z0-9]+$/i.test(parts[1])) return null;
+  const payload = parts.slice(0, 3).join(".");
+  const expected = Buffer.from(sign(payload, secret));
+  const actual = Buffer.from(parts[3]);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+  return Number(parts[2]) * 1000 > now ? parts[1] : null;
 }
 
-export function checkPassword(candidate: string): boolean {
-  const expected = Buffer.from(process.env.APP_PASSWORD ?? "");
-  const actual = Buffer.from(candidate);
-  return expected.length > 0 && expected.length === actual.length && timingSafeEqual(expected, actual);
+let cachedSecret: string | null = null;
+
+/** SESSION_SECRET, else a persistent random secret stored in the database. */
+export async function getSessionSecret(prisma: PrismaClient): Promise<string> {
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 16) return process.env.SESSION_SECRET;
+  if (cachedSecret) return cachedSecret;
+  await prisma.appSecret.createMany({ data: [{ name: "session", value: randomBytes(32).toString("base64url") }], skipDuplicates: true });
+  const row = await prisma.appSecret.findUniqueOrThrow({ where: { name: "session" } });
+  cachedSecret = row.value;
+  return cachedSecret;
 }
+
+export const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production" && process.env.INSECURE_COOKIES !== "1",
+  path: "/",
+  maxAge: SESSION_MAX_AGE_S,
+};

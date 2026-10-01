@@ -29,6 +29,7 @@ const settings: SettingsDTO = {
   averageOdds: 1.85,
   geminiModel: "gemini-3.5-flash-lite",
   geminiFallbackModel: "gemini-3.8-flash",
+  showOnLeaderboard: true,
   geminiKeySource: "settings",
   geminiKeyHint: "…0000",
 };

@@ -27,13 +27,13 @@ export type CreateOutcome =
 const SIMILAR_WINDOW_MS = 3 * 60 * 60_000;
 
 /** Create one match with its statistics and alarm, refusing duplicates. */
-export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInput, now = new Date()): Promise<CreateOutcome> {
+export async function createMatchWithAlarm(prisma: PrismaClient, userId: string, input: MatchInput, now = new Date()): Promise<CreateOutcome> {
   const startsAt = new Date(input.startsAt);
   const check = checkSchedule(startsAt, input.reminderMinutes, now);
   if (!check.ok) return { status: "invalid", message: check.reason };
 
   const dedupeKey = matchDedupeKey(input.player1, input.player2, startsAt);
-  const exact = await prisma.match.findUnique({ where: { dedupeKey }, select: { id: true } });
+  const exact = await prisma.match.findUnique({ where: { userId_dedupeKey: { userId, dedupeKey } }, select: { id: true } });
   if (exact) {
     return { status: "duplicate", existingId: exact.id, message: `${input.player1} vs ${input.player2} at this time already has an alarm.` };
   }
@@ -41,7 +41,7 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
   if (!input.allowSimilar) {
     const key = playersKey(input.player1, input.player2);
     const nearby = await prisma.match.findMany({
-      where: { startsAt: { gte: new Date(startsAt.getTime() - SIMILAR_WINDOW_MS), lte: new Date(startsAt.getTime() + SIMILAR_WINDOW_MS) } },
+      where: { userId, startsAt: { gte: new Date(startsAt.getTime() - SIMILAR_WINDOW_MS), lte: new Date(startsAt.getTime() + SIMILAR_WINDOW_MS) } },
       select: { id: true, player1: true, player2: true },
     });
     const similar = nearby.find((m) => playersKey(m.player1, m.player2) === key);
@@ -55,7 +55,7 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
   }
 
   const screenshotIds = input.screenshotIds.length
-    ? (await prisma.screenshot.findMany({ where: { id: { in: input.screenshotIds } }, select: { id: true } })).map((s) => s.id)
+    ? (await prisma.screenshot.findMany({ where: { id: { in: input.screenshotIds }, userId }, select: { id: true } })).map((s) => s.id)
     : [];
 
   try {
@@ -69,6 +69,7 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
         rawTimeText: input.rawTimeText,
         notes: input.notes,
         dedupeKey,
+        userId,
         playType: input.playType ?? (input.selection ? "BOT" : "PERSONAL"),
         stakeUnits: input.stakeUnits,
         odds: input.odds,
@@ -96,7 +97,7 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
   } catch (err) {
     // Unique constraint race: another request created the same match.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      const existing = await prisma.match.findUnique({ where: { dedupeKey }, select: { id: true } });
+      const existing = await prisma.match.findUnique({ where: { userId_dedupeKey: { userId, dedupeKey } }, select: { id: true } });
       return { status: "duplicate", existingId: existing?.id ?? "", message: "This match already has an alarm." };
     }
     throw err;
@@ -104,8 +105,8 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
 }
 
 /** Edit match details and/or reminder; reschedules the alarm when timing changes. */
-export async function updateMatch(prisma: PrismaClient, id: string, input: UpdateMatchInput, now = new Date()): Promise<MatchWithRelations> {
-  const existing = await prisma.match.findUnique({ where: { id }, include: matchInclude });
+export async function updateMatch(prisma: PrismaClient, userId: string, id: string, input: UpdateMatchInput, now = new Date()): Promise<MatchWithRelations> {
+  const existing = await prisma.match.findFirst({ where: { id, userId }, include: matchInclude });
   if (!existing) throw new ServiceError("Match not found.", 404, "not_found");
 
   const player1 = input.player1 ?? existing.player1;
@@ -117,7 +118,7 @@ export async function updateMatch(prisma: PrismaClient, id: string, input: Updat
 
   const dedupeKey = matchDedupeKey(player1, player2, startsAt);
   if (dedupeKey !== existing.dedupeKey) {
-    const clash = await prisma.match.findUnique({ where: { dedupeKey }, select: { id: true } });
+    const clash = await prisma.match.findUnique({ where: { userId_dedupeKey: { userId, dedupeKey } }, select: { id: true } });
     if (clash && clash.id !== id) {
       throw new ServiceError("Another alarm already exists for these players at this time.", 409, "duplicate", { existingId: clash.id });
     }
@@ -181,8 +182,14 @@ export async function updateMatch(prisma: PrismaClient, id: string, input: Updat
   }
 }
 
-export async function changeAlarmState(prisma: PrismaClient, matchId: string, action: "cancel" | "reactivate" | "complete", now = new Date()): Promise<MatchWithRelations> {
-  const match = await prisma.match.findUnique({ where: { id: matchId }, include: matchInclude });
+export async function changeAlarmState(
+  prisma: PrismaClient,
+  userId: string,
+  matchId: string,
+  action: "cancel" | "reactivate" | "complete",
+  now = new Date(),
+): Promise<MatchWithRelations> {
+  const match = await prisma.match.findFirst({ where: { id: matchId, userId }, include: matchInclude });
   if (!match || !match.alarm) throw new ServiceError("Alarm not found.", 404, "not_found");
   const alarm = match.alarm;
 
@@ -222,25 +229,26 @@ const CLEAR_RINGING = { ackAt: null, ackAction: null, nextRepeatAt: null, repeat
  */
 export async function acknowledgeAlarm(
   prisma: PrismaClient,
+  userId: string,
   alarmId: string,
   action: "placed" | "skipped",
   now = new Date(),
   bet?: { stake?: number; odds?: number | null },
 ): Promise<MatchWithRelations> {
-  const alarm = await prisma.alarm.findUnique({ where: { id: alarmId }, select: { matchId: true, ackAt: true } });
+  const alarm = await prisma.alarm.findFirst({ where: { id: alarmId, match: { userId } }, select: { matchId: true, ackAt: true } });
   if (!alarm) throw new ServiceError("Alarm not found.", 404, "not_found");
   if (!alarm.ackAt) {
     await prisma.alarm.updateMany({ where: { id: alarmId, ackAt: null }, data: { ackAt: now, ackAction: action, nextRepeatAt: null } });
   }
   // "I've placed the bet" records the bet for profit tracking.
-  if (action === "placed") await placeBet(prisma, alarm.matchId, bet ?? {}, now);
+  if (action === "placed") await placeBet(prisma, userId, alarm.matchId, bet ?? {}, now);
   return (await prisma.match.findUnique({ where: { id: alarm.matchId }, include: matchInclude }))!;
 }
 
 /** Alarms that are ringing right now: notified, not confirmed, match not started. */
-export async function listRingingAlarms(prisma: PrismaClient, now = new Date()) {
+export async function listRingingAlarms(prisma: PrismaClient, userId: string, now = new Date()) {
   const rows = await prisma.match.findMany({
-    where: { startsAt: { gt: now }, alarm: { status: "TRIGGERED", ackAt: null } },
+    where: { userId, startsAt: { gt: now }, alarm: { status: "TRIGGERED", ackAt: null } },
     include: matchInclude,
     orderBy: { startsAt: "asc" },
     take: 20,
@@ -248,8 +256,8 @@ export async function listRingingAlarms(prisma: PrismaClient, now = new Date()) 
   return rows.map(toMatchDTO);
 }
 
-export async function deleteMatch(prisma: PrismaClient, id: string): Promise<void> {
-  const res = await prisma.match.deleteMany({ where: { id } });
+export async function deleteMatch(prisma: PrismaClient, userId: string, id: string): Promise<void> {
+  const res = await prisma.match.deleteMany({ where: { id, userId } });
   if (res.count === 0) throw new ServiceError("Match not found.", 404, "not_found");
 }
 

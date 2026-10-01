@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireUserId } from "@/lib/auth/current";
 import { handle, jsonError } from "@/lib/api";
 import { MAX_SCREENSHOT_BYTES, detectImageType, determineCaptureTime, sha256 } from "@/lib/screenshots";
 import { screenshotSelect, toScreenshotDTO } from "@/lib/screenshot-dto";
@@ -7,6 +8,7 @@ import { getSettings } from "@/lib/settings";
 
 /** Upload one screenshot (multipart/form-data: file, lastModified). */
 export const POST = handle(async (request: Request) => {
+  const userId = await requireUserId();
   let form: FormData;
   try {
     form = await request.formData();
@@ -24,10 +26,10 @@ export const POST = handle(async (request: Request) => {
 
   const prisma = db();
   const hash = sha256(buf);
-  const existing = await prisma.screenshot.findFirst({ where: { sha256: hash }, orderBy: { createdAt: "desc" }, select: screenshotSelect });
+  const existing = await prisma.screenshot.findFirst({ where: { userId, sha256: hash }, orderBy: { createdAt: "desc" }, select: screenshotSelect });
   if (existing) return NextResponse.json({ screenshot: toScreenshotDTO(existing, true) });
 
-  const settings = await getSettings(prisma);
+  const settings = await getSettings(prisma, userId);
   const lastModifiedRaw = Number(form.get("lastModified"));
   const { capturedAt, source } = await determineCaptureTime({
     buf,
@@ -44,6 +46,7 @@ export const POST = handle(async (request: Request) => {
       data: buf,
       capturedAt,
       capturedAtSource: source,
+      userId,
     },
     select: screenshotSelect,
   });
@@ -53,6 +56,6 @@ export const POST = handle(async (request: Request) => {
 export const GET = handle(async (request: Request) => {
   const url = new URL(request.url);
   const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 20));
-  const rows = await db().screenshot.findMany({ orderBy: { createdAt: "desc" }, take: limit, select: screenshotSelect });
+  const rows = await db().screenshot.findMany({ where: { userId: await requireUserId() }, orderBy: { createdAt: "desc" }, take: limit, select: screenshotSelect });
   return NextResponse.json({ screenshots: rows.map((r) => toScreenshotDTO(r)) });
 });

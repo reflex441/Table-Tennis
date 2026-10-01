@@ -22,6 +22,8 @@ export const LATE_GRACE_MS = 5 * 60_000;
 
 export interface ClaimedAlarm {
   id: string;
+  /** Owner of the match: their settings and devices are used. */
+  userId: string | null;
   generation: number;
   attempts: number;
   reminderMinutes: number;
@@ -69,22 +71,25 @@ export interface FinishUpdate {
 
 export interface DispatcherStore {
   claimDue(now: Date, limit: number): Promise<ClaimedAlarm[]>;
-  getSettings(): Promise<DispatchSettings>;
-  getActiveSubscriptions(): Promise<SubscriptionRecord[]>;
+  /** The alarm owner's notification settings. */
+  getSettings(userId: string | null): Promise<DispatchSettings>;
+  /** The alarm owner's devices. */
+  getActiveSubscriptions(userId: string | null): Promise<SubscriptionRecord[]>;
   getDeliveredSubscriptionIds(alarmId: string, generation: number): Promise<Set<string>>;
   recordDelivery(alarmId: string, generation: number, subscriptionId: string, result: PushResult): Promise<void>;
   markSubscription(subscriptionId: string, result: PushResult, now: Date): Promise<void>;
   /** Returns true if a new notification was created (false if it already existed). */
-  createInAppNotification(alarmId: string, generation: number, payload: NotificationPayload): Promise<boolean>;
+  createInAppNotification(alarmId: string, generation: number, payload: NotificationPayload, userId: string | null): Promise<boolean>;
   /** Only applies if the alarm is still SENDING with the same generation. */
   finishAlarm(alarmId: string, generation: number, update: FinishUpdate): Promise<boolean>;
   /** Move TRIGGERED alarms whose match has started to COMPLETED. */
   completeStartedAlarms(now: Date): Promise<number>;
   /**
    * Atomically claim triggered, unconfirmed alarms whose repeat is due and
-   * whose match hasn't started, moving their next repeat `intervalMs` ahead.
+   * whose match hasn't started (only for owners with "ring until confirmed"
+   * and push on), moving their next repeat ahead by the owner's interval.
    */
-  claimRepeats(now: Date, limit: number, intervalMs: number): Promise<(ClaimedAlarm & { repeatCount: number })[]>;
+  claimRepeats(now: Date, limit: number): Promise<(ClaimedAlarm & { repeatCount: number })[]>;
   nextDueAt(): Promise<Date | null>;
 }
 
@@ -118,15 +123,25 @@ export async function dispatchDueAlarms(deps: {
   const claimed = await deps.store.claimDue(nowFn(), deps.batchSize ?? 50);
   report.claimed = claimed.length;
 
-  let settingsCache: DispatchSettings | null = null;
-  const getSettings = async () => (settingsCache ??= await deps.store.getSettings());
+  // Each alarm uses its owner's settings and devices (cached per pass).
+  const settingsCache = new Map<string, Promise<DispatchSettings>>();
+  const subsCache = new Map<string, Promise<SubscriptionRecord[]>>();
+  const settingsFor = (userId: string | null) => {
+    const key = userId ?? "";
+    if (!settingsCache.has(key)) settingsCache.set(key, deps.store.getSettings(userId));
+    return settingsCache.get(key)!;
+  };
+  const subscriptionsFor = (userId: string | null) => {
+    const key = userId ?? "";
+    if (!subsCache.has(key)) subsCache.set(key, deps.store.getActiveSubscriptions(userId));
+    return subsCache.get(key)!;
+  };
 
   if (claimed.length) {
-    const settings = await getSettings();
-    const subscriptions = settings.pushEnabled && deps.push ? await deps.store.getActiveSubscriptions() : [];
-
     for (const alarm of claimed) {
       try {
+        const settings = await settingsFor(alarm.userId);
+        const subscriptions = settings.pushEnabled && deps.push ? await subscriptionsFor(alarm.userId) : [];
         const outcome = await processAlarm(alarm, settings, subscriptions, deps.store, deps.push, nowFn(), log);
         report.pushSent += outcome.pushSent;
         report.pushFailed += outcome.pushFailed;
@@ -152,13 +167,13 @@ export async function dispatchDueAlarms(deps: {
 
   // "Ring until confirmed": re-send the push for triggered alarms nobody has
   // confirmed yet, so a locked phone keeps alerting until the bet is placed.
-  const settings = await getSettings();
-  if (settings.ringUntilAck && settings.pushEnabled && deps.push) {
-    const repeats = await deps.store.claimRepeats(nowFn(), deps.batchSize ?? 50, settings.repeatSeconds * 1000);
+  if (deps.push) {
+    const repeats = await deps.store.claimRepeats(nowFn(), deps.batchSize ?? 50);
     if (repeats.length) {
-      // Repeats go to computers only: phones get a single notification.
-      const subscriptions = (await deps.store.getActiveSubscriptions()).filter(isDesktop);
       for (const alarm of repeats) {
+        const settings = await settingsFor(alarm.userId);
+        // Repeats go to computers only: phones get a single notification.
+        const subscriptions = (await subscriptionsFor(alarm.userId)).filter(isDesktop);
         const now = nowFn();
         const payload = buildAlarmNotification({
           match: alarm.match,
@@ -219,7 +234,7 @@ async function processAlarm(
 
   let inAppDelivered = false;
   if (settings.inAppEnabled) {
-    await store.createInAppNotification(alarm.id, alarm.generation, payload);
+    await store.createInAppNotification(alarm.id, alarm.generation, payload, alarm.userId);
     inAppDelivered = true;
   }
 

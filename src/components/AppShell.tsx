@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, LayoutDashboard, Settings, Upload, AlertTriangle, TrendingUp } from "lucide-react";
+import { Bell, LayoutDashboard, LogOut, Settings, Trophy, Upload, AlertTriangle, TrendingUp } from "lucide-react";
+import type { PublicUser } from "@/lib/auth/accounts";
+import { signOut } from "@/lib/sign-out";
 import { useNotifications } from "./NotificationProvider";
 import { DateTime } from "luxon";
 
@@ -11,12 +13,13 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/profit", label: "Profit", icon: TrendingUp },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppShell({ children, dbError }: { children: React.ReactNode; dbError: boolean }) {
+export function AppShell({ children, dbError, user }: { children: React.ReactNode; dbError: boolean; user: PublicUser }) {
   const pathname = usePathname();
-  if (pathname === "/login") return <>{children}</>;
+  if (pathname === "/login" || pathname === "/signup") return <>{children}</>;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -41,8 +44,9 @@ export function AppShell({ children, dbError }: { children: React.ReactNode; dbE
               );
             })}
           </nav>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
             <NotificationBell />
+            <UserMenu user={user} />
           </div>
         </div>
       </header>
@@ -56,7 +60,7 @@ export function AppShell({ children, dbError }: { children: React.ReactNode; dbE
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 pb-24 pt-4 sm:px-4 sm:pb-10">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
@@ -123,6 +127,51 @@ function NotificationBell() {
               ))}
             </ul>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UserMenu({ user }: { user: PublicUser }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+  const initials = user.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        aria-label="Account"
+        aria-expanded={open}
+        className="grid h-8 w-8 place-items-center rounded-full bg-accent/15 text-xs font-bold text-accent hover:bg-accent/25"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {initials || "?"}
+      </button>
+      {open && (
+        <div className="card absolute right-0 top-10 z-50 w-64 bg-panel-2 p-1 shadow-2xl shadow-black/60">
+          <div className="border-b border-line px-3 py-2">
+            <p className="truncate text-sm font-semibold">{user.name}</p>
+            <p className="truncate text-xs text-muted">{user.email}</p>
+          </div>
+          <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-line/50">
+            <Settings className="h-4 w-4" /> Settings
+          </Link>
+          <button onClick={() => void signOut()} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-under hover:bg-line/50">
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
         </div>
       )}
     </div>

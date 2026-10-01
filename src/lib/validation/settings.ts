@@ -64,6 +64,7 @@ export const settingsUpdateSchema = z
     averageOdds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000),
     geminiModel: geminiModelSchema,
     geminiFallbackModel: geminiFallbackSchema,
+    showOnLeaderboard: z.boolean(),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -98,8 +99,10 @@ export interface SettingsDTO {
   geminiModel: string;
   /** Comma-separated backup models ("" = off). */
   geminiFallbackModel: string;
-  /** Where the Gemini key comes from. The key itself is never sent to the browser. */
-  geminiKeySource: "settings" | "env" | "none";
+  /** Appear on the leaderboard (display name only). */
+  showOnLeaderboard: boolean;
+  /** Whether this account has saved a Gemini key. The key itself is never sent to the browser. */
+  geminiKeySource: "settings" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */
   geminiKeyHint: string | null;
 }

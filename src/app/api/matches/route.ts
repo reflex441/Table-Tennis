@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireUserId } from "@/lib/auth/current";
 import { handle, parseJson } from "@/lib/api";
 import { createMatchesSchema } from "@/lib/validation/match";
 import { createMatchWithAlarm, toMatchDTO } from "@/lib/alarms/service";
@@ -12,7 +13,7 @@ const SECTIONS = new Set(["upcoming", "triggered", "completed", "cancelled", "al
 export const GET = handle(async (request: Request) => {
   const url = new URL(request.url);
   const section = url.searchParams.get("section") ?? "all";
-  const matches = await listMatches(db(), SECTIONS.has(section) && section !== "all" ? (section as Section) : null);
+  const matches = await listMatches(db(), await requireUserId(), SECTIONS.has(section) && section !== "all" ? (section as Section) : null);
   return NextResponse.json({ matches });
 });
 
@@ -21,11 +22,12 @@ export const GET = handle(async (request: Request) => {
  * independently so one duplicate doesn't block the rest.
  */
 export const POST = handle(async (request: Request) => {
+  const userId = await requireUserId();
   const body = await parseJson(request, createMatchesSchema);
   const prisma = db();
   const results = [];
   for (const [index, input] of body.matches.entries()) {
-    const outcome = await createMatchWithAlarm(prisma, input);
+    const outcome = await createMatchWithAlarm(prisma, userId, input);
     if (outcome.status === "created") {
       results.push({ index, status: "created" as const, immediate: outcome.immediate, match: toMatchDTO(outcome.match) });
     } else {

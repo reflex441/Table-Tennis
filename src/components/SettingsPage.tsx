@@ -10,6 +10,8 @@ import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { listTimeZones } from "@/lib/format";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
+import { signOut } from "@/lib/sign-out";
+import type { PublicUser } from "@/lib/auth/accounts";
 import { useBrowserTimeZone } from "./useBrowserTimeZone";
 import type { SettingsUpdate } from "@/lib/validation/settings";
 
@@ -127,6 +129,8 @@ export function SettingsPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+
+      <AccountSection />
 
       <GeminiKeySection />
 
@@ -300,19 +304,6 @@ export function SettingsPage() {
         </ul>
       </Section>
 
-      <form
-        action="/api/auth/logout"
-        method="post"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          await fetch("/api/auth/logout", { method: "POST" });
-          window.location.replace("/login");
-        }}
-      >
-        <button className="text-xs text-muted underline" type="submit">
-          Log out (only relevant when APP_PASSWORD is set)
-        </button>
-      </form>
     </div>
   );
 }
@@ -426,7 +417,6 @@ function GeminiKeySection() {
       <p className={`mb-3 flex items-center gap-1.5 text-sm ${source === "none" ? "text-warn" : "text-over"}`}>
         {source === "none" ? <Info className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
         {source === "settings" && <>Key saved ({settings.geminiKeyHint})</>}
-        {source === "env" && <>Using the key from the server&apos;s GEMINI_API_KEY variable</>}
         {source === "none" && <>No key yet — scanning won&apos;t work until you add one</>}
       </p>
 
@@ -482,7 +472,7 @@ function GeminiKeySection() {
       <ModelFields available={available} />
 
       <p className="mt-2 text-xs text-muted">
-        The key is stored on your server and is never shown again after saving. A key saved here overrides GEMINI_API_KEY. Set APP_PASSWORD so strangers can&apos;t change it.
+        Each account uses its own key. It is stored on the server, only used for your scans, and never shown again after saving.
       </p>
     </Section>
   );
@@ -737,5 +727,38 @@ function ModelFields({ available }: { available: string[] }) {
         {msg && <span className={`text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</span>}
       </div>
     </div>
+  );
+}
+
+/** Who is signed in, leaderboard visibility and sign out. */
+function AccountSection() {
+  const { settings, update } = useSettings();
+  const [user, setUser] = useState<PublicUser | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ user: PublicUser | null }>("/api/auth/me").then((r) => !cancelled && setUser(r.user)).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return (
+    <Section title="Account">
+      {user && (
+        <p className="text-sm">
+          Signed in as <b>{user.name}</b> <span className="text-muted">({user.email})</span>
+          {user.hasGoogle && <span className="ml-2 chip bg-line text-muted">Google</span>}
+        </p>
+      )}
+      <Toggle
+        label="Show me on the leaderboard"
+        hint="Only your display name and your results are shown - never your email."
+        checked={settings.showOnLeaderboard}
+        onChange={(v) => void update({ showOnLeaderboard: v })}
+      />
+      <button className="btn-ghost mt-2" onClick={() => void signOut()}>
+        Sign out
+      </button>
+      <p className="mt-1 text-xs text-muted">Signing out also stops this browser getting your alarm notifications.</p>
+    </Section>
   );
 }

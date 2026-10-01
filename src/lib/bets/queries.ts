@@ -10,10 +10,11 @@ export interface BetRowWithMatch extends BetRow {
 }
 
 /** Every recorded bet with the match details needed for the profit page. */
-export async function listBetRows(prisma: PrismaClient, opts: { since?: Date; playType?: PlayType } = {}): Promise<BetRowWithMatch[]> {
+export async function listBetRows(prisma: PrismaClient, userId: string, opts: { since?: Date; playType?: PlayType } = {}): Promise<BetRowWithMatch[]> {
   const rows = await prisma.bet.findMany({
     where: {
       match: {
+        userId,
         ...(opts.since ? { startsAt: { gte: opts.since } } : {}),
         ...(opts.playType ? { playType: opts.playType } : {}),
       },

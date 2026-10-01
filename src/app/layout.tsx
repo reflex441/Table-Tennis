@@ -7,6 +7,8 @@ import { NotificationProvider } from "@/components/NotificationProvider";
 import { AlarmRinger } from "@/components/AlarmRinger";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
+import { getCurrentUser } from "@/lib/auth/current";
+import type { PublicUser } from "@/lib/auth/accounts";
 import type { SettingsDTO } from "@/lib/validation/settings";
 
 export const metadata: Metadata = {
@@ -43,6 +45,7 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   averageOdds: 1.85,
   geminiModel: "gemini-3.5-flash-lite",
   geminiFallbackModel: "gemini-3.8-flash",
+  showOnLeaderboard: true,
   geminiKeySource: "none",
   geminiKeyHint: null,
 };
@@ -50,12 +53,30 @@ const FALLBACK_SETTINGS: SettingsDTO = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   await connection();
   let settings = FALLBACK_SETTINGS;
+  let user: PublicUser | null = null;
   let dbError = false;
   try {
-    settings = await getSettings(db());
+    user = await getCurrentUser();
+    if (user) settings = await getSettings(db(), user.id);
   } catch (err) {
-    console.error("Failed to load settings", err);
+    console.error("Failed to load the session or settings", err);
     dbError = true;
+  }
+
+  // Signed out: only the sign-in / sign-up pages render (no polling, no alarms).
+  if (!user) {
+    return (
+      <html lang="en" className="h-full antialiased">
+        <body className="min-h-full">
+          {dbError && (
+            <div className="border-b border-rose-900/60 bg-rose-950/40 px-4 py-2 text-center text-sm text-rose-200">
+              Cannot reach the database. Check DATABASE_URL and run the migrations (see README).
+            </div>
+          )}
+          {children}
+        </body>
+      </html>
+    );
   }
 
   return (
@@ -63,7 +84,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-full">
         <SettingsProvider initial={settings}>
           <NotificationProvider>
-            <AppShell dbError={dbError}>{children}</AppShell>
+            <AppShell dbError={dbError} user={user}>
+              {children}
+            </AppShell>
             <AlarmRinger />
           </NotificationProvider>
         </SettingsProvider>

@@ -84,6 +84,7 @@ function createMemoryStore(opts: { alarms: MemAlarm[]; subs?: SubscriptionRecord
         a.attempts += 1;
         return {
           id: a.id,
+          userId: "u1",
           generation: a.generation,
           attempts: a.attempts,
           reminderMinutes: a.reminderMinutes,
@@ -142,15 +143,17 @@ function createMemoryStore(opts: { alarms: MemAlarm[]; subs?: SubscriptionRecord
       if (update.nextRepeatAt !== undefined) a.nextRepeatAt = update.nextRepeatAt;
       return true;
     },
-    async claimRepeats(now, limit, intervalMs) {
+    async claimRepeats(now, limit) {
+      if (!(opts.ringUntilAck ?? false) || !(opts.pushEnabled ?? true)) return [];
       const due = [...alarms.values()]
         .filter((a) => a.status === "TRIGGERED" && !a.ackAt && a.nextRepeatAt && a.nextRepeatAt <= now && a.startsAt > now)
         .slice(0, limit);
       return due.map((a) => {
-        a.nextRepeatAt = new Date(now.getTime() + intervalMs);
+        a.nextRepeatAt = new Date(now.getTime() + (opts.repeatSeconds ?? 30) * 1000);
         a.repeatCount = (a.repeatCount ?? 0) + 1;
         return {
           id: a.id,
+          userId: "u1",
           generation: a.generation,
           attempts: a.attempts,
           reminderMinutes: a.reminderMinutes,

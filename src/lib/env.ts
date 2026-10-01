@@ -6,7 +6,6 @@ import { z } from "zod";
  */
 const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  GEMINI_API_KEY: z.string().optional().default(""),
   /** Optional API base URL override (e.g. a corporate proxy or a local mock). */
   GEMINI_BASE_URL: z.string().optional().default(""),
   VAPID_PUBLIC_KEY: z.string().optional().default(""),
@@ -15,8 +14,13 @@ const schema = z.object({
   CRON_SECRET: z.string().optional().default(""),
   SCHEDULER_MODE: z.enum(["inprocess", "worker", "external"]).optional().default("inprocess"),
   SCHEDULER_INTERVAL_MS: z.coerce.number().int().min(1000).max(60_000).optional().default(10_000),
-  APP_PASSWORD: z.string().optional().default(""),
+  /** Signs session cookies. Optional: a random secret is generated and stored in the database if unset. */
   SESSION_SECRET: z.string().optional().default(""),
+  /** Google sign-in (optional). */
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
+  /** Public URL of the app, e.g. https://tt.example.com (used for the Google redirect URL). */
+  APP_URL: z.string().optional().default(""),
 });
 
 export type ServerEnv = z.infer<typeof schema>;
@@ -37,8 +41,4 @@ export function env(): ServerEnv {
 export function isPushConfigured(): boolean {
   const e = env();
   return Boolean(e.VAPID_PUBLIC_KEY && e.VAPID_PRIVATE_KEY);
-}
-
-export function isGeminiConfigured(): boolean {
-  return Boolean(env().GEMINI_API_KEY);
 }

@@ -2,15 +2,15 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
 
 /**
- * Make sure the single settings row exists. `skipDuplicates` compiles to
+ * Make sure the user's settings row exists. `skipDuplicates` compiles to
  * INSERT ... ON CONFLICT DO NOTHING, which (unlike Prisma's upsert) is safe
- * when several requests/dispatchers race on first start.
+ * when several requests race on first use.
  */
-async function ensureRow(prisma: PrismaClient) {
-  const existing = await prisma.settings.findUnique({ where: { id: 1 } });
+async function ensureRow(prisma: PrismaClient, userId: string) {
+  const existing = await prisma.settings.findUnique({ where: { userId } });
   if (existing) return existing;
-  await prisma.settings.createMany({ data: [{ id: 1 }], skipDuplicates: true });
-  return prisma.settings.findUniqueOrThrow({ where: { id: 1 } });
+  await prisma.settings.createMany({ data: [{ userId }], skipDuplicates: true });
+  return prisma.settings.findUniqueOrThrow({ where: { userId } });
 }
 
 /** Show only the last 4 characters of a secret. */
@@ -19,26 +19,22 @@ export function maskKey(key: string | null | undefined): string | null {
   return `…${key.slice(-4)}`;
 }
 
-/**
- * The Gemini API key to use: one saved in Settings wins, otherwise the
- * GEMINI_API_KEY environment variable. Server-side only.
- */
-export async function getGeminiApiKey(prisma: PrismaClient): Promise<string> {
-  const s = await ensureRow(prisma);
-  return s.geminiApiKey || process.env.GEMINI_API_KEY || "";
+/** The user's own Gemini API key (each account adds its own). Server-side only. */
+export async function getGeminiApiKey(prisma: PrismaClient, userId: string): Promise<string> {
+  const s = await ensureRow(prisma, userId);
+  return s.geminiApiKey || "";
 }
 
 /** Models to scan with, from Settings → Gemini API (Model / Backup model). */
-export async function getGeminiModels(prisma: PrismaClient): Promise<{ model: string; fallback: string[] }> {
-  const s = await ensureRow(prisma);
+export async function getGeminiModels(prisma: PrismaClient, userId: string): Promise<{ model: string; fallback: string[] }> {
+  const s = await ensureRow(prisma, userId);
   const model = s.geminiModel.trim() || "gemini-3.5-flash-lite";
   const fallback = s.geminiFallbackModel.split(",").map((m) => m.trim()).filter(Boolean);
   return { model, fallback };
 }
 
-export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
-  const s = await ensureRow(prisma);
-  const envKey = process.env.GEMINI_API_KEY;
+export async function getSettings(prisma: PrismaClient, userId: string): Promise<SettingsDTO> {
+  const s = await ensureRow(prisma, userId);
   return {
     defaultReminderMinutes: s.defaultReminderMinutes,
     timezone: s.timezone,
@@ -58,14 +54,15 @@ export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
     averageOdds: s.averageOdds,
     geminiModel: s.geminiModel,
     geminiFallbackModel: s.geminiFallbackModel,
+    showOnLeaderboard: s.showOnLeaderboard,
     // Never include the key itself in this DTO: it is sent to the browser.
-    geminiKeySource: s.geminiApiKey ? "settings" : envKey ? "env" : "none",
+    geminiKeySource: s.geminiApiKey ? "settings" : "none",
     geminiKeyHint: maskKey(s.geminiApiKey),
   };
 }
 
-export async function updateSettings(prisma: PrismaClient, update: SettingsUpdate): Promise<SettingsDTO> {
-  await ensureRow(prisma);
-  await prisma.settings.update({ where: { id: 1 }, data: update });
-  return getSettings(prisma);
+export async function updateSettings(prisma: PrismaClient, userId: string, update: SettingsUpdate): Promise<SettingsDTO> {
+  await ensureRow(prisma, userId);
+  await prisma.settings.update({ where: { userId }, data: update });
+  return getSettings(prisma, userId);
 }

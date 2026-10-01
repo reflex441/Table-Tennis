@@ -5,7 +5,7 @@ import type { ExtractionResult } from "./types";
 
 export class GeminiConfigError extends Error {
   constructor() {
-    super("GEMINI_API_KEY is not configured on the server.");
+    super("No Gemini API key: add yours in Settings → Gemini API.");
     this.name = "GeminiConfigError";
   }
 }

@@ -66,6 +66,34 @@ enum BetResult {
 
 /// An uploaded screenshot. Image bytes are stored in Postgres so the app
 /// has no extra storage dependency (files are capped at 8 MB).
+/// A person with an account. Signs in with email + password and/or Google.
+model User {
+  id           String    @id @default(cuid())
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  /// Lower-cased.
+  email        String    @unique
+  /// Display name (shown on the leaderboard).
+  name         String
+  /// scrypt hash; null for Google-only accounts.
+  passwordHash String?
+  googleId     String?   @unique
+  lastLoginAt  DateTime? @db.Timestamptz(3)
+
+  settings      Settings?
+  matches       Match[]
+  screenshots   Screenshot[]
+  subscriptions PushSubscription[]
+  notifications InAppNotification[]
+}
+
+/// Server-generated secrets (e.g. the session signing key when SESSION_SECRET is not set).
+model AppSecret {
+  name      String   @id
+  value     String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
 model Screenshot {
   id               String            @id @default(cuid())
   createdAt        DateTime          @default(now()) @db.Timestamptz(3)
@@ -79,12 +107,14 @@ model Screenshot {
   capturedAtSource CaptureTimeSource @default(NONE)
   status           ScreenshotStatus  @default(UPLOADED)
   error            String?
+  userId           String?
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   extractions Extraction[]
   sources     MatchSource[]
 
-  @@index([sha256])
-  @@index([createdAt])
+  @@index([userId, sha256])
+  @@index([userId, createdAt])
 }
 
 /// The raw and validated output of one Gemini run over a screenshot.
@@ -119,7 +149,9 @@ model Match {
   rawTimeText String?
   notes       String?
   /// Normalised "player-a|player-b|startMinute" key used to prevent duplicates.
-  dedupeKey   String   @unique
+  dedupeKey   String
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   playType    PlayType @default(PERSONAL)
   /// Stake in units shown on the pick badge ("1U"), if any.
   stakeUnits  Float?
@@ -131,6 +163,8 @@ model Match {
   sources    MatchSource[]
   bet        Bet?
 
+  @@unique([userId, dedupeKey])
+  @@index([userId, startsAt])
   @@index([startsAt])
 }
 
@@ -231,8 +265,12 @@ model PushSubscription {
   lastSuccessAt DateTime? @db.Timestamptz(3)
   lastFailureAt DateTime? @db.Timestamptz(3)
   lastError     String?
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   deliveries NotificationDelivery[]
+
+  @@index([userId])
 }
 
 /// Log of every delivery attempt. The unique constraint guarantees a given
@@ -265,14 +303,20 @@ model InAppNotification {
   body       String
   url        String
   readAt     DateTime? @db.Timestamptz(3)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([alarmId, generation])
-  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 /// Single-row application settings (id is always 1).
 model Settings {
-  id                         Int      @id @default(1)
+  id                         Int      @id @default(autoincrement())
+  userId                     String?  @unique
+  user                       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Appear on the public leaderboard (display name only).
+  showOnLeaderboard          Boolean  @default(true)
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
   defaultReminderMinutes     Int      @default(5)
   timezone                   String   @default("Australia/Sydney")

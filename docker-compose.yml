@@ -1,5 +1,5 @@
 # Local / self-hosted deployment: Postgres + web server + scheduler worker.
-#   cp .env.example .env   (fill in GEMINI_API_KEY and VAPID keys)
+#   cp .env.example .env   (fill in the VAPID keys; optional Google sign-in)
 #   docker compose up -d --build
 services:
   db:

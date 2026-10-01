@@ -12,6 +12,7 @@ async function loadClaimed(prisma: PrismaClient, ids: string[]): Promise<(Claime
   });
   return alarms.map((a) => ({
     id: a.id,
+    userId: a.match.userId,
     generation: a.generation,
     attempts: a.attempts,
     reminderMinutes: a.reminderMinutes,
@@ -36,6 +37,16 @@ async function loadClaimed(prisma: PrismaClient, ids: string[]): Promise<(Claime
   }));
 }
 
+/** Used for alarms without an owner (created before accounts existed). */
+const DEFAULT_DISPATCH_SETTINGS = {
+  timezone: "Australia/Sydney",
+  pushEnabled: true,
+  inAppEnabled: true,
+  includeStatsInNotification: true,
+  ringUntilAck: true,
+  repeatSeconds: 30,
+};
+
 /** Postgres implementation of the dispatcher store. */
 export function createPrismaStore(prisma: PrismaClient): DispatcherStore {
   return {
@@ -58,8 +69,9 @@ export function createPrismaStore(prisma: PrismaClient): DispatcherStore {
       return loadClaimed(prisma, rows.map((r) => r.id));
     },
 
-    async getSettings() {
-      const s = await getSettings(prisma);
+    async getSettings(userId) {
+      if (!userId) return { ...DEFAULT_DISPATCH_SETTINGS };
+      const s = await getSettings(prisma, userId);
       return {
         timezone: s.timezone,
         pushEnabled: s.pushEnabled,
@@ -70,9 +82,9 @@ export function createPrismaStore(prisma: PrismaClient): DispatcherStore {
       };
     },
 
-    async getActiveSubscriptions() {
+    async getActiveSubscriptions(userId) {
       const subs = await prisma.pushSubscription.findMany({
-        where: { active: true },
+        where: { active: true, userId },
         select: { id: true, endpoint: true, p256dh: true, auth: true, deviceType: true },
       });
       return subs.map((s) => ({ ...s, deviceType: s.deviceType === "mobile" ? ("mobile" as const) : ("desktop" as const) }));
@@ -116,10 +128,10 @@ export function createPrismaStore(prisma: PrismaClient): DispatcherStore {
       }
     },
 
-    async createInAppNotification(alarmId, generation, payload) {
+    async createInAppNotification(alarmId, generation, payload, userId) {
       try {
         await prisma.inAppNotification.create({
-          data: { alarmId, generation, matchId: payload.matchId, title: payload.title, body: payload.body, url: payload.url },
+          data: { alarmId, generation, userId, matchId: payload.matchId, title: payload.title, body: payload.body, url: payload.url },
         });
         return true;
       } catch (err) {
@@ -151,24 +163,32 @@ export function createPrismaStore(prisma: PrismaClient): DispatcherStore {
       return res.count;
     },
 
-    async claimRepeats(now, limit, intervalMs) {
-      const next = new Date(now.getTime() + intervalMs);
+    async claimRepeats(now, limit) {
+      // The next repeat uses the owner's interval; owners who turned off
+      // "ring until confirmed" or push get no repeats.
       const rows = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-        UPDATE "Alarm"
-           SET "nextRepeatAt" = ${next}, "repeatCount" = "repeatCount" + 1, "updatedAt" = ${now}
-         WHERE "id" IN (
+        UPDATE "Alarm" al
+           SET "nextRepeatAt" = ${now}::timestamptz + make_interval(secs => COALESCE(
+                 (SELECT s."repeatSeconds" FROM "Match" m JOIN "Settings" s ON s."userId" = m."userId" WHERE m."id" = al."matchId"),
+                 ${DEFAULT_DISPATCH_SETTINGS.repeatSeconds})),
+               "repeatCount" = al."repeatCount" + 1,
+               "updatedAt" = ${now}
+         WHERE al."id" IN (
            SELECT a."id" FROM "Alarm" a
              JOIN "Match" m ON m."id" = a."matchId"
+             LEFT JOIN "Settings" s ON s."userId" = m."userId"
             WHERE a."status" = 'TRIGGERED'
               AND a."ackAt" IS NULL
               AND a."nextRepeatAt" IS NOT NULL
               AND a."nextRepeatAt" <= ${now}
               AND m."startsAt" > ${now}
+              AND COALESCE(s."ringUntilAck", true)
+              AND COALESCE(s."pushEnabled", true)
             ORDER BY a."nextRepeatAt" ASC
             LIMIT ${limit}
             FOR UPDATE OF a SKIP LOCKED
          )
-     RETURNING "id"`);
+     RETURNING al."id"`);
       return loadClaimed(prisma, rows.map((r) => r.id));
     },
 

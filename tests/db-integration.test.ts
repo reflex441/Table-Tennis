@@ -16,12 +16,18 @@ import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 import { deleteBet, updateBet } from "@/lib/bets/service";
 import { listBetRows } from "@/lib/bets/queries";
 import { summarize } from "@/lib/bets/profit";
+import { authenticate, registerUser, signInWithGoogle } from "@/lib/auth/accounts";
+import { getMatch, listMatches } from "@/lib/alarms/queries";
+import { deleteMatch } from "@/lib/alarms/service";
+import { getLeaderboard } from "@/lib/leaderboard";
+import { getSessionSecret } from "@/lib/auth/session";
 
 const url = process.env.TEST_DATABASE_URL;
 
 describe.skipIf(!url)("PostgreSQL integration", () => {
   let prisma: PrismaClient;
   let other: PrismaClient;
+  let userId: string;
 
   beforeAll(() => {
     prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url! }) });
@@ -35,8 +41,9 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings" CASCADE`,
+      `TRUNCATE "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "User", "AppSecret" CASCADE`,
     );
+    userId = (await prisma.user.create({ data: { email: "owner@example.com", name: "Owner" } })).id;
   });
 
   const input = (over: Record<string, unknown> = {}) =>
@@ -55,7 +62,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     });
 
   it("creates a match with statistics and an alarm at startsAt - reminder", async () => {
-    const res = await createMatchWithAlarm(prisma, input(), new Date("2030-09-21T12:00:00Z"));
+    const res = await createMatchWithAlarm(prisma, userId, input(), new Date("2030-09-21T12:00:00Z"));
     expect(res.status).toBe("created");
     if (res.status !== "created") return;
     expect(res.match.alarm?.fireAt.toISOString()).toBe("2030-09-21T17:55:00.000Z");
@@ -64,21 +71,21 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   it("prevents duplicate alarms (exact and same players in either order)", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
-    expect((await createMatchWithAlarm(prisma, input(), now)).status).toBe("created");
-    expect((await createMatchWithAlarm(prisma, input({ player1: "Jan S", player2: "Varcl J" }), now)).status).toBe("duplicate");
-    expect((await createMatchWithAlarm(prisma, input({ startsAt: "2030-09-21T19:00:00Z" }), now)).status).toBe("similar");
-    expect((await createMatchWithAlarm(prisma, input({ startsAt: "2030-09-21T19:00:00Z", allowSimilar: true }), now)).status).toBe("created");
+    expect((await createMatchWithAlarm(prisma, userId, input(), now)).status).toBe("created");
+    expect((await createMatchWithAlarm(prisma, userId, input({ player1: "Jan S", player2: "Varcl J" }), now)).status).toBe("duplicate");
+    expect((await createMatchWithAlarm(prisma, userId, input({ startsAt: "2030-09-21T19:00:00Z" }), now)).status).toBe("similar");
+    expect((await createMatchWithAlarm(prisma, userId, input({ startsAt: "2030-09-21T19:00:00Z", allowSimilar: true }), now)).status).toBe("created");
     // Concurrent identical requests: the unique constraint lets only one through.
-    const results = await Promise.all([1, 2, 3].map(() => createMatchWithAlarm(prisma, input({ startsAt: "2030-09-22T18:00:00Z" }), now)));
+    const results = await Promise.all([1, 2, 3].map(() => createMatchWithAlarm(prisma, userId, input({ startsAt: "2030-09-22T18:00:00Z" }), now)));
     expect(results.filter((r) => r.status === "created")).toHaveLength(1);
   });
 
   it("claims each due alarm exactly once across concurrent dispatchers", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     for (let i = 0; i < 10; i++) {
-      await createMatchWithAlarm(prisma, input({ player1: `Player ${i}`, startsAt: `2030-09-21T18:${String(i).padStart(2, "0")}:00Z` }), now);
+      await createMatchWithAlarm(prisma, userId, input({ player1: `Player ${i}`, startsAt: `2030-09-21T18:${String(i).padStart(2, "0")}:00Z` }), now);
     }
-    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/1", p256dh: "k", auth: "a" } });
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/1", p256dh: "k", auth: "a", userId } });
     const sent: string[] = [];
     const push: PushSender = {
       async send(_sub, payload) {
@@ -104,21 +111,21 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   it("stores the Gemini key server-side and never exposes it in settings", async () => {
     const key = "AIzaSyD-test-key-for-integration-0000";
-    const saved = await updateSettings(prisma, { geminiApiKey: key });
+    const saved = await updateSettings(prisma, userId, { geminiApiKey: key });
     expect(saved.geminiKeySource).toBe("settings");
     expect(saved.geminiKeyHint).toBe("…0000");
-    expect(JSON.stringify(await getSettings(prisma))).not.toContain(key);
-    expect(await getGeminiApiKey(prisma)).toBe(key);
-    const removed = await updateSettings(prisma, { geminiApiKey: null });
-    expect(removed.geminiKeySource).toBe(process.env.GEMINI_API_KEY ? "env" : "none");
+    expect(JSON.stringify(await getSettings(prisma, userId))).not.toContain(key);
+    expect(await getGeminiApiKey(prisma, userId)).toBe(key);
+    const removed = await updateSettings(prisma, userId, { geminiApiKey: null });
+    expect(removed.geminiKeySource).toBe("none");
   });
 
   it("rings until confirmed: repeats are claimed once and stop after 'bet placed'", async () => {
     const now = new Date("2030-09-21T17:00:00Z");
-    const res = await createMatchWithAlarm(prisma, input(), now);
+    const res = await createMatchWithAlarm(prisma, userId, input(), now);
     if (res.status !== "created") throw new Error("not created");
-    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/laptop", p256dh: "k", auth: "a", deviceType: "desktop" } });
-    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/phone", p256dh: "k", auth: "a", deviceType: "mobile" } });
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/laptop", p256dh: "k", auth: "a", deviceType: "desktop", userId } });
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/phone", p256dh: "k", auth: "a", deviceType: "mobile", userId } });
     const sent: { endpoint: string; requireAck: boolean }[] = [];
     const push: PushSender = {
       async send(sub, payload) {
@@ -128,7 +135,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     };
     await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:55:00Z") });
     expect(sent).toHaveLength(2);
-    expect((await listRingingAlarms(prisma, new Date("2030-09-21T17:55:05Z"))).map((m) => m.id)).toEqual([res.match.id]);
+    expect((await listRingingAlarms(prisma, userId, new Date("2030-09-21T17:55:05Z"))).map((m) => m.id)).toEqual([res.match.id]);
 
     // Two dispatchers race for the same repeat: only one sends it, and only to the laptop.
     const at = () => new Date("2030-09-21T17:55:31Z");
@@ -139,85 +146,204 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(sent.slice(2)).toEqual([{ endpoint: "https://push.example/laptop", requireAck: true }]);
 
     const alarmId = res.match.alarm!.id;
-    const acked = await acknowledgeAlarm(prisma, alarmId, "placed", new Date("2030-09-21T17:55:40Z"));
+    const acked = await acknowledgeAlarm(prisma, userId, alarmId, "placed", new Date("2030-09-21T17:55:40Z"));
     expect(acked.alarm?.ackAction).toBe("placed");
-    expect(await listRingingAlarms(prisma, new Date("2030-09-21T17:55:45Z"))).toEqual([]);
+    expect(await listRingingAlarms(prisma, userId, new Date("2030-09-21T17:55:45Z"))).toEqual([]);
     await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:56:30Z") });
     expect(sent).toHaveLength(3);
 
     // Rescheduling clears the confirmation so the alarm rings again.
-    const updated = await updateMatch(prisma, res.match.id, { reminderMinutes: 4 }, new Date("2030-09-21T17:55:50Z"));
+    const updated = await updateMatch(prisma, userId, res.match.id, { reminderMinutes: 4 }, new Date("2030-09-21T17:55:50Z"));
     expect(updated.alarm?.ackAt).toBeNull();
   });
 
   it("classifies bot/personal plays and tracks bet profit in units", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
-    const botRes = await createMatchWithAlarm(prisma, input({ stakeUnits: 2 }), now);
-    const personalRes = await createMatchWithAlarm(prisma, input({ player1: "Novak P", player2: "Kral T", selection: null, startsAt: "2030-09-21T19:00:00Z" }), now);
+    const botRes = await createMatchWithAlarm(prisma, userId, input({ stakeUnits: 2 }), now);
+    const personalRes = await createMatchWithAlarm(prisma, userId, input({ player1: "Novak P", player2: "Kral T", selection: null, startsAt: "2030-09-21T19:00:00Z" }), now);
     if (botRes.status !== "created" || personalRes.status !== "created") throw new Error("not created");
     expect(botRes.match.playType).toBe("BOT");
     expect(personalRes.match.playType).toBe("PERSONAL");
 
     // "I've placed the bet" records the bet; the stake defaults to the one set at upload.
-    const acked = await acknowledgeAlarm(prisma, botRes.match.alarm!.id, "placed", now, { odds: 1.9 });
+    const acked = await acknowledgeAlarm(prisma, userId, botRes.match.alarm!.id, "placed", now, { odds: 1.9 });
     expect(acked.bet).toMatchObject({ stake: 2, odds: 1.9, result: "PENDING", profit: null });
     // Acknowledging again keeps a single bet.
-    await acknowledgeAlarm(prisma, botRes.match.alarm!.id, "placed", now);
+    await acknowledgeAlarm(prisma, userId, botRes.match.alarm!.id, "placed", now);
     expect(await prisma.bet.count()).toBe(1);
 
-    const won = await updateBet(prisma, botRes.match.id, { result: "WON" }, now);
+    const won = await updateBet(prisma, userId, botRes.match.id, { result: "WON" }, now);
     expect(won.profit).toBe(1.8);
     expect(won.settledAt).not.toBeNull();
 
     // Settling a match without a recorded bet records it with 1 unit.
-    const lost = await updateBet(prisma, personalRes.match.id, { result: "LOST" }, now);
+    const lost = await updateBet(prisma, userId, personalRes.match.id, { result: "LOST" }, now);
     expect(lost).toMatchObject({ stake: 1, profit: -1 });
 
     // Skipping does not record a bet.
-    const skipRes = await createMatchWithAlarm(prisma, input({ player1: "X", player2: "Y", startsAt: "2030-09-21T20:00:00Z" }), now);
+    const skipRes = await createMatchWithAlarm(prisma, userId, input({ player1: "X", player2: "Y", startsAt: "2030-09-21T20:00:00Z" }), now);
     if (skipRes.status !== "created") throw new Error("not created");
-    expect((await acknowledgeAlarm(prisma, skipRes.match.alarm!.id, "skipped", now)).bet).toBeNull();
+    expect((await acknowledgeAlarm(prisma, userId, skipRes.match.alarm!.id, "skipped", now)).bet).toBeNull();
 
-    const rows = await listBetRows(prisma);
+    const rows = await listBetRows(prisma, userId);
     expect(summarize(rows.filter((r) => r.playType === "BOT")).profit).toBe(1.8);
     expect(summarize(rows.filter((r) => r.playType === "PERSONAL")).profit).toBe(-1);
-    expect((await listBetRows(prisma, { playType: "PERSONAL" })).map((r) => r.matchId)).toEqual([personalRes.match.id]);
+    expect((await listBetRows(prisma, userId, { playType: "PERSONAL" })).map((r) => r.matchId)).toEqual([personalRes.match.id]);
 
     // Re-classifying a match moves its bet to the other group.
-    await updateMatch(prisma, personalRes.match.id, { playType: "BOT" }, now);
-    expect((await listBetRows(prisma, { playType: "BOT" })).length).toBe(2);
+    await updateMatch(prisma, userId, personalRes.match.id, { playType: "BOT" }, now);
+    expect((await listBetRows(prisma, userId, { playType: "BOT" })).length).toBe(2);
 
     // Odds filled in at upload (the average odds) become the bet's odds.
-    const withOdds = await createMatchWithAlarm(prisma, input({ player1: "S", player2: "T", startsAt: "2030-09-21T22:00:00Z", stakeUnits: 1, odds: 1.85 }), now);
+    const withOdds = await createMatchWithAlarm(prisma, userId, input({ player1: "S", player2: "T", startsAt: "2030-09-21T22:00:00Z", stakeUnits: 1, odds: 1.85 }), now);
     if (withOdds.status !== "created") throw new Error("not created");
     expect(withOdds.match.odds).toBe(1.85);
-    const placed = await acknowledgeAlarm(prisma, withOdds.match.alarm!.id, "placed", now);
+    const placed = await acknowledgeAlarm(prisma, userId, withOdds.match.alarm!.id, "placed", now);
     expect(placed.bet).toMatchObject({ stake: 1, odds: 1.85 });
-    expect((await updateBet(prisma, withOdds.match.id, { result: "WON" }, now)).profit).toBe(0.85);
+    expect((await updateBet(prisma, userId, withOdds.match.id, { result: "WON" }, now)).profit).toBe(0.85);
     // Changing the average-odds setting later never touches existing bets.
-    await updateSettings(prisma, { useAverageOdds: true, averageOdds: 1.5 });
-    await updateSettings(prisma, { useAverageOdds: false });
+    await updateSettings(prisma, userId, { useAverageOdds: true, averageOdds: 1.5 });
+    await updateSettings(prisma, userId, { useAverageOdds: false });
     expect(await prisma.bet.findUnique({ where: { matchId: withOdds.match.id } })).toMatchObject({ odds: 1.85, profit: 0.85 });
     expect(await prisma.bet.findUnique({ where: { matchId: botRes.match.id } })).toMatchObject({ odds: 1.9, profit: 1.8 });
-    await deleteBet(prisma, withOdds.match.id);
+    await deleteBet(prisma, userId, withOdds.match.id);
 
-    await deleteBet(prisma, botRes.match.id);
+    await deleteBet(prisma, userId, botRes.match.id);
     expect(await prisma.bet.count()).toBe(1);
   });
 
   it("reschedules on edit and ignores cancelled alarms", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
-    const res = await createMatchWithAlarm(prisma, input(), now);
+    const res = await createMatchWithAlarm(prisma, userId, input(), now);
     if (res.status !== "created") throw new Error("not created");
-    const updated = await updateMatch(prisma, res.match.id, { reminderMinutes: 15 }, now);
+    const updated = await updateMatch(prisma, userId, res.match.id, { reminderMinutes: 15 }, now);
     expect(updated.alarm?.fireAt.toISOString()).toBe("2030-09-21T17:45:00.000Z");
     expect(updated.alarm?.generation).toBe(2);
 
-    await changeAlarmState(prisma, res.match.id, "cancel", now);
+    await changeAlarmState(prisma, userId, res.match.id, "cancel", now);
     const report = await dispatchDueAlarms({ store: createPrismaStore(prisma), push: null, now: () => new Date("2030-09-21T17:50:00Z") });
     expect(report.claimed).toBe(0);
 
-    const reactivated = await changeAlarmState(prisma, res.match.id, "reactivate", now);
+    const reactivated = await changeAlarmState(prisma, userId, res.match.id, "reactivate", now);
     expect(reactivated.alarm?.status).toBe("SCHEDULED");
+  });
+
+  it("first account takes over data created before accounts; later accounts start empty", async () => {
+    await prisma.user.deleteMany();
+    const orphan = await prisma.match.create({ data: { player1: "A", player2: "B", startsAt: new Date("2030-09-21T18:00:00Z"), timezone: "UTC", dedupeKey: "orphan" } });
+    await prisma.settings.create({ data: { unitSize: 25 } });
+    const first = await registerUser(prisma, { email: " Will@Example.com ", name: "Will", password: "correct horse" });
+    expect(first.email).toBe("will@example.com");
+    expect((await prisma.match.findUnique({ where: { id: orphan.id } }))!.userId).toBe(first.id);
+    expect((await getSettings(prisma, first.id)).unitSize).toBe(25);
+    const second = await registerUser(prisma, { email: "sam@example.com", name: "Sam", password: "another one" });
+    expect(await listMatches(prisma, second.id, null)).toEqual([]);
+    expect((await getSettings(prisma, second.id)).unitSize).toBe(10);
+    // Each account has its own Gemini key.
+    await updateSettings(prisma, first.id, { geminiApiKey: "AIzaSyFirstUsersKey000000000000000" });
+    expect(await getGeminiApiKey(prisma, second.id)).toBe("");
+
+    await expect(registerUser(prisma, { email: "WILL@example.com", name: "x", password: "whatever1" })).rejects.toMatchObject({ status: 409 });
+    expect((await authenticate(prisma, "will@example.com", "correct horse"))?.id).toBe(first.id);
+    expect(await authenticate(prisma, "will@example.com", "wrong")).toBeNull();
+    expect(await authenticate(prisma, "nobody@example.com", "correct horse")).toBeNull();
+  });
+
+  it("Google sign-in links to the account with the same verified email, or creates one", async () => {
+    const linked = await signInWithGoogle(prisma, { sub: "g-1", email: "OWNER@example.com", emailVerified: true, name: "Owner G" });
+    expect(linked.id).toBe(userId);
+    expect(linked.googleId).toBe("g-1");
+    expect((await signInWithGoogle(prisma, { sub: "g-1", email: "changed@example.com", emailVerified: true, name: null })).id).toBe(userId);
+    const fresh = await signInWithGoogle(prisma, { sub: "g-2", email: "new@example.com", emailVerified: true, name: "New Person" });
+    expect(fresh).toMatchObject({ email: "new@example.com", name: "New Person", passwordHash: null });
+    await expect(signInWithGoogle(prisma, { sub: "g-3", email: "x@example.com", emailVerified: false, name: null })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("keeps each account's matches, alarms and devices separate", async () => {
+    const bob = (await prisma.user.create({ data: { email: "bob@example.com", name: "Bob" } })).id;
+    const now = new Date("2030-09-21T12:00:00Z");
+    const mine = await createMatchWithAlarm(prisma, userId, input(), now);
+    // The same match is not a duplicate for another account.
+    const his = await createMatchWithAlarm(prisma, bob, input(), now);
+    if (mine.status !== "created" || his.status !== "created") throw new Error("not created");
+
+    expect((await listMatches(prisma, bob, null)).map((m) => m.id)).toEqual([his.match.id]);
+    expect(await getMatch(prisma, bob, mine.match.id)).toBeNull();
+    await expect(updateMatch(prisma, bob, mine.match.id, { notes: "hacked" }, now)).rejects.toMatchObject({ status: 404 });
+    await expect(changeAlarmState(prisma, bob, mine.match.id, "cancel", now)).rejects.toMatchObject({ status: 404 });
+    await expect(acknowledgeAlarm(prisma, bob, mine.match.alarm!.id, "placed", now)).rejects.toMatchObject({ status: 404 });
+    await expect(updateBet(prisma, bob, mine.match.id, { result: "WON" }, now)).rejects.toMatchObject({ status: 404 });
+    await expect(deleteMatch(prisma, bob, mine.match.id)).rejects.toMatchObject({ status: 404 });
+    expect(await getMatch(prisma, userId, mine.match.id)).not.toBeNull();
+
+    // Alarms go only to the owner's devices, using the owner's settings.
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/mine", p256dh: "k", auth: "a", userId } });
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/bob", p256dh: "k", auth: "a", userId: bob } });
+    await updateSettings(prisma, bob, { inAppEnabled: false });
+    const sent: string[] = [];
+    const push: PushSender = {
+      async send(sub) {
+        sent.push(sub.endpoint);
+        return { ok: true };
+      },
+    };
+    await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:55:00Z") });
+    expect(sent.sort()).toEqual(["https://push.example/bob", "https://push.example/mine"]);
+    const inApp = await prisma.inAppNotification.findMany({ select: { userId: true } });
+    expect(inApp).toEqual([{ userId }]); // Bob turned in-app notifications off
+  });
+
+  it("ranks accounts by units and ROI with a minimum number of settled bets", async () => {
+    const mk = async (email: string, name: string) => (await prisma.user.create({ data: { email, name } })).id;
+    const ann = await mk("ann@example.com", "Ann");
+    const ben = await mk("ben@example.com", "Ben");
+    const cat = await mk("cat@example.com", "Cat");
+    let n = 0;
+    const bets = async (owner: string, list: { stake: number; profit: number; result: "WON" | "LOST" | "VOID"; type?: "BOT" | "PERSONAL" }[]) => {
+      for (const b of list) {
+        n++;
+        await prisma.match.create({
+          data: {
+            userId: owner,
+            player1: `P${n}`,
+            player2: `Q${n}`,
+            startsAt: new Date(Date.UTC(2030, 0, 1, 0, n)),
+            timezone: "UTC",
+            dedupeKey: `k${n}`,
+            playType: b.type ?? "BOT",
+            bet: { create: { stake: b.stake, odds: 2, result: b.result, profit: b.profit } },
+          },
+        });
+      }
+    };
+    // Ann: +3u from 10u staked (ROI 30%). Ben: +4u from 20u (ROI 20%). Cat: only 2 bets.
+    await bets(ann, [{ stake: 5, profit: 5, result: "WON" }, { stake: 5, profit: -2, result: "LOST" }, { stake: 1, profit: 0, result: "VOID", type: "PERSONAL" }]);
+    await bets(ben, [{ stake: 10, profit: 10, result: "WON" }, { stake: 10, profit: -6, result: "LOST" }, { stake: 1, profit: 0, result: "VOID" }]);
+    await bets(cat, [{ stake: 1, profit: 50, result: "WON" }, { stake: 1, profit: 50, result: "WON" }]);
+
+    const board = await getLeaderboard(prisma, { currentUserId: cat, minBets: 3 });
+    expect(board.byProfit.map((r) => [r.name, r.profit, r.rank])).toEqual([["Ben", 4, 1], ["Ann", 3, 2]]);
+    expect(board.byRoi.map((r) => [r.name, r.roi])).toEqual([["Ann", 30], ["Ben", 20]]);
+    expect(board.me).toMatchObject({ name: "Cat", bets: 2, rankProfit: null, hidden: false });
+    expect(JSON.stringify(board)).not.toContain("@example.com");
+
+    // Opting out hides the account; filtering by play type uses only those bets.
+    await updateSettings(prisma, ben, { showOnLeaderboard: false });
+    expect((await getLeaderboard(prisma, { currentUserId: ann, minBets: 3 })).byProfit.map((r) => r.name)).toEqual(["Ann"]);
+    expect((await getLeaderboard(prisma, { currentUserId: ann, minBets: 1, playType: "PERSONAL" })).byProfit.map((r) => r.name)).toEqual(["Ann"]);
+    expect((await getLeaderboard(prisma, { currentUserId: ann })).minBets).toBe(100);
+  });
+
+  it("generates and keeps a session secret when SESSION_SECRET is not set", async () => {
+    const saved = process.env.SESSION_SECRET;
+    delete process.env.SESSION_SECRET;
+    try {
+      const secret = await getSessionSecret(prisma);
+      expect(secret.length).toBeGreaterThanOrEqual(32);
+      expect((await prisma.appSecret.findUnique({ where: { name: "session" } }))?.value).toBe(secret);
+      expect(await getSessionSecret(other)).toBe(secret);
+    } finally {
+      if (saved !== undefined) process.env.SESSION_SECRET = saved;
+    }
   });
 });

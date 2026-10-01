@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireUserId } from "@/lib/auth/current";
 import { handle } from "@/lib/api";
 import { createWebPushSender } from "@/lib/push/web-push";
 import { createPrismaStore } from "@/lib/alarms/prisma-store";
 import type { NotificationPayload } from "@/lib/alarms/notification-content";
 
-/** Send a test notification to every subscribed device and the in-app centre. */
+/** Send a test notification to every device of the signed-in user and their in-app centre. */
 export const POST = handle(async () => {
   const prisma = db();
+  const userId = await requireUserId();
   const payload: NotificationPayload = {
     title: "Test notification",
     body: "Varcl J vs Jan S - Czech Liga Pro\nOVER | O/U 20/9 - 69% | EDGE 47%",
@@ -16,10 +18,10 @@ export const POST = handle(async () => {
     matchId: "",
     alarmId: null,
   };
-  await prisma.inAppNotification.create({ data: { title: payload.title, body: payload.body, url: payload.url } });
+  await prisma.inAppNotification.create({ data: { userId, title: payload.title, body: payload.body, url: payload.url } });
 
   const sender = createWebPushSender();
-  const subs = await prisma.pushSubscription.findMany({ where: { active: true } });
+  const subs = await prisma.pushSubscription.findMany({ where: { userId, active: true } });
   const store = createPrismaStore(prisma);
   const results = [];
   if (sender) {

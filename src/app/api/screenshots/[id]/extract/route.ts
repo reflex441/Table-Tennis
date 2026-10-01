@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { requireUserId } from "@/lib/auth/current";
 import { handle, jsonError } from "@/lib/api";
 import { extractFromScreenshot, GeminiConfigError, GeminiRequestError } from "@/lib/gemini/extract";
 import { ExtractionFormatError } from "@/lib/gemini/normalize";
@@ -14,13 +15,14 @@ export const maxDuration = 120;
 export const POST = handle(async (_request: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   const prisma = db();
-  const shot = await prisma.screenshot.findUnique({ where: { id }, select: { id: true, data: true, mimeType: true, status: true } });
+  const userId = await requireUserId();
+  const shot = await prisma.screenshot.findFirst({ where: { id, userId }, select: { id: true, data: true, mimeType: true, status: true } });
   if (!shot) return jsonError(404, "not_found", "Screenshot not found.");
 
   const config = env();
-  const apiKey = await getGeminiApiKey(prisma);
+  const apiKey = await getGeminiApiKey(prisma, userId);
   if (!apiKey) {
-    return jsonError(503, "gemini_not_configured", "No Gemini API key configured. Add one in Settings → Gemini API.");
+    return jsonError(503, "gemini_not_configured", "Add your Gemini API key in Settings → Gemini API before scanning (each account uses its own key).");
   }
 
   // Claim the screenshot so double-clicks don't trigger two Gemini calls.
@@ -37,7 +39,7 @@ export const POST = handle(async (_request: Request, ctx: { params: Promise<{ id
   }
 
   try {
-    const models = await getGeminiModels(prisma);
+    const models = await getGeminiModels(prisma, userId);
     const out = await extractFromScreenshot({
       apiKey,
       model: models.model,
