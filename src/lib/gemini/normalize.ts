@@ -122,6 +122,10 @@ function normaliseMatch(raw: unknown, index: number, warnings: string[]): Extrac
       }
     }
   }
+  // EDGE is the right-most bar value; equal to the O/U % usually means a misread.
+  if (match.edge !== null && match.ouHitRate !== null && match.edge === match.ouHitRate) {
+    warnings.push(`${p}EDGE ${match.edge}% is the same as the O/U % - check it is the right-most value (under the bar).`);
+  }
   return match;
 }
 

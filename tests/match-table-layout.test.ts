@@ -160,6 +160,25 @@ describe("today's-list edge cases", () => {
     expect(startsAt(0)).toBe("2026-10-01T14:30:00.000Z"); // 12:30 AM Fri 2/10/2026
   });
 
+  it("reads a personal-play row: EDGE is the right-most bar value, 2:00 AM is the next day", () => {
+    // Vaclavik M. -263 vs Cernik J. +172, CZECH LIGA PRO, 2:00 AM, "56 pts 28.09.2026",
+    // H2H 23, SWEEP 35%, O18.5 43%, OT 0.8 - 20%, O/U 11/12 - 48%, SPLIT 48%, 5-SET 39%, bar "8%".
+    const row = { player1: "Vaclavik M.", player2: "Cernik J.", competition: "CZECH LIGA PRO", timeText: "2:00 AM", dateText: null, ouStats: "11/12", ouHitRate: 48, edge: 8 };
+    const { candidates, startsAt, warnings } = scan({ matches: [row] }, "2026-10-01T09:00:00Z"); // 7:00 PM Thu 1 Oct
+    expect(warnings).toEqual([]);
+    expect(startsAt(0)).toBe("2026-10-01T16:00:00.000Z"); // 2:00 AM Fri 2/10/2026
+    expect(candidates[0]).toMatchObject({ edge: "8", ouStats: "11/12", ouHitRate: "48", playType: "PERSONAL", selection: "" });
+
+    // Taking the SPLIT/O-U 48% as EDGE is flagged for review.
+    const misread = scan({ matches: [{ ...row, edge: 48 }] }, "2026-10-01T09:00:00Z");
+    expect(misread.warnings.join(" ")).toMatch(/EDGE 48% is the same as the O\/U %/);
+  });
+
+  it("tells Gemini that EDGE is the right-most value, not the middle statistics", () => {
+    expect(EXTRACTION_PROMPT).toMatch(/RIGHT-MOST value of the row/);
+    expect(EXTRACTION_PROMPT).toMatch(/edge is 8, not 48 or 39/);
+  });
+
   it("asks for confirmation when the today rule is switched off", () => {
     const { candidates, startsAt } = scan(fixture, "2026-10-01T07:30:00Z", { ...settings, screenshotsAreToday: false });
     expect(candidates.every((c) => c.timeStatus === "needs_confirmation")).toBe(true);

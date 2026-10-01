@@ -44,7 +44,9 @@ export const EXTRACTION_JSON_SCHEMA = {
           ouStats: nullableString("The O/U statistic exactly as shown, two integers separated by '/', e.g. 'O/U 24/9 · 73%' -> '24/9'."),
           ouHitRate: nullableNumber("The O/U hit-rate percentage as a number without the % sign, e.g. 69."),
           stakeUnits: nullableNumber("Stake in units shown on the pick badge, e.g. '1U OVER (23/33, 70%)' -> 1, '2U UNDER' -> 2. Null if no units are shown."),
-          edge: nullableNumber("The EDGE percentage as a number without the % sign, e.g. 47. May be negative."),
+          edge: nullableNumber(
+            "The EDGE percentage without the % sign. In match tables it is the RIGHT-MOST number of the row, the percentage under/next to the small horizontal bar at the far right (e.g. '8%' -> 8). Never SPLIT, 5-SET, SWEEP, O18.5, OT or the O/U percentage.",
+          ),
           confidence: nullableNumber("Your confidence from 0 to 1 that this entry was transcribed correctly."),
         },
         required: [
@@ -84,7 +86,7 @@ Rules:
 - A pick badge such as "1U OVER (23/33, 70%)" means selection OVER ("1U" is the stake in units). Do NOT use the numbers in the pick badge as ouStats/ouHitRate.
 - pointsLine is the numeric total points line of the pick itself (e.g. "OVER 74.5" -> 74.5). Statistic labels like "O18.5 67%" are NOT the points line.
 - ouStats/ouHitRate come from the statistic labelled "O/U", e.g. "O/U 24/9 · 73%" -> ouStats "24/9", ouHitRate 73. Other statistics (H2H, SWEEP, O18.5, OT, SPLIT, S-SET, last match points) are not needed.
-- edge is the EDGE percentage (e.g. 47), often shown under a small bar in an EDGE column. Numbers only, without "%".
+- edge is the EDGE percentage. In match tables it is the RIGHT-MOST value of the row: the percentage under or next to the small horizontal progress bar at the far right of the row (e.g. a bar with "8%" under it -> edge 8). The EDGE column may have no visible header. It is NEVER one of the labelled statistics in the middle of the row (H2H, SWEEP, O18.5, OT, O/U, SPLIT, 5-SET / S-SET) - e.g. in a row with "O/U 11/12 - 48%", "SPLIT 48%", "5-SET 39%" and a bar with "8%" at the far right, edge is 8, not 48 or 39. If there is no bar/percentage at the far right, edge is null. Numbers only, without "%".
 - visibleClock is the device's status-bar clock (top of a phone screenshot), not a match time.
 - timezoneText only if a timezone label is explicitly printed next to the match times or in their column header.
 - Do not merge different matches. Do not duplicate the same match.
