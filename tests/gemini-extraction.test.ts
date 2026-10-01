@@ -49,7 +49,8 @@ describe("extractFromScreenshot", () => {
     expect(req.model).toBe("gemini-test");
     expect(req.config.responseMimeType).toBe("application/json");
     expect(req.config.responseJsonSchema).toBe(EXTRACTION_JSON_SCHEMA);
-    expect(req.config.temperature).toBe(0);
+    // Gemini 3.x should run at its default temperature.
+    expect(req.config.temperature).toBeUndefined();
     expect(req.contents[0].parts[0].inlineData).toEqual({ data: IMAGE.toString("base64"), mimeType: "image/png" });
 
     expect(out.result.matches).toHaveLength(1);

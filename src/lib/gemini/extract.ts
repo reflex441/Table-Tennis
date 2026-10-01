@@ -58,7 +58,8 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
       config: {
         responseMimeType: "application/json",
         responseJsonSchema: EXTRACTION_JSON_SCHEMA,
-        temperature: 0,
+        // Gemini 3.x is tuned for its default temperature (1.0); Google warns
+        // that lower values can cause looping, so it is deliberately not set.
         abortSignal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),
       },
     });

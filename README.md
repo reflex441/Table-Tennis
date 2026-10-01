@@ -24,7 +24,7 @@ Upload screenshots of upcoming table tennis matches, selections and statistics. 
 
 ## Tech stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini 3.5 Flash by default) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
 
 ## Credentials and external services you need to configure
 
@@ -182,7 +182,7 @@ TEST_DATABASE_URL=postgresql://... npm test  # + PostgreSQL integration tests (d
 
 The suites cover:
 
-- `tests/gemini-extraction.test.ts`: request shape (image, JSON schema, temperature 0), validation and coercion, nulls for missing data, rejected/invalid output, API error handling. `@google/genai` is mocked.
+- `tests/gemini-extraction.test.ts`: request shape (image, JSON schema, default temperature), validation and coercion, nulls for missing data, rejected/invalid output, API error handling. `@google/genai` is mocked.
 - `tests/time-resolve.test.ts`: all required time formats, timezones, DST, ambiguous dates, and every "needs confirmation" path.
 - `tests/alarm-scheduling.test.ts`: the 17:55 trigger time for an 18:00 match with a 5-min reminder, concurrent dispatchers, retries, expired subscriptions, missed alarms, crash recovery, edits during sending, auto-completion, and notification text.
 - `tests/duplicates-and-validation.test.ts`: name normalisation, duplicate keys, merge suggestions and merging, candidate validation, API schemas, image type sniffing and session tokens.
