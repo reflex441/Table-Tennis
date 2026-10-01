@@ -28,10 +28,10 @@ export const EXTRACTION_JSON_SCHEMA = {
           player2: nullableString("Second (right/bottom/away) player name exactly as written."),
           competition: nullableString("League or competition name exactly as written, e.g. 'Czech Liga Pro'."),
           timeText: nullableString(
-            "The match start time text copied verbatim, including relative words, e.g. 'Today at 6:00 PM', 'Starts in 45 minutes', '21/09/2026 15:00'. Do NOT convert or compute.",
+            "Only the start time of THIS match (e.g. '9:35 PM' from the TIME column; never a date from a 'LAST MATCH' column). The match start time text copied verbatim, including relative words, e.g. 'Today at 6:00 PM', 'Starts in 45 minutes', '21/09/2026 15:00'. Do NOT convert or compute.",
           ),
           dateText: nullableString(
-            "The date of THIS match if shown separately from the time (e.g. a section header 'Tomorrow' or '21 Sep'), verbatim. Never use the date of a previous/last match.",
+            "The date of THIS match if shown separately from the time (e.g. a section header 'Tomorrow' or '21 Sep'), verbatim. Never use the date of a previous/last match (e.g. the date under the points in a 'LAST MATCH' column such as '72 pts 29.09.2026' is NOT the match date - return null).",
           ),
           selection: {
             type: ["string", "null"],
@@ -75,7 +75,8 @@ Rules:
 - Copy player names and competition names exactly as written (keep abbreviations like "Varcl J").
 - Copy start time text verbatim, including words like "Today", "Tomorrow", "Starts in 45 minutes". Do not convert times, do not compute dates, do not change formats.
 - If matches are grouped under a date header (e.g. "Tomorrow" or "21 Sep"), put that header in dateText for each match in the group.
-- Ignore dates that belong to previous matches (e.g. a "LAST MATCH" column showing "71 pts 14.09.2026"); they are not the match date.
+- IMPORTANT: In tables with a "LAST MATCH" column, the date shown under the points (e.g. "72 pts 29.09.2026") is the date the players LAST played. It is NOT the date of this match and is wrong to use. Never put it in dateText or timeText.
+- For these tables the match is today: timeText is only the clock time from the TIME column (e.g. "9:35 PM") and dateText is null.
 - Tables: read each row as one match. The time column header may carry the timezone, e.g. "TIME (GMT+10)" -> timezoneText "GMT+10".
 - selection is OVER or UNDER only when the screenshot shows that pick (labels like "OVER", "UNDER", "O 74.5", "U 74.5"). Otherwise null.
 - A pick badge such as "1U OVER (23/33, 70%)" means selection OVER ("1U" is the stake in units). Do NOT use the numbers in the pick badge as ouStats/ouHitRate.

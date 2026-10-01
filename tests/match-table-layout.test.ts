@@ -96,6 +96,9 @@ describe("match table layout - today's list", () => {
     expect(EXTRACTION_PROMPT).toMatch(/LAST MATCH/);
     expect(EXTRACTION_PROMPT).toMatch(/O18\.5/);
     expect(EXTRACTION_PROMPT).toMatch(/1U OVER/);
+    // The date under the points is the LAST match date - Gemini must not use it.
+    expect(EXTRACTION_PROMPT).toMatch(/72 pts 29\.09\.2026[\s\S]*LAST played/);
+    expect(EXTRACTION_PROMPT).toMatch(/Never put it in dateText or timeText/);
   });
 });
 
@@ -130,6 +133,27 @@ describe("today's-list edge cases", () => {
     const { candidates } = scan(rows(["6:00 PM", "8:10 PM"]), "2026-10-01T08:19:00Z"); // 6:19 PM
     expect(candidates[0].include).toBe(false);
     expect(candidates[1].include).toBe(true);
+  });
+
+  it("ignores the LAST MATCH date Gemini returns and uses only the time", () => {
+    // "72 pts 29.09.2026" is when they last played, not the match date.
+    const raw = {
+      matches: [
+        { player1: "Neterda R.", player2: "Ruzicka J.", competition: "TT CUP", timeText: "9:35 PM", dateText: "29.09.2026", ouStats: "17/14", ouHitRate: 55, edge: 10 },
+        { player1: "A", player2: "B", timeText: "29.09.2026 10:15 PM" },
+      ],
+    };
+    const { candidates, startsAt } = scan(raw, "2026-10-01T08:19:00Z"); // 6:19 PM Thu 1 Oct
+    expect(startsAt(0)).toBe("2026-10-01T11:35:00.000Z"); // 9:35 PM Thu 1/10/2026
+    expect(startsAt(1)).toBe("2026-10-01T12:15:00.000Z"); // 10:15 PM Thu 1/10/2026
+    expect(candidates[0].timeStatus).toBe("resolved");
+    expect(candidates[0].include).toBe(true);
+    expect(candidates[0].timeNotes.join(" ")).toMatch(/Ignored "29\.09\.2026"/);
+  });
+
+  it("12 AM onwards is the next day even when the screenshot is sent in the morning", () => {
+    const { startsAt } = scan(rows(["12:30 AM"]), "2026-10-01T00:00:00Z"); // 10:00 AM Thu 1 Oct
+    expect(startsAt(0)).toBe("2026-10-01T14:30:00.000Z"); // 12:30 AM Fri 2/10/2026
   });
 
   it("asks for confirmation when the today rule is switched off", () => {

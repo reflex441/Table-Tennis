@@ -556,7 +556,7 @@ function AlarmSection() {
         {blocked && <span className="text-xs text-warn">The browser blocked sound - click the button again.</span>}
       </div>
       <p className="mt-2 text-xs text-muted">
-        Keep a TT Alarms tab open on your computer (it can be in the background) - the siren plays from that tab. Websites can&apos;t play a continuous sound when the browser is closed; then you&apos;ll still get the repeating notification.
+        Windows: if pop-ups don&apos;t appear, turn off &quot;Do not disturb&quot; (bell icon at the bottom right of the taskbar) or add your browser under Settings → System → Notifications → Set priority notifications. Keep a TT Alarms tab open on your computer (it can be in the background) - the siren plays from that tab. Websites can&apos;t play a continuous sound when the browser is closed; then you&apos;ll still get the repeating notification.
       </p>
     </Section>
   );

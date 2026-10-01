@@ -76,7 +76,8 @@ export function buildAlarmNotification(opts: {
     title: `${opts.repeat ? "⏰ " : ""}${match.player1} vs ${match.player2}`,
     body: lines.join("\n"),
     url: `/matches/${match.id}`,
-    tag: `alarm-${opts.alarmId}-${opts.generation}`,
+    // Same tag as the page-shown notification, so the OS keeps a single one.
+    tag: `alarm-${opts.alarmId}`,
     matchId: match.id,
     alarmId: opts.alarmId,
     repeat: opts.repeat ?? 0,

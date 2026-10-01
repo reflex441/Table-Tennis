@@ -123,7 +123,8 @@ describe("review candidates", () => {
   });
 
   it("requires players, a confirmed future time and valid statistics", () => {
-    const c = candidateFromExtraction(extracted({ player1: "Varcl J", timeText: "03/10/2026 18:00", ouStats: "20-9-1", edge: 400 }), shotA, settings, now);
+    // With the "today's list" rule off, an ambiguous date still needs confirming.
+    const c = candidateFromExtraction(extracted({ player1: "Varcl J", timeText: "03/10/2026 18:00", ouStats: "20-9-1", edge: 400 }), shotA, { ...settings, screenshotsAreToday: false }, now);
     const v = validateCandidate({ ...c, ouStats: "20-9-1", edge: "400" }, settings.timezone, now);
     expect(v.ok).toBe(false);
     expect(Object.keys(v.errors).sort()).toEqual(["edge", "ouStats", "player2", "time"]);

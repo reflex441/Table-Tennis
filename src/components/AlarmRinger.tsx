@@ -2,10 +2,11 @@
 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { BellRing, CheckCircle2, Volume2 } from "lucide-react";
+import { Bell, BellRing, CheckCircle2, Volume2 } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { api } from "@/lib/client-api";
-import { detectDeviceType } from "@/lib/push-client";
+import { detectDeviceType, subscribeToPush } from "@/lib/push-client";
+import { formatClock, statsLine } from "@/lib/alarms/notification-content";
 import { audioUnlocked, installAudioUnlock, startSiren, unlockAudio } from "@/lib/siren";
 import { formatDayLabel, formatPct, formatTime } from "@/lib/format";
 import { useSettings } from "./SettingsProvider";
@@ -63,6 +64,58 @@ export function AlarmRinger() {
   }, [enabled, refresh]);
 
   const active = enabled && ringing.length > 0;
+
+  // System notification (the pop-up at the side of the screen) so the alarm
+  // is visible while other apps are in front. Shown from this tab when the
+  // alarm starts; if this browser has no push subscription it is re-shown on
+  // the repeat interval (otherwise the server's repeated pushes do that).
+  const [canNotify, setCanNotify] = useState<boolean | null>(null);
+  const shownRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const show = async () => {
+      const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator;
+      const granted = supported && Notification.permission === "granted";
+      if (!cancelled) setCanNotify(granted);
+      if (!granted) return;
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      if (!reg || cancelled) return;
+      const hasPush = Boolean(await reg.pushManager.getSubscription().catch(() => null));
+      for (const m of ringing) {
+        if (!m.alarm) continue;
+        const last = shownRef.current.get(m.alarm.id);
+        if (last && (hasPush || Date.now() - last < settings.repeatSeconds * 1000)) continue;
+        shownRef.current.set(m.alarm.id, Date.now());
+        const mins = Math.max(0, Math.round((new Date(m.startsAt).getTime() - Date.now()) / 60_000));
+        const lines = [[m.competition, `${formatClock(new Date(m.startsAt), settings.timezone)} (starts in ${mins} min)`].filter(Boolean).join(" - ")];
+        const stats = settings.includeStatsInNotification ? statsLine(m.statistics) : null;
+        if (stats) lines.push(stats);
+        lines.push("Place your bet, then click \"Bet placed\"");
+        await reg
+          .showNotification(`⏰ ${m.player1} vs ${m.player2}`, {
+            body: lines.join("\n"),
+            tag: `alarm-${m.alarm.id}`,
+            icon: "/icons/icon-192.png",
+            badge: "/icons/badge-72.png",
+            requireInteraction: true,
+            renotify: Boolean(last),
+            actions: [
+              { action: "placed", title: "✅ Bet placed" },
+              { action: "skip", title: "Skip" },
+            ],
+            data: { url: `/matches/${m.id}`, matchId: m.id, alarmId: m.alarm.id },
+          } as NotificationOptions)
+          .catch(() => {});
+      }
+    };
+    void show();
+    const timer = setInterval(() => void show(), 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [active, ringing, settings.repeatSeconds, settings.timezone, settings.includeStatsInNotification]);
   const soundOn = active && settings.soundEnabled;
 
   // Siren: runs continuously while anything is ringing.
@@ -112,6 +165,9 @@ export function AlarmRinger() {
     setBusy(true);
     try {
       await api(`/api/alarms/${match.alarm.id}/ack`, { method: "POST", json: { action } });
+      // Remove the side notification for this alarm too.
+      const reg = await navigator.serviceWorker?.getRegistration("/");
+      (await reg?.getNotifications({ tag: `alarm-${match.alarm.id}` }))?.forEach((n) => n.close());
       setRinging((prev) => prev.filter((m) => m.id !== match.id));
       void refresh();
     } finally {
@@ -157,6 +213,15 @@ export function AlarmRinger() {
             </span>
           </div>
         </div>
+
+        {canNotify === false && (
+          <button
+            className="btn-ghost mt-3 w-full border-accent/50 text-accent"
+            onClick={() => void subscribeToPush().then(() => setCanNotify(true)).catch(() => setCanNotify(false))}
+          >
+            <Bell className="h-4 w-4" /> Also show alerts on top of other apps (turn on notifications)
+          </button>
+        )}
 
         {soundBlocked && settings.soundEnabled && (
           <button className="btn-ghost mt-3 w-full border-warn/50 text-warn" onClick={() => void unlockAudio().then((ok) => setSoundBlocked(!ok))}>

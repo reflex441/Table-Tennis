@@ -101,6 +101,9 @@ const ABBREVIATION_OFFSETS: Record<string, string> = {
   AEDT: "UTC+11",
 };
 
+/** In today's list, times from 12 AM up to this hour are the next day. */
+const EARLY_HOURS_END = 6;
+
 /** A bare time is placed on the occurrence within ±12 h of the capture time. */
 const HALF_DAY_MS = 12 * 60 * 60_000;
 
@@ -265,7 +268,7 @@ function emptyResult(zone: string, kind: ResolveKind, status: ResolveStatus, iss
 export function resolveMatchTime(input: ResolveInput): ResolveResult {
   const now = DateTime.fromJSDate(input.now ?? new Date());
   const order = input.dateOrder ?? "DMY";
-  const rawText = [input.dateText, input.timeText].filter((s): s is string => Boolean(s && s.trim())).join(" ").trim();
+  let rawText = [input.dateText, input.timeText].filter((s): s is string => Boolean(s && s.trim())).join(" ").trim();
 
   const issues: string[] = [];
   const notes: string[] = [];
@@ -299,6 +302,20 @@ export function resolveMatchTime(input: ResolveInput): ResolveResult {
 
   if (!rawText) {
     return emptyResult(zoneName, "none", "missing", ["No start time found in the screenshot - enter it manually."]);
+  }
+
+  // Today's list: only the clock time counts. Dates in these screenshots
+  // belong to other columns (e.g. "LAST MATCH 72 pts 29.09.2026"), so any
+  // date read from the image is ignored.
+  if (input.assumeToday && parseRelativeDuration(rawText.toLowerCase()) === null) {
+    const t = parseTimeOfDay(rawText);
+    if (t && t !== "invalid") {
+      const rest = rawText.replace(t.match, " ");
+      if (parseDate(rest, order) !== null || /\d/.test(rest)) {
+        notes.push(`Ignored "${rest.replace(/\s+/g, " ").trim()}" - for today's list only the start time (${t.match.trim()}) is used.`);
+      }
+      rawText = t.match.trim();
+    }
   }
 
   const lower = rawText.toLowerCase();
@@ -412,7 +429,15 @@ export function resolveMatchTime(input: ResolveInput): ResolveResult {
   }
   let dt = reference.startOf("day").set({ hour: timeOfDay.hour, minute: timeOfDay.minute });
   const floor = input.notBefore ? DateTime.fromISO(input.notBefore).setZone(zone) : null;
-  if (floor && floor.isValid) {
+  if (input.assumeToday) {
+    // Same day as the screenshot, except times from 12 AM until early morning,
+    // which belong to the next day (unless the screenshot itself was taken
+    // after midnight). Rows are chronological, so never go before the row above.
+    if (timeOfDay.hour < EARLY_HOURS_END && reference.hour >= EARLY_HOURS_END) dt = dt.plus({ days: 1 });
+    if (floor && floor.isValid) {
+      for (let i = 0; i < 3 && dt.toMillis() < floor.toMillis(); i++) dt = dt.plus({ days: 1 });
+    }
+  } else if (floor && floor.isValid) {
     for (let i = 0; i < 3 && dt.toMillis() < floor.toMillis(); i++) dt = dt.plus({ days: 1 });
   } else if (reference.toMillis() - dt.toMillis() > HALF_DAY_MS) {
     dt = dt.plus({ days: 1 });

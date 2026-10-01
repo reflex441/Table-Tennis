@@ -416,7 +416,7 @@ describe("buildAlarmNotification", () => {
     expect(p.title).toBe("Varcl J vs Jan S");
     expect(p.body).toBe("Czech Liga Pro - 18:00 (starts in 5 min)\nOVER 74.5 | O/U 20/9 - 69% | EDGE 47%");
     expect(p.url).toBe("/matches/m1");
-    expect(p.tag).toBe("alarm-a1-2");
+    expect(p.tag).toBe("alarm-a1");
   });
 
   it("omits statistics when disabled or missing", () => {
