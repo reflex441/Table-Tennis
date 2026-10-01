@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isSafeUrl, type LeagueLink } from "@/lib/leagues";
+import { ALARM_SOUNDS, type AlarmSound } from "@/lib/alarm-sounds";
 import { reminderMinutesSchema } from "./match";
 
 export function isValidTimeZone(tz: string): boolean {
@@ -59,6 +60,8 @@ export const settingsUpdateSchema = z
     screenshotTimesAreLocal: z.boolean(),
     ringUntilAck: z.boolean(),
     repeatSeconds: z.number().int().min(15, "At least 15 seconds").max(300, "At most 5 minutes"),
+    alarmVolume: z.number().int().min(1, "At least 1%").max(100, "At most 100%"),
+    alarmSound: z.enum(ALARM_SOUNDS),
     unitSize: z.number().positive("Must be more than 0").max(1_000_000),
     currency: z.string().trim().min(1).max(4),
     useAverageOdds: z.boolean(),
@@ -100,6 +103,10 @@ export interface SettingsDTO {
   ringUntilAck: boolean;
   /** Seconds between repeated push notifications while ringing. */
   repeatSeconds: number;
+  /** Alarm and chime loudness, 1-100. */
+  alarmVolume: number;
+  /** Which alarm sound plays. */
+  alarmSound: AlarmSound;
   /** Money per betting unit. */
   unitSize: number;
   /** Currency symbol, e.g. "$". */

@@ -159,6 +159,7 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 - Confirming on any device stops the alarm everywhere. The match card then shows **Bet placed ✓** or **Skipped**.
 - The siren can only play from an open browser tab (it can be in the background). Keep a TT Alarms tab open on the computer. Browsers block sound until you've clicked the page once; use **Settings → Test alarm sound**.
 - Turn it off with **Settings → Alarm on computers → Ring until I confirm the bet**.
+- **Alarm volume and sound:** in the same section. The volume slider defaults to 15% (much quieter than the original siren), and you can pick Siren, Alarm clock, Chime, Pulse or Rising. Clicking a sound plays a short preview. Both also apply to the in-app notification chime.
 
 ## Profit tracking
 

@@ -339,6 +339,10 @@ model Settings {
   ringUntilAck               Boolean  @default(true)
   /// Seconds between repeated push notifications while an alarm rings.
   repeatSeconds              Int      @default(30)
+  /// Alarm and chime loudness, 0-100 (% of the original siren volume).
+  alarmVolume                Int      @default(15)
+  /// siren | classic | chime | pulse | rising
+  alarmSound                 String   @default("siren")
   /// Money per unit (a "1U" bot play stakes this amount).
   unitSize                   Float    @default(10)
   /// Currency symbol shown next to stakes and profit.

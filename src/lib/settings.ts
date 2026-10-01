@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
 import { parseLeagueLinks } from "@/lib/leagues";
+import { isAlarmSound } from "@/lib/alarm-sounds";
 
 /**
  * Make sure the user's settings row exists. `skipDuplicates` compiles to
@@ -49,6 +50,8 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
     screenshotTimesAreLocal: s.screenshotTimesAreLocal,
     ringUntilAck: s.ringUntilAck,
     repeatSeconds: s.repeatSeconds,
+    alarmVolume: s.alarmVolume,
+    alarmSound: isAlarmSound(s.alarmSound) ? s.alarmSound : "siren",
     unitSize: s.unitSize,
     currency: s.currency,
     useAverageOdds: s.useAverageOdds,

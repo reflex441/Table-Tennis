@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, LayoutDashboard, LogOut, Settings, Trophy, Upload, AlertTriangle, TrendingUp } from "lucide-react";
+import { Bell, LayoutDashboard, LogOut, Settings, Trophy, Upload, AlertTriangle, TrendingUp, X } from "lucide-react";
 import type { PublicUser } from "@/lib/auth/accounts";
 import { signOut } from "@/lib/sign-out";
 import { useNotifications } from "./NotificationProvider";
@@ -77,7 +77,7 @@ export function AppShell({ children, dbError, user }: { children: React.ReactNod
 }
 
 function NotificationBell() {
-  const { notifications, unread, markAllRead } = useNotifications();
+  const { notifications, unread, markAllRead, remove, clearAll } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -109,20 +109,42 @@ function NotificationBell() {
       </button>
       {open && (
         <div className="card absolute right-0 top-10 z-50 max-h-[70vh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto bg-panel-2 shadow-2xl shadow-black/60">
-          <div className="border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Notifications</div>
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel-2 px-3 py-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Notifications</span>
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                className="rounded-md px-2 py-0.5 text-xs text-muted hover:bg-line/60 hover:text-text"
+                onClick={() => {
+                  if (window.confirm("Delete all notifications?")) void clearAll();
+                }}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
           {notifications.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-muted">No notifications yet.</p>
           ) : (
             <ul className="divide-y divide-line">
               {notifications.map((n) => (
-                <li key={n.id}>
-                  <Link href={n.url} onClick={() => setOpen(false)} className="block px-3 py-2 hover:bg-line/50">
+                <li key={n.id} className="group/n relative">
+                  <Link href={n.url} onClick={() => setOpen(false)} className="block py-2 pl-3 pr-9 hover:bg-line/50">
                     <div className="flex items-center justify-between gap-2">
                       <p className={`truncate text-sm ${n.readAt ? "text-text/80" : "font-semibold"}`}>{n.title}</p>
                       <span className="shrink-0 text-[10px] text-muted">{DateTime.fromISO(n.createdAt).toRelative()}</span>
                     </div>
                     <p className="mt-0.5 whitespace-pre-line text-xs text-muted">{n.body}</p>
                   </Link>
+                  <button
+                    type="button"
+                    aria-label={`Delete notification: ${n.title}`}
+                    title="Delete"
+                    onClick={() => void remove(n.id)}
+                    className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-line hover:text-under sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover/n:opacity-100"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </li>
               ))}
             </ul>

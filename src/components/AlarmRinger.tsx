@@ -124,6 +124,8 @@ export function AlarmRinger() {
     };
   }, [active, ringing, settings.repeatSeconds, settings.timezone, settings.includeStatsInNotification]);
   const soundOn = active && settings.soundEnabled;
+  const alarmVolume = settings.alarmVolume;
+  const alarmSound = settings.alarmSound;
 
   // Siren: runs continuously while anything is ringing.
   useEffect(() => {
@@ -133,7 +135,7 @@ export function AlarmRinger() {
       const ok = audioUnlocked() || (await unlockAudio());
       if (cancelled) return;
       setSoundBlocked(!ok);
-      if (ok && !stopRef.current) stopRef.current = startSiren();
+      if (ok && !stopRef.current) stopRef.current = startSiren(alarmVolume, alarmSound);
     };
     void tryStart();
     const retry = setInterval(() => {
@@ -145,7 +147,7 @@ export function AlarmRinger() {
       stopRef.current?.();
       stopRef.current = null;
     };
-  }, [soundOn]);
+  }, [soundOn, alarmVolume, alarmSound]);
 
   // Flash the tab title so the alarm is visible from other tabs.
   useEffect(() => {

@@ -28,3 +28,9 @@ export const GET = handle(async (request: Request) => {
   }));
   return NextResponse.json({ notifications, unread, serverTime: new Date().toISOString() });
 });
+
+/** Clear all of your notifications. */
+export const DELETE = handle(async () => {
+  const res = await db().inAppNotification.deleteMany({ where: { userId: await requireUserId() } });
+  return NextResponse.json({ deleted: res.count });
+});

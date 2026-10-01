@@ -7,6 +7,7 @@ import type { InAppNotificationDTO } from "@/lib/types";
 import { api } from "@/lib/client-api";
 import { detectDeviceType, getCurrentSubscription, registerServiceWorker } from "@/lib/push-client";
 import { useSettings } from "./SettingsProvider";
+import { installAudioUnlock, playOnce } from "@/lib/siren";
 
 interface Toast {
   id: string;
@@ -20,6 +21,10 @@ interface NotificationContextValue {
   unread: number;
   refresh: () => Promise<void>;
   markAllRead: () => Promise<void>;
+  /** Delete one notification. */
+  remove: (id: string) => Promise<void>;
+  /** Delete all notifications. */
+  clearAll: () => Promise<void>;
   /** Show a transient message (e.g. "Alarm created"). */
   notify: (title: string, body?: string, url?: string) => void;
 }
@@ -29,30 +34,6 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 export const NOTIFICATION_EVENT = "tt:notification";
 const POLL_MS = 15_000;
 
-/** Short two-tone chime using Web Audio (no asset needed). */
-function playChime() {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    [880, 1320].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = freq;
-      osc.type = "sine";
-      const t = ctx.currentTime + i * 0.18;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.4);
-    });
-    setTimeout(() => void ctx.close(), 1000);
-  } catch {
-    /* audio blocked until user interaction */
-  }
-}
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
@@ -62,9 +43,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const cursor = useRef<string | null>(null);
   const seen = useRef<Set<string>>(new Set());
   const soundRef = useRef(settings.soundEnabled);
+  const volumeRef = useRef(settings.alarmVolume);
+  const alarmSoundRef = useRef(settings.alarmSound);
   useEffect(() => {
     soundRef.current = settings.soundEnabled;
-  }, [settings.soundEnabled]);
+    volumeRef.current = settings.alarmVolume;
+    alarmSoundRef.current = settings.alarmSound;
+    installAudioUnlock();
+  }, [settings.soundEnabled, settings.alarmVolume, settings.alarmSound]);
 
   const pushToast = useCallback((t: Toast) => {
     setToasts((prev) => [t, ...prev.filter((p) => p.id !== t.id)].slice(0, 4));
@@ -86,7 +72,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
       if (fresh.length) {
         fresh.forEach((n) => pushToast({ id: n.id, title: n.title, body: n.body, url: n.url }));
-        if (soundRef.current) playChime();
+        if (soundRef.current) playOnce(volumeRef.current, alarmSoundRef.current);
         window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT));
       }
     } catch {
@@ -131,12 +117,30 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
   }, []);
 
+  const remove = useCallback(async (id: string) => {
+    setNotifications((prev) => {
+      const gone = prev.find((n) => n.id === id);
+      if (gone && !gone.readAt) setUnread((u) => Math.max(0, u - 1));
+      return prev.filter((n) => n.id !== id);
+    });
+    await api(`/api/notifications/${id}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  const clearAll = useCallback(async () => {
+    setNotifications([]);
+    setUnread(0);
+    await api("/api/notifications", { method: "DELETE" }).catch(() => {});
+  }, []);
+
   const notify = useCallback(
     (title: string, body = "", url = "") => pushToast({ id: `local-${Date.now()}-${Math.random()}`, title, body, url }),
     [pushToast],
   );
 
-  const value = useMemo(() => ({ notifications, unread, refresh, markAllRead, notify }), [notifications, unread, refresh, markAllRead, notify]);
+  const value = useMemo(
+    () => ({ notifications, unread, refresh, markAllRead, remove, clearAll, notify }),
+    [notifications, unread, refresh, markAllRead, remove, clearAll, notify],
+  );
 
   return (
     <NotificationContext.Provider value={value}>

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { compareNames, comparePlayers, matchDedupeKey, mergeRecords, normalizeName, playersKey, suggestMerges } from "@/lib/matching/dedupe";
 import { createMatchesSchema, matchInputSchema, updateMatchSchema } from "@/lib/validation/match";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
+import { ALARM_SOUNDS } from "@/lib/alarm-sounds";
+import { volumeToGain } from "@/lib/siren";
 import { maskKey } from "@/lib/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, validateCandidate, type ScreenshotContext } from "@/lib/review/candidate";
 import type { SettingsDTO } from "@/lib/validation/settings";
@@ -76,6 +78,8 @@ const settings: SettingsDTO = {
   screenshotTimesAreLocal: true,
   ringUntilAck: true,
   repeatSeconds: 30,
+  alarmVolume: 15,
+  alarmSound: "siren",
   unitSize: 10,
   currency: "$",
   useAverageOdds: false,
@@ -102,6 +106,18 @@ const extracted = (over: Partial<ExtractedMatch>): ExtractedMatch => ({
   stakeUnits: null,
   confidence: null,
   ...over,
+});
+
+describe("alarm sound settings", () => {
+  it("accepts a volume of 1-100 and a known sound", () => {
+    expect(settingsUpdateSchema.parse({ alarmVolume: 15, alarmSound: "chime" })).toEqual({ alarmVolume: 15, alarmSound: "chime" });
+    expect(settingsUpdateSchema.safeParse({ alarmVolume: 0 }).success).toBe(false);
+    expect(settingsUpdateSchema.safeParse({ alarmVolume: 101 }).success).toBe(false);
+    expect(settingsUpdateSchema.safeParse({ alarmSound: "airhorn" }).success).toBe(false);
+    expect(ALARM_SOUNDS).toEqual(["siren", "classic", "chime", "pulse", "rising"]);
+    expect(volumeToGain(100)).toBeCloseTo(0.4);
+    expect(volumeToGain(15)).toBeCloseTo(0.06); // the default is far quieter than the old siren (0.4)
+  });
 });
 
 describe("Gemini model settings", () => {

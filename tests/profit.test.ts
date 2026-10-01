@@ -126,6 +126,8 @@ describe("bot vs personal classification", () => {
     screenshotTimesAreLocal: true,
     ringUntilAck: true,
     repeatSeconds: 30,
+    alarmVolume: 15,
+    alarmSound: "siren",
     unitSize: 10,
     currency: "$",
     useAverageOdds: false,

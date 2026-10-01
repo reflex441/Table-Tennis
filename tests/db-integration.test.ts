@@ -362,4 +362,16 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
       if (saved !== undefined) process.env.SESSION_SECRET = saved;
     }
   });
+
+  it("stores alarm volume/sound per account and keeps notifications private", async () => {
+    expect(await getSettings(prisma, userId)).toMatchObject({ alarmVolume: 15, alarmSound: "siren" });
+    expect(await updateSettings(prisma, userId, { alarmVolume: 40, alarmSound: "chime" })).toMatchObject({ alarmVolume: 40, alarmSound: "chime" });
+    const bob = (await prisma.user.create({ data: { email: "bob@example.com", name: "Bob" } })).id;
+    const mine = await prisma.inAppNotification.create({ data: { userId, title: "a", body: "", url: "/" } });
+    await prisma.inAppNotification.create({ data: { userId: bob, title: "b", body: "", url: "/" } });
+    // Bob can't delete my notification; clearing his own leaves mine.
+    expect((await prisma.inAppNotification.deleteMany({ where: { id: mine.id, userId: bob } })).count).toBe(0);
+    await prisma.inAppNotification.deleteMany({ where: { userId: bob } });
+    expect(await prisma.inAppNotification.count({ where: { userId } })).toBe(1);
+  });
 });

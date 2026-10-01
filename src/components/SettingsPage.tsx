@@ -4,17 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle } from "lucide-react";
 import { startSiren, unlockAudio } from "@/lib/siren";
+import { ALARM_SOUNDS, ALARM_SOUND_LABEL } from "@/lib/alarm-sounds";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { ReminderPicker } from "./ReminderPicker";
 import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
-import { listTimeZones } from "@/lib/format";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "@/lib/leagues";
 import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
-import { useBrowserTimeZone } from "./useBrowserTimeZone";
 import type { SettingsUpdate } from "@/lib/validation/settings";
 
 interface Health {
@@ -40,15 +39,12 @@ interface Device {
 export function SettingsPage() {
   const { settings, update } = useSettings();
   const { notify } = useNotifications();
-  const browserTz = useBrowserTimeZone();
-  const [tzDraft, setTzDraft] = useState(settings.timezone);
   const [saving, setSaving] = useState<string | null>(null);
   const [pushState, setPushState] = useState<PushState | "unknown">("unknown");
   const [permission, setPermission] = useState<string>("unknown");
   const [health, setHealth] = useState<Health | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [testing, setTesting] = useState(false);
-  const [zones] = useState(() => listTimeZones());
 
   const refreshDevices = useCallback(async () => {
     const res = await api<{ subscriptions: Device[] }>("/api/push/subscriptions").catch(() => ({ subscriptions: [] }));
@@ -141,62 +137,6 @@ export function SettingsPage() {
       <Section title="Default reminder" description="Used for new matches. Every match can still have its own reminder.">
         <ReminderPicker value={settings.defaultReminderMinutes} onChange={(m) => void save({ defaultReminderMinutes: m }, "reminder")} />
         {saving === "reminder" && <Saving />}
-      </Section>
-
-      <Section title="Timezone" description="Screenshot times without an explicit timezone are interpreted in this timezone, and all times are displayed in it.">
-        <div className="flex flex-wrap items-center gap-2">
-          <input className="input max-w-xs" list="tz-list" value={tzDraft} onChange={(e) => setTzDraft(e.target.value)} aria-label="Timezone" />
-          <datalist id="tz-list">
-            {zones.map((z) => (
-              <option key={z} value={z} />
-            ))}
-          </datalist>
-          <button className="btn-primary" disabled={!zones.includes(tzDraft) && tzDraft !== "UTC"} onClick={() => void save({ timezone: tzDraft, timezoneConfirmed: true }, "tz")}>
-            Save
-          </button>
-          {browserTz && browserTz !== tzDraft && (
-            <button
-              className="btn-ghost"
-              onClick={() => {
-                setTzDraft(browserTz);
-                void save({ timezone: browserTz, timezoneConfirmed: true }, "tz");
-              }}
-            >
-              Use browser ({browserTz})
-            </button>
-          )}
-          {saving === "tz" && <Saving />}
-        </div>
-        <p className={`mt-2 flex items-center gap-1 text-xs ${settings.timezoneConfirmed ? "text-over" : "text-warn"}`}>
-          {settings.timezoneConfirmed ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Info className="h-3.5 w-3.5" />}
-          {settings.timezoneConfirmed ? `Confirmed: ${settings.timezone}` : `Not confirmed yet (currently ${settings.timezone}). Extracted times will require manual confirmation.`}
-        </p>
-        <div className="mt-3">
-          <span className="label">Numeric dates like 03/04/2026 mean</span>
-          <div className="flex gap-2">
-            {(["DMY", "MDY"] as const).map((o) => (
-              <label key={o} className="flex items-center gap-1.5 text-sm">
-                <input type="radio" name="dateOrder" checked={settings.dateOrder === o} onChange={() => void save({ dateOrder: o }, "order")} />
-                {o === "DMY" ? "Day/Month (3 April)" : "Month/Day (March 4)"}
-              </label>
-            ))}
-          </div>
-          <p className="mt-1 text-xs text-muted">Ambiguous dates are always shown for confirmation.</p>
-        </div>
-        <div className="mt-3 border-t border-line pt-2">
-          <Toggle
-            label="Screenshots show today's matches"
-            hint="A time like 8:10 PM is today; once the list passes midnight (11:30 PM → 12:15 AM) the rest is tomorrow. No confirmation needed."
-            checked={settings.screenshotsAreToday}
-            onChange={(v) => void save({ screenshotsAreToday: v }, "today")}
-          />
-          <Toggle
-            label="Screenshot times are in my timezone"
-            hint="Ignore timezone labels read from screenshots (e.g. a cropped 'GMT+10' header misread as 'GMT+3') and use the timezone above."
-            checked={settings.screenshotTimesAreLocal}
-            onChange={(v) => void save({ screenshotTimesAreLocal: v }, "local")}
-          />
-        </div>
       </Section>
 
       <Section title="Notifications on this device" description="Background notifications use the Web Push API and a service worker.">
@@ -487,17 +427,25 @@ function AlarmSection() {
   const { settings, update } = useSettings();
   const [testing, setTesting] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [volume, setVolume] = useState(settings.alarmVolume);
+
+  // Save the volume shortly after the slider stops moving.
+  useEffect(() => {
+    if (volume === settings.alarmVolume) return;
+    const t = setTimeout(() => void update({ alarmVolume: volume }), 400);
+    return () => clearTimeout(t);
+  }, [volume, settings.alarmVolume, update]);
 
   const testAlarm = async () => {
     const ok = await unlockAudio();
     setBlocked(!ok);
     if (!ok) return;
     setTesting(true);
-    const stop = startSiren();
+    const stop = startSiren(volume, settings.alarmSound);
     setTimeout(() => {
       stop();
       setTesting(false);
-    }, 4000);
+    }, 3000);
   };
 
   return (
@@ -525,6 +473,50 @@ function AlarmSection() {
         ))}
         <span className="text-xs text-muted">(computers only, until you confirm or the match starts)</span>
       </div>
+      <label className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-muted">Alarm volume</span>
+        <input
+          type="range"
+          min={1}
+          max={100}
+          step={1}
+          value={volume}
+          onChange={(e) => setVolume(Number(e.target.value))}
+          className="w-48 accent-[var(--color-accent)]"
+          aria-label="Alarm volume"
+          aria-valuetext={`${volume}%`}
+        />
+        <span className="w-10 tabular text-xs text-muted">{volume}%</span>
+      </label>
+      <div className="mt-3">
+        <span className="label">Alarm sound</span>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Alarm sound">
+          {ALARM_SOUNDS.map((snd) => (
+            <button
+              key={snd}
+              type="button"
+              role="radio"
+              aria-checked={settings.alarmSound === snd}
+              onClick={() => {
+                void update({ alarmSound: snd });
+                // Short preview of the sound.
+                void unlockAudio().then((ok) => {
+                  if (!ok) return setBlocked(true);
+                  const stop = startSiren(volume, snd);
+                  setTimeout(stop, 1600);
+                });
+              }}
+              className={`rounded-lg border px-3 py-1.5 text-left text-xs ${
+                settings.alarmSound === snd ? "border-accent bg-accent/15 text-accent" : "border-line bg-bg text-muted hover:text-text"
+              }`}
+            >
+              <span className="block font-semibold">{ALARM_SOUND_LABEL[snd].label}</span>
+              <span className="block text-[11px] opacity-80">{ALARM_SOUND_LABEL[snd].hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-muted">The volume and sound also apply to the in-app notification chime. Your computer&apos;s own volume still applies.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button className="btn-ghost" disabled={testing} onClick={() => void testAlarm()}>
           <Volume2 className="h-4 w-4" /> {testing ? "Ringing…" : "Test alarm sound"}
