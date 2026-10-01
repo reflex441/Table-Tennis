@@ -20,12 +20,19 @@ export class GeminiRequestError extends Error {
 export interface ExtractOptions {
   apiKey: string;
   model: string;
+  /** Tried when `model` stays overloaded / rate-limited after retries. */
+  fallbackModel?: string;
   baseUrl?: string;
   image: Buffer;
   mimeType: string;
   /** Injected for tests. */
   client?: Pick<GoogleGenAI, "models">;
+  /** Per-request timeout. */
   timeoutMs?: number;
+  /** Total time allowed including retries. */
+  budgetMs?: number;
+  /** Injected for tests to skip real waiting. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -54,42 +61,100 @@ export interface ExtractOutput {
   durationMs: number;
 }
 
+/** HTTP statuses worth retrying: rate limit, overload and server errors. */
+function isRetryableStatus(status: number | undefined): boolean {
+  return status === undefined || status === 408 || status === 429 || status >= 500;
+}
+
+/** Turn Google's error into something a person can act on. */
+function friendlyMessage(status: number | undefined, raw: string, attempts: number, models: string[]): string {
+  const tried = `Tried ${attempts} time${attempts === 1 ? "" : "s"} (${models.join(" then ")}).`;
+  if (status === 503 || /overloaded|high demand|UNAVAILABLE/i.test(raw)) {
+    return `Gemini is overloaded right now (Google returned 503). ${tried} This is on Google's side and usually clears within a few minutes - press Retry.`;
+  }
+  if (status === 429) {
+    return `Gemini rate limit reached (429). ${tried} Free API keys only allow a limited number of requests per minute - wait a minute, then press Retry.`;
+  }
+  if (status === undefined) return `Could not reach Gemini (network error or timeout). ${tried} Press Retry.`;
+  if (status >= 500) return `Gemini had a server error (${status}). ${tried} Press Retry.`;
+  if (status === 400 || status === 401 || status === 403) return `Gemini rejected the request (${status}) - check the API key in Settings. ${raw}`;
+  return `Gemini request failed (${status}): ${raw}`;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** Send one screenshot to Gemini and return validated structured data. */
 export async function extractFromScreenshot(opts: ExtractOptions): Promise<ExtractOutput> {
   if (!opts.apiKey && !opts.client) throw new GeminiConfigError();
   const client = opts.client ?? new GoogleGenAI({ apiKey: opts.apiKey, ...(opts.baseUrl ? { httpOptions: { baseUrl: opts.baseUrl } } : {}) });
   const started = Date.now();
+  const wait = opts.sleep ?? sleep;
+  // Stay inside the route's time limit even when retrying.
+  const budgetMs = opts.budgetMs ?? 100_000;
+
+  // Overload/rate-limit errors are usually brief: retry the main model with
+  // backoff, then try the fallback model (a separate capacity pool).
+  const plan: { model: string; delayBeforeMs: number }[] = [
+    { model: opts.model, delayBeforeMs: 0 },
+    { model: opts.model, delayBeforeMs: 2_000 },
+    { model: opts.model, delayBeforeMs: 6_000 },
+  ];
+  if (opts.fallbackModel && opts.fallbackModel !== opts.model) {
+    plan.push({ model: opts.fallbackModel, delayBeforeMs: 1_000 }, { model: opts.fallbackModel, delayBeforeMs: 4_000 });
+  }
 
   let text: string | undefined;
-  try {
-    const response = await client.models.generateContent({
-      model: opts.model,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { inlineData: { data: opts.image.toString("base64"), mimeType: opts.mimeType } },
-            { text: EXTRACTION_PROMPT },
-          ],
+  let usedModel = opts.model;
+  let lastStatus: number | undefined;
+  let lastMessage = "";
+  let attempts = 0;
+  const modelsTried: string[] = [];
+
+  for (const step of plan) {
+    const elapsed = Date.now() - started;
+    if (attempts > 0 && elapsed + step.delayBeforeMs + 5_000 > budgetMs) break;
+    if (step.delayBeforeMs) await wait(step.delayBeforeMs);
+    attempts++;
+    if (!modelsTried.includes(step.model)) modelsTried.push(step.model);
+    const remaining = Math.max(5_000, budgetMs - (Date.now() - started));
+    try {
+      const response = await client.models.generateContent({
+        model: step.model,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { data: opts.image.toString("base64"), mimeType: opts.mimeType } },
+              { text: EXTRACTION_PROMPT },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseJsonSchema: EXTRACTION_JSON_SCHEMA,
+          // Gemini 3.x is tuned for its default temperature (1.0); Google warns
+          // that lower values can cause looping, so it is deliberately not set.
+          abortSignal: AbortSignal.timeout(Math.min(opts.timeoutMs ?? 60_000, remaining)),
         },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseJsonSchema: EXTRACTION_JSON_SCHEMA,
-        // Gemini 3.x is tuned for its default temperature (1.0); Google warns
-        // that lower values can cause looping, so it is deliberately not set.
-        abortSignal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),
-      },
-    });
-    text = response.text;
-  } catch (err) {
-    const status = (err as { status?: number }).status;
-    const message = err instanceof Error ? err.message : String(err);
-    const retryable = status === undefined || status === 429 || status >= 500;
-    throw new GeminiRequestError(`Gemini request failed${status ? ` (${status})` : ""}: ${message}`, retryable);
+      });
+      text = response.text;
+      usedModel = step.model;
+      lastStatus = undefined;
+      break;
+    } catch (err) {
+      lastStatus = (err as { status?: number }).status;
+      lastMessage = err instanceof Error ? err.message : String(err);
+      if (!isRetryableStatus(lastStatus)) {
+        throw new GeminiRequestError(friendlyMessage(lastStatus, lastMessage, attempts, modelsTried), false);
+      }
+    }
+  }
+
+  if (text === undefined) {
+    throw new GeminiRequestError(friendlyMessage(lastStatus, lastMessage, attempts, modelsTried), true);
   }
 
   const raw = parseModelJson(text);
   const { result, warnings } = normalizeExtraction(raw);
-  return { raw, result, warnings, model: opts.model, durationMs: Date.now() - started };
+  return { raw, result, warnings, model: usedModel, durationMs: Date.now() - started };
 }

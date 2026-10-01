@@ -409,6 +409,23 @@ export function UploadReview() {
               </li>
             ))}
           </ul>
+          {items
+            .filter((i) => i.phase === "error")
+            .map((item) => (
+              <div key={`err-${item.key}`} className="mt-2 flex items-start gap-2 rounded-lg bg-under/10 px-3 py-2 text-xs text-under">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="flex-1">
+                  <b>{item.file.name}:</b> {item.error}
+                </span>
+                <button
+                  className="btn-ghost shrink-0 px-2 py-1 text-xs"
+                  disabled={scanning}
+                  onClick={() => void (item.screenshot ? scanOne(item, true) : uploadOne(item))}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Retry
+                </button>
+              </div>
+            ))}
         </div>
       )}
 

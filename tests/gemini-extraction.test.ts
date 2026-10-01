@@ -12,6 +12,7 @@ vi.mock("@google/genai", () => ({
 }));
 
 const IMAGE = Buffer.from("fake-image-bytes");
+const noWait = async () => {};
 
 const sample = {
   layout: "match list",
@@ -79,13 +80,60 @@ describe("extractFromScreenshot", () => {
 
   it("wraps API errors and marks rate limits as retryable", async () => {
     generateContent.mockRejectedValue(Object.assign(new Error("Resource exhausted"), { status: 429 }));
-    const err = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png" }).catch((e) => e);
+    const err = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
     expect(err).toBeInstanceOf(GeminiRequestError);
     expect(err.retryable).toBe(true);
+    expect(err.message).toMatch(/rate limit/);
 
+    generateContent.mockReset();
     generateContent.mockRejectedValue(Object.assign(new Error("Bad key"), { status: 400 }));
-    const err2 = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png" }).catch((e) => e);
+    const err2 = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
     expect(err2.retryable).toBe(false);
+    expect(generateContent).toHaveBeenCalledTimes(1); // no retries for a bad request
+  });
+
+  it("retries when Gemini is overloaded (503) and succeeds", async () => {
+    const overloaded = Object.assign(new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'), { status: 503 });
+    generateContent.mockRejectedValueOnce(overloaded).mockRejectedValueOnce(overloaded).mockResolvedValue({ text: JSON.stringify(sample) });
+    const waits: number[] = [];
+    const out = await extractFromScreenshot({ apiKey: "k", model: "gemini-3.5-flash", image: IMAGE, mimeType: "image/png", sleep: async (ms) => void waits.push(ms) });
+    expect(out.model).toBe("gemini-3.5-flash");
+    expect(out.result.matches).toHaveLength(1);
+    expect(generateContent).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([2_000, 6_000]);
+  });
+
+  it("falls back to the lighter model when the main one stays overloaded", async () => {
+    const overloaded = Object.assign(new Error("UNAVAILABLE"), { status: 503 });
+    generateContent.mockImplementation(async (req: { model: string }) => {
+      if (req.model === "gemini-3.5-flash") throw overloaded;
+      return { text: JSON.stringify(sample) };
+    });
+    const out = await extractFromScreenshot({
+      apiKey: "k",
+      model: "gemini-3.5-flash",
+      fallbackModel: "gemini-3.8-flash",
+      image: IMAGE,
+      mimeType: "image/png",
+      sleep: noWait,
+    });
+    expect(out.model).toBe("gemini-3.8-flash");
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.8-flash"]);
+  });
+
+  it("gives a clear message when every attempt is overloaded", async () => {
+    generateContent.mockRejectedValue(Object.assign(new Error("high demand"), { status: 503 }));
+    const err = await extractFromScreenshot({ apiKey: "k", model: "a", fallbackModel: "b", image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
+    expect(err).toBeInstanceOf(GeminiRequestError);
+    expect(err.retryable).toBe(true);
+    expect(err.message).toMatch(/overloaded right now/);
+    expect(err.message).toMatch(/Tried 5 times \(a then b\)/);
+  });
+
+  it("stops retrying when the time budget is used up", async () => {
+    generateContent.mockRejectedValue(Object.assign(new Error("busy"), { status: 503 }));
+    await extractFromScreenshot({ apiKey: "k", model: "a", image: IMAGE, mimeType: "image/png", sleep: noWait, budgetMs: 4_000 }).catch(() => {});
+    expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
   it("rejects malformed JSON", async () => {

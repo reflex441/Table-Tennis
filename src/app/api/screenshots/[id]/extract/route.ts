@@ -40,6 +40,7 @@ export const POST = handle(async (_request: Request, ctx: { params: Promise<{ id
     const out = await extractFromScreenshot({
       apiKey,
       model: config.GEMINI_MODEL,
+      fallbackModel: config.GEMINI_FALLBACK_MODEL || undefined,
       baseUrl: config.GEMINI_BASE_URL || undefined,
       image: Buffer.from(shot.data),
       mimeType: shot.mimeType,
