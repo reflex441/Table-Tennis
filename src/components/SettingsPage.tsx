@@ -11,6 +11,7 @@ import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { listTimeZones } from "@/lib/format";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
+import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "@/lib/leagues";
 import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
 import { useBrowserTimeZone } from "./useBrowserTimeZone";
@@ -132,6 +133,8 @@ export function SettingsPage() {
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
 
       <AccountSection />
+
+      <LeagueLinksSection />
 
       <GeminiKeySection />
 
@@ -806,6 +809,104 @@ function AccountSection() {
         Sign out
       </button>
       <p className="mt-1 text-xs text-muted">Signing out also stops this browser getting your alarm notifications.</p>
+    </Section>
+  );
+}
+
+/** Bookmaker page per league; the player names on a match open it. */
+function LeagueLinksSection() {
+  const { settings, update } = useSettings();
+  const initialRows = (): LeagueLink[] => {
+    const saved = settings.leagueLinks;
+    const have = new Set(saved.map((l) => normalizeLeague(l.league)));
+    return [...saved, ...SUGGESTED_LEAGUES.filter((l) => !have.has(normalizeLeague(l))).map((league) => ({ league, url: "" }))];
+  };
+  const [rows, setRows] = useState<LeagueLink[]>(initialRows);
+  const [competitions, setCompetitions] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // League names from your matches, offered as suggestions.
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ matches: { competition: string | null }[] }>("/api/matches")
+      .then((r) => {
+        if (cancelled) return;
+        const seen = new Map<string, string>();
+        for (const m of r.matches) if (m.competition) seen.set(normalizeLeague(m.competition), m.competition);
+        setCompetitions([...seen.values()].sort());
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setRow = (i: number, patch: Partial<LeagueLink>) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
+  const filled = rows.map((r) => ({ league: r.league.trim(), url: r.url.trim() })).filter((r) => r.league && r.url);
+  const invalid = filled.find((r) => !isSafeUrl(r.url));
+
+  const save = async () => {
+    if (invalid) return setMsg({ ok: false, text: `The link for ${invalid.league} must be a full web address starting with https://` });
+    setBusy(true);
+    setMsg(null);
+    try {
+      await update({ leagueLinks: filled });
+      setMsg({ ok: true, text: "League links saved." });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section
+      title="League links"
+      description="Paste the Ladbrokes / Sportsbet table tennis page for each league. Clicking the player names on a match (or on the alarm) opens that league's page in a new tab."
+    >
+      <datalist id="league-names">
+        {[...new Set([...SUGGESTED_LEAGUES, ...competitions])].map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+      <div className="flex flex-col gap-2">
+        {rows.map((row, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+            <input
+              className="input sm:w-44"
+              list="league-names"
+              placeholder="League, e.g. TT Cup"
+              value={row.league}
+              onChange={(e) => setRow(i, { league: e.target.value })}
+              aria-label={`League ${i + 1} name`}
+            />
+            <input
+              className="input min-w-0 flex-1 font-mono text-xs"
+              inputMode="url"
+              placeholder="https://www.ladbrokes.com.au/sports/table-tennis/..."
+              value={row.url}
+              onChange={(e) => setRow(i, { url: e.target.value })}
+              aria-label={`${row.league || `League ${i + 1}`} link`}
+            />
+            <button type="button" className="btn-ghost px-2" onClick={() => setRows((r) => r.filter((_, j) => j !== i))} aria-label={`Remove ${row.league || "league"}`}>
+              <XCircle className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-ghost" onClick={() => setRows((r) => [...r, { league: "", url: "" }])}>
+          + Add league
+        </button>
+        <button type="button" className="btn-primary" disabled={busy} onClick={() => void save()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save links
+        </button>
+        {msg && <span className={`text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</span>}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        League names are matched ignoring capitals and spaces, so &quot;TT Cup&quot; also matches &quot;TT CUP&quot;. Leagues without a link open the match details instead.
+      </p>
     </Section>
   );
 }

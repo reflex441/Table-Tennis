@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafeUrl, type LeagueLink } from "@/lib/leagues";
 import { reminderMinutesSchema } from "./match";
 
 export function isValidTimeZone(tz: string): boolean {
@@ -65,6 +66,18 @@ export const settingsUpdateSchema = z
     geminiModel: geminiModelSchema,
     geminiFallbackModel: geminiFallbackSchema,
     showOnLeaderboard: z.boolean(),
+    leagueLinks: z
+      .array(
+        z.object({
+          league: z.string().trim().min(1, "Enter the league name").max(60),
+          url: z
+            .string()
+            .trim()
+            .max(500)
+            .refine((u) => isSafeUrl(u), "Enter a full web address starting with https://"),
+        }),
+      )
+      .max(30),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -101,6 +114,8 @@ export interface SettingsDTO {
   geminiFallbackModel: string;
   /** Appear on the leaderboard (display name only). */
   showOnLeaderboard: boolean;
+  /** Bookmaker link per league, opened from the player names. */
+  leagueLinks: LeagueLink[];
   /** Whether this account has saved a Gemini key. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

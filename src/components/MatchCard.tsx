@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Ban, Pencil, RotateCcw, Trash2, CheckCheck, BellRing } from "lucide-react";
+import { Ban, Pencil, RotateCcw, Trash2, CheckCheck, BellRing, Image as ImageIcon, Info } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
 import { Countdown, EdgeIndicator, PercentBar, SelectionBadge, StatusBadge } from "./MatchBits";
 import { useNow } from "./useNow";
 import { BetPanel, PlayTypeChip } from "./BetBits";
+import { MatchNames } from "./MatchNames";
+import { ScreenshotViewer } from "./ScreenshotViewer";
 
 export interface MatchCardActions {
   onCancel: (m: MatchDTO) => Promise<void>;
@@ -20,6 +23,8 @@ export interface MatchCardActions {
 
 export function MatchCard({ match, timezone, actions, highlight }: { match: MatchDTO; timezone: string; actions: MatchCardActions; highlight?: boolean }) {
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState(false);
+  const router = useRouter();
   const now = useNow();
   const s = match.statistics;
   const alarm = match.alarm;
@@ -33,16 +38,27 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
     }
   };
 
+  const hasShot = match.screenshotIds.length > 0;
+  const title = `${match.player1} vs ${match.player2}`;
+  // Clicking the card (not a button, link or field) shows the screenshot it came from.
+  const onCardClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label, [role=dialog]")) return;
+    if (window.getSelection()?.toString()) return;
+    if (hasShot) setViewing(true);
+    else router.push(`/matches/${match.id}`);
+  };
+
   return (
     <article
       id={`match-${match.id}`}
-      className={`card group relative flex flex-col gap-1.5 p-3 transition-colors hover:border-muted/40 ${highlight ? "ring-2 ring-accent" : ""} ${status === "CANCELLED" ? "opacity-70" : ""}`}
+      onClick={onCardClick}
+      title={hasShot ? "Click to see the screenshot" : "Click for match details"}
+      className={`card group relative flex cursor-pointer flex-col gap-1.5 p-3 transition-colors hover:border-muted/40 ${highlight ? "ring-2 ring-accent" : ""} ${status === "CANCELLED" ? "opacity-70" : ""}`}
     >
+      {viewing && <ScreenshotViewer ids={match.screenshotIds} title={title} onClose={() => setViewing(false)} />}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link href={`/matches/${match.id}`} className="block truncate text-[15px] font-semibold leading-tight hover:underline">
-            {match.player1} <span className="font-normal text-muted">vs</span> {match.player2}
-          </Link>
+          <MatchNames match={match} className="text-[15px] font-semibold leading-tight" />
           <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
             <PlayTypeChip playType={match.playType} />
             <span className="truncate">{match.competition ?? "Unknown competition"}</span>
@@ -100,6 +116,14 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
       )}
 
       <div className="mt-0.5 flex items-center justify-end gap-1">
+        {hasShot && (
+          <button className="btn-ghost px-2 py-1 text-xs" onClick={() => setViewing(true)} aria-label="Show screenshot">
+            <ImageIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <Link href={`/matches/${match.id}`} className="btn-ghost px-2 py-1 text-xs" aria-label="Match details">
+          <Info className="h-3.5 w-3.5" />
+        </Link>
         <Link href={`/matches/${match.id}?edit=1`} className="btn-ghost px-2 py-1 text-xs" aria-label="Edit">
           <Pencil className="h-3.5 w-3.5" /> Edit
         </Link>

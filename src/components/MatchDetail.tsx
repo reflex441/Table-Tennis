@@ -13,6 +13,8 @@ import { useSettings } from "./SettingsProvider";
 import { useNow } from "./useNow";
 import { useNotifications } from "./NotificationProvider";
 import { BetPanel, PlayTypeChip } from "./BetBits";
+import { MatchNames } from "./MatchNames";
+import { ScreenshotViewer } from "./ScreenshotViewer";
 
 export function MatchDetail({ initial }: { initial: MatchDTO }) {
   const { settings } = useSettings();
@@ -22,6 +24,7 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
   const [match, setMatch] = useState(initial);
   const [editing, setEditing] = useState(params.get("edit") === "1");
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState<number | null>(null);
   const now = useNow();
   const tz = settings.timezone;
   const s = match.statistics;
@@ -79,7 +82,7 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold leading-tight">
-              {match.player1} <span className="font-normal text-muted">vs</span> {match.player2}
+              <MatchNames match={match} />
             </h1>
             <p className="flex items-center gap-2 text-sm text-muted">
               <PlayTypeChip playType={match.playType} />
@@ -205,13 +208,16 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
         <div className="card p-3">
           <h2 className="mb-2 text-sm font-semibold">Source screenshots</h2>
           <div className="flex gap-2 overflow-x-auto">
-            {match.screenshotIds.map((id) => (
-              <a key={id} href={`/api/screenshots/${id}/image`} target="_blank" rel="noreferrer" className="shrink-0">
+            {match.screenshotIds.map((id, i) => (
+              <button key={id} type="button" onClick={() => setViewing(i)} className="shrink-0 rounded-lg focus-visible:ring-2 focus-visible:ring-accent" aria-label="Show screenshot full size">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/screenshots/${id}/image`} alt="Source screenshot" className="h-48 rounded-lg border border-line object-contain" />
-              </a>
+                <img src={`/api/screenshots/${id}/image`} alt="Source screenshot" className="h-48 rounded-lg border border-line object-contain hover:border-muted" />
+              </button>
             ))}
           </div>
+          {viewing !== null && (
+            <ScreenshotViewer ids={match.screenshotIds} start={viewing} title={`${match.player1} vs ${match.player2}`} onClose={() => setViewing(null)} />
+          )}
         </div>
       )}
     </div>

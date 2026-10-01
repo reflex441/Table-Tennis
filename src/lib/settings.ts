@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
+import { parseLeagueLinks } from "@/lib/leagues";
 
 /**
  * Make sure the user's settings row exists. `skipDuplicates` compiles to
@@ -55,6 +56,7 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
     geminiModel: s.geminiModel,
     geminiFallbackModel: s.geminiFallbackModel,
     showOnLeaderboard: s.showOnLeaderboard,
+    leagueLinks: parseLeagueLinks(s.leagueLinks),
     // Never include the key itself in this DTO: it is sent to the browser.
     geminiKeySource: s.geminiApiKey ? "settings" : "none",
     geminiKeyHint: maskKey(s.geminiApiKey),

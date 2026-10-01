@@ -34,6 +34,11 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 - **Upgrading an existing install:** the first account created takes over all matches, bets and settings that existed before accounts were added.
 - **Leaderboard:** ranks accounts by **most units profited** (everyone with a settled bet) and **highest ROI** (only accounts with at least **100 settled bets**; until then the page shows how many more you need). Only settled bets count. Emails listed in `LEADERBOARD_ALWAYS_SHOW` (in `.env`, comma-separated) are ranked by ROI regardless of the minimum. You can filter to Bot or Personal plays. Only display names are shown, never emails. Turn off **Settings → Account → Show me on the leaderboard** to hide yourself.
 
+## Match cards: screenshot and bookmaker links
+
+- **Click a match card** (anywhere except its buttons) to see the screenshot it came from, full size. Arrow keys move between screenshots when a match was combined from several; Esc closes it. Matches without a screenshot open their details instead. The ⓘ button always opens the details.
+- **Click the player names** to open that league's betting page (e.g. Ladbrokes or Sportsbet table tennis) in a new tab. Set one link per league in **Settings → League links** (TT Cup, TT Elite and Czech Liga Pro are listed to start with; add any others). League names match ignoring capitals and spaces. The alarm pop-up also has an **Open … on the bookmaker** button.
+
 ## Credentials and external services you need to configure
 
 | What | Required? | Where to get it | Env variable(s) |

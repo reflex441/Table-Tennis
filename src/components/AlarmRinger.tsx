@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Bell, BellRing, CheckCircle2, Volume2 } from "lucide-react";
+import { Bell, BellRing, CheckCircle2, ExternalLink, Volume2 } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { api } from "@/lib/client-api";
 import { detectDeviceType, subscribeToPush } from "@/lib/push-client";
@@ -13,6 +13,8 @@ import { useSettings } from "./SettingsProvider";
 import { NOTIFICATION_EVENT } from "./NotificationProvider";
 import { Countdown, SelectionBadge } from "./MatchBits";
 import { PlayTypeChip } from "./BetBits";
+import { MatchNames } from "./MatchNames";
+import { findLeagueUrl } from "@/lib/leagues";
 import { defaultStake, formatMoney } from "@/lib/bets/profit";
 
 const POLL_MS = 5_000;
@@ -164,6 +166,7 @@ export function AlarmRinger() {
   const match = ringing[0];
   const s = match.statistics;
   const tz = settings.timezone;
+  const leagueUrl = findLeagueUrl(match.competition, settings.leagueLinks);
 
   const input =
     betInput?.matchId === match.id ? betInput : { matchId: match.id, stake: String(defaultStake(match.stakeUnits)), odds: match.odds ? String(match.odds) : "" };
@@ -202,7 +205,7 @@ export function AlarmRinger() {
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-widest text-under">Place your bet</p>
             <h2 id="alarm-title" className="truncate text-xl font-bold">
-              {match.player1} <span className="font-normal text-muted">vs</span> {match.player2}
+              <MatchNames match={match} />
             </h2>
             <p className="flex items-center gap-1.5 text-sm text-muted">
               <PlayTypeChip playType={match.playType} />
@@ -276,6 +279,12 @@ export function AlarmRinger() {
           </label>
         </div>
         {betError && <p className="mt-1 text-xs text-under">{betError}</p>}
+
+        {leagueUrl && (
+          <a href={leagueUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost mt-3 w-full border-accent/50 py-2 text-accent">
+            <ExternalLink className="h-4 w-4" /> Open {match.competition} on the bookmaker
+          </a>
+        )}
 
         <button
           className="btn mt-3 w-full bg-over py-3 text-base font-bold text-slate-950 hover:bg-emerald-400"

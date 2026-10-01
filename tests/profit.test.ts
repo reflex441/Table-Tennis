@@ -133,6 +133,7 @@ describe("bot vs personal classification", () => {
     geminiModel: "gemini-3.5-flash-lite",
     geminiFallbackModel: "gemini-3.8-flash",
     showOnLeaderboard: true,
+    leagueLinks: [],
     geminiKeySource: "none",
     geminiKeyHint: null,
   } as SettingsDTO;

@@ -30,6 +30,7 @@ const settings: SettingsDTO = {
   geminiModel: "gemini-3.5-flash-lite",
   geminiFallbackModel: "gemini-3.8-flash",
   showOnLeaderboard: true,
+  leagueLinks: [],
   geminiKeySource: "settings",
   geminiKeyHint: "…0000",
 };
