@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, authEnabled, verifySessionToken } from "@/lib/auth/session";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/cron/dispatch", "/api/health", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/cron/dispatch", "/sw.js", "/manifest.webmanifest"];
 
 export function proxy(request: NextRequest) {
   if (!authEnabled()) return NextResponse.next();
