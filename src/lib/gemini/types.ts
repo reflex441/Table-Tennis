@@ -1,3 +1,4 @@
+import type { Selection } from "@/lib/selection";
 /** Validated extraction result produced from a single screenshot. */
 export interface ExtractedMatch {
   player1: string | null;
@@ -7,7 +8,7 @@ export interface ExtractedMatch {
   timeText: string | null;
   /** Verbatim date text if shown separately from the time. */
   dateText: string | null;
-  selection: "OVER" | "UNDER" | null;
+  selection: Selection | null;
   pointsLine: number | null;
   /** O/U record exactly as shown, e.g. "20/9". */
   ouStats: string | null;

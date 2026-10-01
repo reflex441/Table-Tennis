@@ -1,11 +1,12 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { BetResult, BetRow, PlayType } from "./profit";
+import type { Selection } from "@/lib/selection";
 
 export interface BetRowWithMatch extends BetRow {
   player1: string;
   player2: string;
   startsAt: string;
-  selection: "OVER" | "UNDER" | null;
+  selection: Selection | null;
   pointsLine: number | null;
 }
 
@@ -36,7 +37,7 @@ export async function listBetRows(prisma: PrismaClient, userId: string, opts: { 
     player1: b.match.player1,
     player2: b.match.player2,
     startsAt: b.match.startsAt.toISOString(),
-    selection: (b.match.statistics?.selection as "OVER" | "UNDER" | null) ?? null,
+    selection: (b.match.statistics?.selection as Selection | null) ?? null,
     pointsLine: b.match.statistics?.pointsLine ?? null,
   }));
 }

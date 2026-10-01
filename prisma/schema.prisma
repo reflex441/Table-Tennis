@@ -30,6 +30,7 @@ enum CaptureTimeSource {
 enum Selection {
   OVER
   UNDER
+  SWEEP
 }
 
 enum AlarmStatus {

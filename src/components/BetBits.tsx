@@ -11,7 +11,7 @@ type Result = "PENDING" | "WON" | "LOST" | "VOID";
 
 export function PlayTypeChip({ playType }: { playType: "BOT" | "PERSONAL" }) {
   return playType === "BOT" ? (
-    <span className="chip gap-1 bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30" title="Bot play - the screenshot had an OVER/UNDER pick">
+    <span className="chip gap-1 bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30" title="Bot play - the screenshot had an OVER / UNDER / SWEEP pick">
       <Bot className="h-3 w-3" /> BOT
     </span>
   ) : (

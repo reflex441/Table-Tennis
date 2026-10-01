@@ -280,7 +280,7 @@ export function SettingsPage() {
         <Toggle label="Browser push notifications" hint="Send reminders to subscribed devices, even when the app is closed." checked={settings.pushEnabled} onChange={(v) => void save({ pushEnabled: v }, "push")} />
         <Toggle label="In-app notifications" hint="Show reminders in the notification centre and as pop-ups while the app is open." checked={settings.inAppEnabled} onChange={(v) => void save({ inAppEnabled: v }, "inapp")} />
         <Toggle label="Alarm sound" hint="Siren on computers until you confirm the bet (phones never play it)." checked={settings.soundEnabled} onChange={(v) => void save({ soundEnabled: v }, "sound")} />
-        <Toggle label="Include statistics" hint="Show OVER/UNDER, O/U and EDGE in the notification text." checked={settings.includeStatsInNotification} onChange={(v) => void save({ includeStatsInNotification: v }, "stats")} />
+        <Toggle label="Include statistics" hint="Show the pick (OVER / UNDER / SWEEP), O/U and EDGE in the notification text." checked={settings.includeStatsInNotification} onChange={(v) => void save({ includeStatsInNotification: v }, "stats")} />
       </Section>
 
       <Section title="Server status">

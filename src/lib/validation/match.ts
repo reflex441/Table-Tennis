@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SELECTIONS } from "@/lib/selection";
 
 export const REMINDER_PRESETS = [1, 3, 5, 10, 15, 30] as const;
 export const MIN_REMINDER_MINUTES = 0;
@@ -20,7 +21,7 @@ const optionalText = (max: number) =>
     .transform((v) => (v ? v : null));
 
 export const statisticsSchema = z.object({
-  selection: z.enum(["OVER", "UNDER"]).nullish().transform((v) => v ?? null),
+  selection: z.enum(SELECTIONS).nullish().transform((v) => v ?? null),
   pointsLine: z.number().min(0).max(500).nullish().transform((v) => v ?? null),
   ouStats: z
     .string()

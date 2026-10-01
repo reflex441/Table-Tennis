@@ -1,4 +1,5 @@
 import type { ExtractedMatch, ExtractionResult } from "./types";
+import type { Selection } from "@/lib/selection";
 
 /**
  * Server-side validation of Gemini output. The model's JSON is treated as
@@ -53,7 +54,7 @@ function cleanNumber(value: unknown, field: string, warnings: string[], min: num
   return Math.round(n * 100) / 100;
 }
 
-function cleanSelection(value: unknown, field: string, warnings: string[]): "OVER" | "UNDER" | null {
+function cleanSelection(value: unknown, field: string, warnings: string[]): Selection | null {
   if (value === null || value === undefined) return null;
   if (typeof value !== "string") {
     warnings.push(`${field}: invalid selection - ignored.`);
@@ -62,8 +63,9 @@ function cleanSelection(value: unknown, field: string, warnings: string[]): "OVE
   const v = value.trim().toUpperCase();
   if (v === "OVER" || v === "O") return "OVER";
   if (v === "UNDER" || v === "U") return "UNDER";
+  if (v === "SWEEP") return "SWEEP";
   if (!v || v === "NULL") return null;
-  warnings.push(`${field}: "${value}" is not OVER or UNDER - ignored.`);
+  warnings.push(`${field}: "${value}" is not OVER, UNDER or SWEEP - ignored.`);
   return null;
 }
 

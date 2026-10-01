@@ -38,12 +38,12 @@ export function ProfitChart({ points, unitSize, currency }: { points: Cumulative
     const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.cumulative).toFixed(1)}`).join("");
     const zeroY = y(0);
     const area = points.length ? `${line}L${x(points.length - 1).toFixed(1)},${zeroY}L${x(0).toFixed(1)},${zeroY}Z` : "";
-    // About 4 evenly spaced date labels.
-    const labelEvery = Math.max(1, Math.ceil(points.length / 4));
+    // Evenly spaced date labels, at least ~64px apart, always including the last day.
     const lastIdx = points.length - 1;
+    const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(2, Math.floor(innerW / 64))));
     const xLabels = points
       .map((p, i) => ({ i, day: p.day }))
-      .filter(({ i }) => i === lastIdx || (i % labelEvery === 0 && (i === 0 || lastIdx - i >= labelEvery / 2)));
+      .filter(({ i }) => i === lastIdx || (i % labelEvery === 0 && (i === 0 || x(lastIdx) - x(i) >= 56)));
     return { ticks, x, y, line, area, zeroY, innerW, xLabels };
   }, [points, width]);
 
@@ -66,7 +66,7 @@ export function ProfitChart({ points, unitSize, currency }: { points: Cumulative
   return (
     <div
       ref={ref}
-      className="relative select-none outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="relative w-full min-w-0 select-none overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-accent"
       tabIndex={0}
       role="img"
       aria-label={`Running profit: ${formatUnits(end)} over ${points.length} day(s). Use the arrow keys to read each day.`}

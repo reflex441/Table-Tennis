@@ -1,11 +1,12 @@
 /** DTOs shared between API routes and client components (no server imports). */
 import type { ExtractionResult } from "@/lib/gemini/types";
 import type { CaptureSource } from "@/lib/time/resolve";
+import type { Selection } from "@/lib/selection";
 
 export type AlarmStatus = "SCHEDULED" | "SENDING" | "TRIGGERED" | "COMPLETED" | "CANCELLED" | "FAILED";
 
 export interface MatchStatisticsDTO {
-  selection: "OVER" | "UNDER" | null;
+  selection: Selection | null;
   pointsLine: number | null;
   ouStats: string | null;
   ouHitRate: number | null;

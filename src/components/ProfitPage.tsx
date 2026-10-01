@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Bot, Trophy, User } from "lucide-react";
 import type { BetRowWithMatch } from "@/lib/bets/queries";
 import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
@@ -14,9 +14,12 @@ import { DailyCalendar } from "./DailyCalendar";
 import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
 import { X } from "lucide-react";
 import { DateTime } from "luxon";
+import { SELECTIONS, SELECTION_LABEL, type Selection } from "@/lib/selection";
+import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 
 type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
+type PickFilter = "ALL" | Selection;
 type SortKey = "date" | "profit" | "stake" | "odds";
 
 const PERIODS: { id: Period; label: string; days: number | null }[] = [
@@ -35,6 +38,8 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
   const tz = settings.timezone;
   const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
   const [type, setType] = useState<TypeFilter>("ALL");
+  const [pick, setPick] = useState<PickFilter>("ALL");
+  const [chartMode, setChartMode] = useState<"total" | "picks">("total");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "date", desc: true });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const today = useToday(tz);
@@ -43,20 +48,39 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
     () => (period.fromDay === null ? initial : initial.filter((r) => dayKey(r.startsAt, tz) >= period.fromDay!)),
     [initial, period.fromDay, tz],
   );
-  const bot = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "BOT")), [inPeriod]);
-  const personal = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "PERSONAL")), [inPeriod]);
-  const filtered = useMemo(() => (type === "ALL" ? inPeriod : inPeriod.filter((r) => r.playType === type)), [inPeriod, type]);
+  const typeOk = useCallback((r: BetRowWithMatch) => type === "ALL" || r.playType === type, [type]);
+  const pickOk = useCallback((r: BetRowWithMatch) => pick === "ALL" || r.selection === pick, [pick]);
+  const bot = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "BOT" && pickOk(r))), [inPeriod, pickOk]);
+  const personal = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "PERSONAL" && pickOk(r))), [inPeriod, pickOk]);
+  // Over / Under / Sweep performance for the chosen play type.
+  const picks = useMemo(
+    () => SELECTIONS.map((sel) => ({ sel, summary: summarize(inPeriod.filter((r) => typeOk(r) && r.selection === sel)) })),
+    [inPeriod, typeOk],
+  );
+  const filtered = useMemo(() => inPeriod.filter((r) => typeOk(r) && pickOk(r)), [inPeriod, typeOk, pickOk]);
   const overall = useMemo(() => summarize(filtered), [filtered]);
   const byCompetition = useMemo(() => summarizeBy(filtered, (r) => r.competition ?? "Unknown competition"), [filtered]);
 
   // Daily P/L for the chosen play type (the calendar can page through any month).
-  const daily = useMemo(() => dailyPL(type === "ALL" ? initial : initial.filter((r) => r.playType === type), tz), [initial, type, tz]);
+  const daily = useMemo(() => dailyPL(initial.filter((r) => typeOk(r) && pickOk(r)), tz), [initial, typeOk, pickOk, tz]);
   const series = useMemo(() => {
     const keys = [...daily.keys()].sort();
     const to = today ?? keys[keys.length - 1];
     const from = period.fromDay ?? keys[0];
     return from && to ? cumulativeSeries(daily, from, to < from ? from : to) : [];
   }, [daily, today, period.fromDay]);
+  // One running total per pick, over the same days.
+  const pickSeries = useMemo(() => {
+    const perPick = SELECTIONS.map((sel) => ({ sel, days: dailyPL(initial.filter((r) => typeOk(r) && r.selection === sel), tz) }));
+    const keys = perPick.flatMap((p) => [...p.days.keys()]).sort();
+    const to = today ?? keys[keys.length - 1];
+    const from = period.fromDay ?? keys[0];
+    if (!from || !to) return [];
+    return perPick.map((p) => ({ pick: p.sel, points: cumulativeSeries(p.days, from, to < from ? from : to) }));
+  }, [initial, typeOk, today, period.fromDay, tz]);
+  const scope = [type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays", pick === "ALL" ? null : `${SELECTION_LABEL[pick]} picks`]
+    .filter(Boolean)
+    .join(" · ");
 
   const sorted = useMemo(() => {
     const val = (r: BetRowWithMatch): number => {
@@ -73,11 +97,15 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
     };
     // A day picked on the calendar shows that day's bets, whatever the period.
     const rows = selectedDay
-      ? initial.filter((r) => (type === "ALL" || r.playType === type) && dayKey(r.startsAt, tz) === selectedDay)
+      ? initial.filter((r) => typeOk(r) && pickOk(r) && dayKey(r.startsAt, tz) === selectedDay)
       : filtered;
     return [...rows].sort((a, b) => (sort.desc ? val(b) - val(a) : val(a) - val(b)));
-  }, [filtered, initial, type, sort, selectedDay, tz]);
+  }, [filtered, initial, typeOk, pickOk, sort, selectedDay, tz]);
 
+  // The most profitable pick (only once at least two picks have settled bets).
+  const settledPicks = picks.filter((p) => p.summary.settled > 0).sort((a, b) => b.summary.profit - a.summary.profit);
+  const pickLeader =
+    settledPicks.length >= 2 && settledPicks[0].summary.profit !== settledPicks[1].summary.profit ? settledPicks[0].sel : null;
   const leader = bot.settled && personal.settled ? (bot.profit === personal.profit ? null : bot.profit > personal.profit ? "BOT" : "PERSONAL") : null;
   const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }));
 
@@ -118,12 +146,18 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
             ]}
             onChange={(id) => setType(id as TypeFilter)}
           />
+          <Segmented
+            label="Pick"
+            value={pick}
+            options={[{ id: "ALL", label: "All picks" }, ...SELECTIONS.map((sel) => ({ id: sel, label: SELECTION_LABEL[sel] }))]}
+            onChange={(id) => setPick(id as PickFilter)}
+          />
         </div>
       </div>
 
       <section className="card grid grid-cols-2 gap-4 p-4 sm:grid-cols-5">
         <div className="col-span-2">
-          <p className="label">{type === "ALL" ? "Total profit" : type === "BOT" ? "Bot plays profit" : "Personal plays profit"}</p>
+          <p className="label">Profit · {scope}</p>
           <ProfitAmount units={overall.profit} size="lg" />
         </div>
         <Stat label="ROI" value={pct(overall.roi)} tone={overall.roi === null ? undefined : overall.roi >= 0 ? "text-over" : "text-under"} />
@@ -149,21 +183,59 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
         />
       </section>
 
+      <section>
+        <h2 className="mb-2 text-sm font-semibold">
+          Picks <span className="font-normal text-muted">· how OVER, UNDER and SWEEP are doing{type === "ALL" ? "" : ` (${type === "BOT" ? "bot" : "personal"} plays)`}</span>
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {picks.map(({ sel, summary }) => (
+            <PlayTypeCard
+              key={sel}
+              title={SELECTION_LABEL[sel]}
+              icon={
+                <svg width="16" height="8" aria-hidden="true">
+                  <line x1="1" x2="15" y1="4" y2="4" stroke={PICK_SERIES[sel].color} strokeWidth="3" strokeDasharray={PICK_SERIES[sel].dash} strokeLinecap="round" />
+                </svg>
+              }
+              summary={summary}
+              leading={pickLeader === sel}
+              active={pick === sel}
+              onSelect={() => setPick(pick === sel ? "ALL" : sel)}
+            />
+          ))}
+        </div>
+      </section>
+
       <section className="grid gap-3 lg:grid-cols-2">
-        <div className="card p-3">
-          <div className="mb-2 flex items-baseline justify-between gap-2">
+        <div className="card min-w-0 p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">
               Running profit
-              <span className="font-normal text-muted"> · {type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays"}</span>
+              <span className="font-normal text-muted"> · {chartMode === "picks" ? `by pick${type === "ALL" ? "" : ` · ${type === "BOT" ? "bot" : "personal"} plays`}` : scope}</span>
             </h2>
-            <span className="text-xs text-muted">{period.fromDay ? `last ${PERIODS.find((x) => x.id === period.id)!.days} days` : "all time"}</span>
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-muted">{period.fromDay ? `last ${PERIODS.find((x) => x.id === period.id)!.days} days` : "all time"}</span>
+              <Segmented
+                label="Chart"
+                value={chartMode}
+                options={[
+                  { id: "total", label: "Total" },
+                  { id: "picks", label: "By pick" },
+                ]}
+                onChange={(id) => setChartMode(id as "total" | "picks")}
+              />
+            </span>
           </div>
-          <ProfitChart points={series} unitSize={settings.unitSize} currency={settings.currency} />
+          {chartMode === "picks" ? (
+            <PickCompareChart series={pickSeries} unitSize={settings.unitSize} currency={settings.currency} />
+          ) : (
+            <ProfitChart points={series} unitSize={settings.unitSize} currency={settings.currency} />
+          )}
         </div>
-        <div className="card p-3">
+        <div className="card min-w-0 p-3">
           <h2 className="mb-2 text-sm font-semibold">
             Daily P/L
-            <span className="font-normal text-muted"> · {type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays"}</span>
+            <span className="font-normal text-muted"> · {scope}</span>
           </h2>
           <DailyCalendar days={daily} today={today} selected={selectedDay} onSelect={setSelectedDay} unitSize={settings.unitSize} currency={settings.currency} />
         </div>

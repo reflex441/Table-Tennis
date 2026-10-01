@@ -5,6 +5,7 @@ import { Loader2, Save } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { ReminderPicker } from "./ReminderPicker";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
+import type { Selection } from "@/lib/selection";
 
 export interface MatchFormValues {
   player1: string;
@@ -14,7 +15,7 @@ export interface MatchFormValues {
   timezone: string;
   notes: string | null;
   reminderMinutes: number;
-  selection: "OVER" | "UNDER" | null;
+  selection: Selection | null;
   pointsLine: number | null;
   ouStats: string | null;
   ouHitRate: number | null;
@@ -51,7 +52,7 @@ export function MatchEditor({
   const [startsLocal, setStartsLocal] = useState(initial ? toLocalInputValue(initial.startsAt, timezone) : "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [reminder, setReminder] = useState(initial?.alarm?.reminderMinutes ?? defaultReminder);
-  const [selection, setSelection] = useState<"" | "OVER" | "UNDER">(initial?.statistics.selection ?? "");
+  const [selection, setSelection] = useState<"" | Selection>(initial?.statistics.selection ?? "");
   const [pointsLine, setPointsLine] = useState(initial?.statistics.pointsLine?.toString() ?? "");
   const [ouStats, setOuStats] = useState(initial?.statistics.ouStats ?? "");
   const [ouHitRate, setOuHitRate] = useState(initial?.statistics.ouHitRate?.toString() ?? "");
@@ -118,10 +119,11 @@ export function MatchEditor({
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <F label="Selection">
-          <select className="input" value={selection} onChange={(e) => setSelection(e.target.value as "" | "OVER" | "UNDER")}>
+          <select className="input" value={selection} onChange={(e) => setSelection(e.target.value as "" | Selection)}>
             <option value="">—</option>
             <option value="OVER">OVER</option>
             <option value="UNDER">UNDER</option>
+            <option value="SWEEP">SWEEP</option>
           </select>
         </F>
         <F label="Line" error={errors.pointsLine}>

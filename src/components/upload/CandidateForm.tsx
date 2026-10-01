@@ -196,7 +196,7 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Field label="Selection">
           <select
-            className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : ""}`}
+            className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : c.selection === "SWEEP" ? "text-violet-300" : ""}`}
             value={c.selection}
             onChange={(e) => {
               const selection = e.target.value as Candidate["selection"];
@@ -206,6 +206,7 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
             <option value="">—</option>
             <option value="OVER">OVER</option>
             <option value="UNDER">UNDER</option>
+            <option value="SWEEP">SWEEP</option>
           </select>
         </Field>
         <Field label="Line" error={err.pointsLine}>

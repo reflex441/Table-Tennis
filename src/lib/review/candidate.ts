@@ -3,6 +3,7 @@ import { isCaptureCorroborated, resolveMatchTime, type CaptureSource, type Resol
 import { mergeRecords } from "@/lib/matching/dedupe";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import type { SettingsDTO } from "@/lib/validation/settings";
+import type { Selection } from "@/lib/selection";
 
 /**
  * A match detected in one or more screenshots, as edited in the review UI.
@@ -27,12 +28,12 @@ export interface Candidate {
   timeNotes: string[];
   /** User ticked "time is correct" (or entered it manually). */
   timeConfirmed: boolean;
-  selection: "" | "OVER" | "UNDER";
+  selection: "" | Selection;
   pointsLine: string;
   ouStats: string;
   ouHitRate: string;
   edge: string;
-  /** BOT when the screenshot showed an OVER/UNDER pick badge, else PERSONAL. */
+  /** BOT when the screenshot showed a pick badge (OVER / UNDER / SWEEP), else PERSONAL. */
   playType: "BOT" | "PERSONAL";
   /** Stake in units (default 1u). */
   stakeUnits: string;

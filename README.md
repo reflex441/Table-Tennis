@@ -162,12 +162,14 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 
 ## Profit tracking
 
-- **Bot play vs personal play:** a match whose screenshot shows an OVER/UNDER pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**. The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
+- **Bot play vs personal play:** a match whose screenshot shows an OVER / UNDER / SWEEP pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**. The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
 - **Recording a bet:** "I've placed the bet" on the computer alarm asks for the stake (in units) and the decimal odds, pre-filled with what was set when the match was uploaded. You can also click **Record bet** on any match card. Then mark it **Won / Lost / Void**.
 - **Profit:** won = stake × (odds − 1), lost = −stake, void = 0. A win without odds is not counted until you add the odds.
 - **Defaults when you upload:** every new match starts with a **1u** stake. Tick **Settings → Average odds** and new uploads also get your average odds (e.g. 1.85). Both can be changed on the review screen before you create the alarms, and they are used when you click "I've placed the bet". Changing the setting later never changes matches or bets you already have.
 - **Profit page:** everything is shown in **units**, with the money amount to the right (units × the unit size). Set what 1 unit is worth (and the currency symbol) in **Settings → Units**. The page has:
   - a Bot vs Personal comparison (profit, ROI, win rate, record, staked);
+  - a **Picks** comparison: OVER, UNDER and SWEEP cards (profit, ROI, win rate, record). Click a card, or use the **Pick** filter, to see only that pick everywhere on the page;
+  - **Running profit → By pick** draws one line each for OVER, UNDER and SWEEP so you can compare them over time;
   - a **running profit graph** for the chosen period (7D / 30D / 90D / All) - hover or use the arrow keys to read any day;
   - a **daily P/L calendar** (green/red by the day's result). Click a day to list that day's bets;
   - clicking **Bot** or **Personal** (the filter or the comparison cards) limits the graph, the calendar and the list to those plays;

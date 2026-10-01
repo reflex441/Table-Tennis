@@ -1,3 +1,4 @@
+import type { Selection } from "@/lib/selection";
 /** Builds notification text for an alarm. Pure so it can be unit-tested. */
 
 export interface NotificationMatch {
@@ -7,7 +8,7 @@ export interface NotificationMatch {
   competition: string | null;
   startsAt: Date;
   statistics: {
-    selection: "OVER" | "UNDER" | null;
+    selection: Selection | null;
     pointsLine: number | null;
     ouStats: string | null;
     ouHitRate: number | null;
