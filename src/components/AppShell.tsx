@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, LayoutDashboard, LogOut, Settings, Trophy, Upload, AlertTriangle, TrendingUp, X } from "lucide-react";
+import { Bell, LayoutDashboard, LogOut, Settings, Trophy, Upload, AlertTriangle, TrendingUp, Users, X } from "lucide-react";
 import type { PublicUser } from "@/lib/auth/accounts";
 import { signOut } from "@/lib/sign-out";
+import { Avatar } from "./Avatar";
 import { useNotifications } from "./NotificationProvider";
 import { DateTime } from "luxon";
 
@@ -14,6 +15,7 @@ const NAV = [
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/profit", label: "Profit", icon: TrendingUp },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/tailing", label: "Tailing", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -60,11 +62,11 @@ export function AppShell({ children, dbError, user }: { children: React.ReactNod
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 pb-24 pt-4 sm:px-4 sm:pb-10">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
-              <Link key={href} href={href} className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${active ? "text-accent" : "text-muted"}`}>
+              <Link key={href} href={href} className={`flex min-w-0 flex-col items-center gap-0.5 py-2 text-[10px] ${active ? "text-accent" : "text-muted"}`}>
                 <Icon className="h-5 w-5" />
                 {label}
               </Link>
@@ -166,27 +168,19 @@ function UserMenu({ user }: { user: PublicUser }) {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
-  const initials = user.name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
   return (
     <div className="relative" ref={ref}>
-      <button
-        aria-label="Account"
-        aria-expanded={open}
-        className="grid h-8 w-8 place-items-center rounded-full bg-accent/15 text-xs font-bold text-accent hover:bg-accent/25"
-        onClick={() => setOpen((o) => !o)}
-      >
-        {initials || "?"}
+      <button aria-label="Account" aria-expanded={open} className="rounded-full hover:opacity-90" onClick={() => setOpen((o) => !o)}>
+        <Avatar name={user.name} url={user.avatarUrl} size={32} />
       </button>
       {open && (
         <div className="card absolute right-0 top-10 z-50 w-64 bg-panel-2 p-1 shadow-2xl shadow-black/60">
-          <div className="border-b border-line px-3 py-2">
-            <p className="truncate text-sm font-semibold">{user.name}</p>
-            <p className="truncate text-xs text-muted">{user.email}</p>
+          <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+            <Avatar name={user.name} url={user.avatarUrl} size={36} />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{user.name}</span>
+              <span className="block truncate text-xs text-muted">{user.email}</span>
+            </span>
           </div>
           <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-line/50">
             <Settings className="h-4 w-4" /> Settings

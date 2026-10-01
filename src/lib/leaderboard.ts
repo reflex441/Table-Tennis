@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
 import { round2 } from "@/lib/bets/profit";
+import { avatarUrl } from "@/lib/auth/accounts";
 
 /** Accounts need this many settled bets to be ranked by ROI (the units ranking has no minimum). */
 export const LEADERBOARD_MIN_BETS = 100;
@@ -8,6 +9,9 @@ export const LEADERBOARD_MIN_BETS = 100;
 export interface LeaderboardRow {
   userId: string;
   name: string;
+  avatarUrl: string | null;
+  /** Their profit page and bets can be viewed on the Tailing page. */
+  tailable: boolean;
   /** Settled bets with a known profit (won / lost / void). */
   bets: number;
   won: number;
@@ -38,7 +42,7 @@ export function alwaysShownEmails(): Set<string> {
   );
 }
 
-type RawRow = { userId: string; name: string; email: string; bets: number; won: number; lost: number; staked: number | null; profit: number | null; visible: boolean };
+type RawRow = { userId: string; name: string; email: string; avatarUpdatedAt: Date | null; tailable: boolean; bets: number; won: number; lost: number; staked: number | null; profit: number | null; visible: boolean };
 
 function toRow(r: RawRow): LeaderboardRow {
   const staked = round2(Number(r.staked ?? 0));
@@ -47,6 +51,8 @@ function toRow(r: RawRow): LeaderboardRow {
   return {
     userId: r.userId,
     name: r.name,
+    avatarUrl: avatarUrl({ id: r.userId, avatarUpdatedAt: r.avatarUpdatedAt }),
+    tailable: r.tailable,
     bets: r.bets,
     won: r.won,
     lost: r.lost,
@@ -73,6 +79,8 @@ export async function getLeaderboard(
     SELECT u."id" AS "userId",
            u."name" AS "name",
            u."email" AS "email",
+           u."avatarUpdatedAt" AS "avatarUpdatedAt",
+           COALESCE(BOOL_AND(s."allowTailing"), true) AS "tailable",
            COUNT(*)::int AS "bets",
            COUNT(*) FILTER (WHERE b."result" = 'WON')::int AS "won",
            COUNT(*) FILTER (WHERE b."result" = 'LOST')::int AS "lost",
@@ -84,7 +92,7 @@ export async function getLeaderboard(
       JOIN "User" u ON u."id" = m."userId"
       LEFT JOIN "Settings" s ON s."userId" = u."id"
      WHERE b."result" <> 'PENDING' AND b."profit" IS NOT NULL ${typeFilter}
-     GROUP BY u."id", u."name", u."email"`);
+     GROUP BY u."id", u."name", u."email", u."avatarUpdatedAt"`);
 
   const always = alwaysShownEmails();
   // Emails are only used here and never leave this function.

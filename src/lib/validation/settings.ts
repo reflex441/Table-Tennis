@@ -69,6 +69,7 @@ export const settingsUpdateSchema = z
     geminiModel: geminiModelSchema,
     geminiFallbackModel: geminiFallbackSchema,
     showOnLeaderboard: z.boolean(),
+    allowTailing: z.boolean(),
     leagueLinks: z
       .array(
         z.object({
@@ -121,6 +122,8 @@ export interface SettingsDTO {
   geminiFallbackModel: string;
   /** Appear on the leaderboard (display name only). */
   showOnLeaderboard: boolean;
+  /** Let other accounts tail you (see your profit and bets, copy your bets). */
+  allowTailing: boolean;
   /** Bookmaker link per league, opened from the player names. */
   leagueLinks: LeagueLink[];
   /** Whether this account has saved a Gemini key. The key itself is never sent to the browser. */

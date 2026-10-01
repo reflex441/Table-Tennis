@@ -14,6 +14,7 @@ import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "@/lib/leagues";
 import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
+import { Avatar } from "./Avatar";
 import type { SettingsUpdate } from "@/lib/validation/settings";
 
 interface Health {
@@ -748,6 +749,37 @@ function AccountSection() {
     };
   }, []);
 
+  const [picBusy, setPicBusy] = useState(false);
+  const uploadPicture = async (file: File) => {
+    setPicBusy(true);
+    setMsg(null);
+    try {
+      const blob = await squareThumbnail(file, 256);
+      const form = new FormData();
+      form.append("file", new File([blob], "avatar.jpg", { type: "image/jpeg" }));
+      const res = await fetch("/api/auth/me/avatar", { method: "POST", body: form });
+      const body = (await res.json().catch(() => null)) as { user?: PublicUser; error?: { message?: string } } | null;
+      if (!res.ok || !body?.user) throw new Error(body?.error?.message ?? "Upload failed.");
+      setUser(body.user);
+      setMsg({ ok: true, text: "Profile picture saved." });
+      router.refresh();
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : "Couldn't use that picture." });
+    } finally {
+      setPicBusy(false);
+    }
+  };
+  const removePicture = async () => {
+    setPicBusy(true);
+    try {
+      const res = await api<{ user: PublicUser }>("/api/auth/me/avatar", { method: "DELETE" });
+      setUser(res.user);
+      router.refresh();
+    } finally {
+      setPicBusy(false);
+    }
+  };
+
   const saveName = async () => {
     setBusy(true);
     setMsg(null);
@@ -767,10 +799,36 @@ function AccountSection() {
   return (
     <Section title="Account">
       {user && (
-        <p className="text-sm">
-          Signed in as <b>{user.name}</b> <span className="text-muted">({user.email})</span>
-          {user.hasGoogle && <span className="ml-2 chip bg-line text-muted">Google</span>}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Avatar name={user.name} url={user.avatarUrl} size={56} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm">
+              Signed in as <b>{user.name}</b> <span className="text-muted">({user.email})</span>
+              {user.hasGoogle && <span className="ml-2 chip bg-line text-muted">Google</span>}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <label className="btn-ghost cursor-pointer py-1 text-xs">
+                {picBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} {user.avatarUrl ? "Change picture" : "Add profile picture"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                  className="sr-only"
+                  aria-label="Profile picture"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) void uploadPicture(f);
+                  }}
+                />
+              </label>
+              {user.avatarUrl && (
+                <button type="button" className="btn-ghost py-1 text-xs" disabled={picBusy} onClick={() => void removePicture()}>
+                  Remove picture
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       {user && (
         <form
@@ -796,6 +854,12 @@ function AccountSection() {
         hint="Only your display name and your results are shown - never your email."
         checked={settings.showOnLeaderboard}
         onChange={(v) => void update({ showOnLeaderboard: v })}
+      />
+      <Toggle
+        label="Let others tail me"
+        hint="Other accounts can see your profit page and bets on the Tailing page and copy your upcoming bets. Your email and screenshots are never shared."
+        checked={settings.allowTailing}
+        onChange={(v) => void update({ allowTailing: v })}
       />
       <button className="btn-ghost mt-2" onClick={() => void signOut()}>
         Sign out
@@ -901,4 +965,27 @@ function LeagueLinksSection() {
       </p>
     </Section>
   );
+}
+
+/** Centre-crop and resize a picture to a small square JPEG in the browser. */
+async function squareThumbnail(file: File, size: number): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("This picture can't be read by the browser. Try a JPEG or PNG."));
+      i.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Couldn't process the picture.");
+    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't process the picture."))), "image/jpeg", 0.85));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

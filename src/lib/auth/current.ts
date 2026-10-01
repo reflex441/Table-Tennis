@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { ServiceError } from "@/lib/alarms/service-error";
 import { SESSION_COOKIE, getSessionSecret, verifySessionToken } from "./session";
-import { toPublicUser, type PublicUser } from "./accounts";
+import { publicUserSelect, toPublicUser, type PublicUser } from "./accounts";
 
 /** The signed-in user (verified against the database), or null. */
 export async function getCurrentUser(): Promise<PublicUser | null> {
@@ -12,7 +12,7 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   const prisma = db();
   const userId = verifySessionToken(token, await getSessionSecret(prisma));
   if (!userId) return null;
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: publicUserSelect });
   return user ? toPublicUser(user) : null;
 }
 

@@ -48,6 +48,7 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   geminiModel: "gemini-3.5-flash-lite",
   geminiFallbackModel: "gemini-3.8-flash",
   showOnLeaderboard: true,
+  allowTailing: true,
   leagueLinks: [],
   geminiKeySource: "none",
   geminiKeyHint: null,

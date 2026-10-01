@@ -51,6 +51,8 @@ export interface MatchDTO {
   screenshotIds: string[];
   playType: "BOT" | "PERSONAL";
   stakeUnits: number | null;
+  /** Copied from a tailed account's bet. */
+  copiedFrom: { id: string; name: string } | null;
   /** Odds filled in at upload; used as the bet's odds. */
   odds: number | null;
   bet: BetDTO | null;

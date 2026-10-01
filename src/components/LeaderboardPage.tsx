@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Medal, Percent, TrendingUp } from "lucide-react";
 import type { Leaderboard, LeaderboardRow } from "@/lib/leaderboard";
 import { formatUnits } from "@/lib/bets/profit";
+import { Avatar } from "./Avatar";
 
 type Type = "ALL" | "BOT" | "PERSONAL";
 
@@ -23,7 +24,7 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Leaderboard</h1>
           <p className="text-sm text-muted">
-            Units ranking: everyone with a settled bet. ROI ranking: at least {board.minBets} settled bets. Results in units, so different unit sizes compare fairly.
+            Units ranking: everyone with a settled bet. ROI ranking: at least {board.minBets} settled bets. Results in units, so different unit sizes compare fairly. Click a name to tail them.
           </p>
         </div>
         <div className="flex rounded-lg border border-line bg-panel p-0.5 text-xs" role="radiogroup" aria-label="Play type">
@@ -142,9 +143,16 @@ function Board({
               <span className="w-7 shrink-0 text-center tabular font-semibold">
                 {r.rank <= 3 ? <Medal className={`mx-auto h-4 w-4 ${["text-amber-300", "text-slate-300", "text-orange-400"][r.rank - 1]}`} aria-label={`#${r.rank}`} /> : `#${r.rank}`}
               </span>
+              <Avatar name={r.name} url={r.avatarUrl} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
-                  {r.name}
+                  {r.userId !== currentUserId && r.tailable ? (
+                    <Link href={`/tailing/${r.userId}`} className="hover:underline" title={`See ${r.name}'s profit and bets`}>
+                      {r.name}
+                    </Link>
+                  ) : (
+                    r.name
+                  )}
                   {r.userId === currentUserId && <span className="ml-1.5 chip bg-accent/20 text-accent">You</span>}
                 </span>
                 <span className="block text-[11px] text-muted">

@@ -63,6 +63,11 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
           <MatchNames match={match} className="text-[15px] font-semibold leading-tight" />
           <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
             <PlayTypeChip playType={match.playType} />
+            {match.copiedFrom && (
+              <span className="chip shrink-0 bg-accent/10 text-accent" title={`Copied from ${match.copiedFrom.name}`}>
+                from {match.copiedFrom.name}
+              </span>
+            )}
             <span className="truncate">{match.competition ?? "Unknown competition"}</span>
           </p>
         </div>

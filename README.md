@@ -34,6 +34,13 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 - **Upgrading an existing install:** the first account created takes over all matches, bets and settings that existed before accounts were added.
 - **Leaderboard:** ranks accounts by **most units profited** (everyone with a settled bet) and **highest ROI** (only accounts with at least **100 settled bets**; until then the page shows how many more you need). Only settled bets count. Emails listed in `LEADERBOARD_ALWAYS_SHOW` (in `.env`, comma-separated) are ranked by ROI regardless of the minimum. You can filter to Bot or Personal plays. Only display names are shown, never emails. Turn off **Settings → Account → Show me on the leaderboard** to hide yourself.
 
+## Tailing and profile pictures
+
+- **Profile picture:** Settings → Account → **Add profile picture**. The browser crops and shrinks it to a small square before uploading. It shows in the account menu, on the Leaderboard and on the Tailing pages. Only signed-in users can load it.
+- **Tailing** (menu item between Leaderboard and Settings): tail other accounts to see their **profit page** (read-only, with all the filters and charts) and their **upcoming bets**. Find people under **Find accounts**, or click a name on the Leaderboard.
+- **Copy bets:** on someone's page, **Copy** adds one upcoming bet to your dashboard and **Copy bets** adds all of them. Copies get your default reminder, a 1u stake and your average odds (if ticked, otherwise their odds). Bets already on your dashboard are skipped. Copied matches show a "from <name>" tag.
+- **Privacy:** turn off **Settings → Account → Let others tail me** to hide your profit and bets. Emails and screenshots are never shared.
+
 ## Dashboard sections
 
 **Upcoming → Triggered → Pending → Completed.** A match moves to **Pending** as soon as a bet is recorded for it (via "I've placed the bet", the **Bet placed** button, or **Record bet**) and moves to **Completed** when you mark the bet **Won / Lost / Void**. Finished or cancelled matches without a pending bet are in **Completed**.

@@ -33,7 +33,11 @@ function pct(n: number | null): string {
   return n === null ? "–" : `${n > 0 ? "+" : ""}${n}%`;
 }
 
-export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
+/**
+ * `title` changes the heading (e.g. "Sam's profit" when tailing); `readOnly`
+ * is for someone else's bets: no links to match pages you can't open.
+ */
+export function ProfitPage({ initial, title = "Profit", readOnly = false }: { initial: BetRowWithMatch[]; title?: string; readOnly?: boolean }) {
   const { settings } = useSettings();
   const tz = settings.timezone;
   const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
@@ -113,9 +117,9 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Profit</h1>
+          {readOnly ? <h2 className="text-lg font-semibold tracking-tight">{title}</h2> : <h1 className="text-xl font-semibold tracking-tight">{title}</h1>}
           <p className="text-sm text-muted">
-            In units · 1u = {settings.currency}
+            In units · {readOnly ? "money amounts use your unit size, " : ""}1u = {settings.currency}
             {settings.unitSize}
             {" "}(change in{" "}
             <Link href="/settings#units" className="underline hover:text-text">
@@ -310,9 +314,15 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
                       {formatDayLabel(r.startsAt, tz)} {formatTime(r.startsAt, tz)}
                     </td>
                     <td className="max-w-[18rem] px-3 py-1.5">
-                      <Link href={`/matches/${r.matchId}`} className="block truncate hover:underline">
-                        {r.player1} <span className="text-muted">vs</span> {r.player2}
-                      </Link>
+                      {readOnly ? (
+                        <span className="block truncate">
+                          {r.player1} <span className="text-muted">vs</span> {r.player2}
+                        </span>
+                      ) : (
+                        <Link href={`/matches/${r.matchId}`} className="block truncate hover:underline">
+                          {r.player1} <span className="text-muted">vs</span> {r.player2}
+                        </Link>
+                      )}
                       <span className="block truncate text-[11px] text-muted">
                         {r.selection ? `${r.selection}${r.pointsLine !== null ? ` ${r.pointsLine}` : ""} · ` : ""}
                         {r.competition ?? "Unknown competition"}

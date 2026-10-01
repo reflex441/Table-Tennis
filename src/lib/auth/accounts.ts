@@ -9,15 +9,44 @@ export interface PublicUser {
   name: string;
   hasPassword: boolean;
   hasGoogle: boolean;
+  /** Profile picture URL (versioned), or null for initials. */
+  avatarUrl: string | null;
 }
 
-export function toPublicUser(u: User): PublicUser {
-  return { id: u.id, email: u.email, name: u.name, hasPassword: Boolean(u.passwordHash), hasGoogle: Boolean(u.googleId) };
+/** Fields needed for PublicUser (never loads the picture bytes). */
+export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, googleId: true, avatarUpdatedAt: true } as const;
+
+type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "googleId" | "avatarUpdatedAt">;
+
+export function avatarUrl(u: { id: string; avatarUpdatedAt: Date | null }): string | null {
+  return u.avatarUpdatedAt ? `/api/users/${u.id}/avatar?v=${u.avatarUpdatedAt.getTime()}` : null;
+}
+
+export function toPublicUser(u: PublicUserSource): PublicUser {
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    hasPassword: Boolean(u.passwordHash),
+    hasGoogle: Boolean(u.googleId),
+    avatarUrl: avatarUrl(u),
+  };
 }
 
 /** Change the display name shown in the app and on the leaderboard. */
 export async function updateDisplayName(prisma: PrismaClient, userId: string, name: string): Promise<User> {
   return prisma.user.update({ where: { id: userId }, data: { name: name.trim() } });
+}
+
+/** Largest accepted profile picture (the browser resizes to 256x256 first). */
+export const MAX_AVATAR_BYTES = 512 * 1024;
+
+export async function setAvatar(prisma: PrismaClient, userId: string, image: { data: Buffer; mime: string } | null, now = new Date()) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: image ? { avatar: new Uint8Array(image.data), avatarMime: image.mime, avatarUpdatedAt: now } : { avatar: null, avatarMime: null, avatarUpdatedAt: null },
+    select: publicUserSelect,
+  });
 }
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();

@@ -14,6 +14,7 @@ export const matchInclude = {
   alarm: true,
   bet: true,
   sources: { select: { screenshotId: true } },
+  copiedFrom: { select: { id: true, name: true } },
 } satisfies Prisma.MatchInclude;
 
 export type MatchWithRelations = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
@@ -27,7 +28,13 @@ export type CreateOutcome =
 const SIMILAR_WINDOW_MS = 3 * 60 * 60_000;
 
 /** Create one match with its statistics and alarm, refusing duplicates. */
-export async function createMatchWithAlarm(prisma: PrismaClient, userId: string, input: MatchInput, now = new Date()): Promise<CreateOutcome> {
+export async function createMatchWithAlarm(
+  prisma: PrismaClient,
+  userId: string,
+  input: MatchInput,
+  now = new Date(),
+  opts: { copiedFromUserId?: string } = {},
+): Promise<CreateOutcome> {
   const startsAt = new Date(input.startsAt);
   const check = checkSchedule(startsAt, input.reminderMinutes, now);
   if (!check.ok) return { status: "invalid", message: check.reason };
@@ -70,6 +77,7 @@ export async function createMatchWithAlarm(prisma: PrismaClient, userId: string,
         notes: input.notes,
         dedupeKey,
         userId,
+        copiedFromUserId: opts.copiedFromUserId ?? null,
         playType: input.playType ?? (input.selection ? "BOT" : "PERSONAL"),
         stakeUnits: input.stakeUnits,
         odds: input.odds,
@@ -290,6 +298,7 @@ export function toMatchDTO(m: MatchWithRelations): MatchDTO {
     screenshotIds: m.sources.map((s) => s.screenshotId),
     playType: m.playType,
     stakeUnits: m.stakeUnits,
+    copiedFrom: m.copiedFrom ? { id: m.copiedFrom.id, name: m.copiedFrom.name } : null,
     odds: m.odds,
     bet: m.bet
       ? {

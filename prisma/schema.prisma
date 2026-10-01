@@ -69,23 +69,42 @@ enum BetResult {
 /// has no extra storage dependency (files are capped at 8 MB).
 /// A person with an account. Signs in with email + password and/or Google.
 model User {
-  id           String    @id @default(cuid())
-  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  id              String    @id @default(cuid())
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
   /// Lower-cased.
-  email        String    @unique
+  email           String    @unique
   /// Display name (shown on the leaderboard).
-  name         String
+  name            String
   /// scrypt hash; null for Google-only accounts.
-  passwordHash String?
-  googleId     String?   @unique
-  lastLoginAt  DateTime? @db.Timestamptz(3)
+  passwordHash    String?
+  googleId        String?   @unique
+  lastLoginAt     DateTime? @db.Timestamptz(3)
+  /// Profile picture (small JPEG/PNG/WebP, resized in the browser).
+  avatar          Bytes?
+  avatarMime      String?
+  avatarUpdatedAt DateTime? @db.Timestamptz(3)
 
   settings      Settings?
-  matches       Match[]
+  matches       Match[]             @relation("owner")
+  copiedMatches Match[]             @relation("copiedFrom")
+  following     Follow[]            @relation("follower")
+  followers     Follow[]            @relation("followee")
   screenshots   Screenshot[]
   subscriptions PushSubscription[]
   notifications InAppNotification[]
+}
+
+/// "Tailing": follower follows (tails) followee to see their profit and bets.
+model Follow {
+  followerId String
+  followeeId String
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  follower   User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followee   User     @relation("followee", fields: [followeeId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followeeId])
+  @@index([followeeId])
 }
 
 /// Server-generated secrets (e.g. the session signing key when SESSION_SECRET is not set).
@@ -136,28 +155,31 @@ model Extraction {
 }
 
 model Match {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
-  player1     String
-  player2     String
-  competition String?
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+  player1          String
+  player2          String
+  competition      String?
   /// Confirmed match start, UTC.
-  startsAt    DateTime @db.Timestamptz(3)
+  startsAt         DateTime @db.Timestamptz(3)
   /// IANA timezone the user confirmed the time in (for display/auditing).
-  timezone    String
+  timezone         String
   /// Verbatim time text from the screenshot, if any (e.g. "Today at 6:00 PM").
-  rawTimeText String?
-  notes       String?
+  rawTimeText      String?
+  notes            String?
   /// Normalised "player-a|player-b|startMinute" key used to prevent duplicates.
-  dedupeKey   String
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  playType    PlayType @default(PERSONAL)
+  dedupeKey        String
+  userId           String?
+  user             User?    @relation("owner", fields: [userId], references: [id], onDelete: Cascade)
+  /// Copied from a tailed account's bet.
+  copiedFromUserId String?
+  copiedFrom       User?    @relation("copiedFrom", fields: [copiedFromUserId], references: [id], onDelete: SetNull)
+  playType         PlayType @default(PERSONAL)
   /// Stake in units shown on the pick badge ("1U"), if any.
-  stakeUnits  Float?
+  stakeUnits       Float?
   /// Odds filled in when the match was uploaded (the average odds from Settings if ticked); used as the bet's odds.
-  odds        Float?
+  odds             Float?
 
   statistics MatchStatistics?
   alarm      Alarm?
@@ -318,6 +340,8 @@ model Settings {
   user                       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Appear on the public leaderboard (display name only).
   showOnLeaderboard          Boolean  @default(true)
+  /// Let other accounts tail you (see your profit page and bets, copy your bets).
+  allowTailing               Boolean  @default(true)
   /// Bookmaker links per league: [{ "league": "TT Cup", "url": "https://..." }]
   leagueLinks                Json     @default("[]")
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
