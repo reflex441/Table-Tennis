@@ -68,27 +68,6 @@ describe("extractFromScreenshot", () => {
     expect(out.warnings).toEqual([]);
   });
 
-  it("asks for less thinking when a thinking level is given (faster scans)", async () => {
-    generateContent.mockResolvedValue({ text: JSON.stringify(sample) });
-    await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", thinkingLevel: "LOW" });
-    expect(generateContent.mock.calls[0][0].config.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
-    generateContent.mockClear();
-    await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png" });
-    expect(generateContent.mock.calls[0][0].config.thinkingConfig).toBeUndefined();
-  });
-
-  it("steps up the thinking level when a model rejects it (e.g. MINIMAL)", async () => {
-    const unsupported = (lvl: string) => Object.assign(new Error(`{"error":{"code":400,"message":"Thinking level ${lvl} is not supported for this model. Please retry with other thinking level.","status":"INVALID_ARGUMENT"}}`), { status: 400 });
-    generateContent.mockImplementation(async (req: { config: { thinkingConfig?: { thinkingLevel: string } } }) => {
-      const lvl = req.config.thinkingConfig?.thinkingLevel;
-      if (lvl === "MINIMAL" || lvl === "LOW") throw unsupported(lvl);
-      return { text: JSON.stringify(sample) };
-    });
-    const out = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", thinkingLevel: "MINIMAL", sleep: noWait });
-    expect(out.result.matches).toHaveLength(1);
-    expect(generateContent.mock.calls.map((c) => c[0].config.thinkingConfig?.thinkingLevel ?? "default")).toEqual(["MINIMAL", "LOW", "default"]);
-  });
-
   it("does not blame the API key for other bad requests", async () => {
     generateContent.mockRejectedValue(Object.assign(new Error("Request contains an invalid argument."), { status: 400 }));
     const err = await extractFromScreenshot({ apiKey: "k", model: "m", image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
@@ -130,7 +109,7 @@ describe("extractFromScreenshot", () => {
     expect(out.model).toBe("gemini-3.5-flash-lite");
     expect(out.result.matches).toHaveLength(1);
     expect(generateContent).toHaveBeenCalledTimes(3);
-    expect(waits).toEqual([2_000, 6_000]);
+    expect(waits).toEqual([1_500, 4_000]);
   });
 
   it("falls back to the lighter model when the main one stays overloaded", async () => {
@@ -148,7 +127,33 @@ describe("extractFromScreenshot", () => {
       sleep: noWait,
     });
     expect(out.model).toBe("gemini-3.8-flash");
-    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"]);
+    // Switches to the backup straight away instead of waiting on the busy model.
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["gemini-3.5-flash-lite", "gemini-3.8-flash"]);
+  });
+
+  it("goes round all models before pausing, and skips a model that doesn't exist", async () => {
+    const overloaded = Object.assign(new Error("UNAVAILABLE"), { status: 503 });
+    const notFound = Object.assign(new Error("models/x is not found"), { status: 404 });
+    let calls = 0;
+    generateContent.mockImplementation(async (req: { model: string }) => {
+      calls++;
+      if (req.model === "x") throw notFound;
+      if (calls < 5) throw overloaded;
+      return { text: JSON.stringify(sample) };
+    });
+    const waits: number[] = [];
+    const out = await extractFromScreenshot({ apiKey: "k", model: "x", fallbackModel: "b, c", image: IMAGE, mimeType: "image/png", sleep: async (ms) => void waits.push(ms) });
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["x", "b", "c", "b", "c"]);
+    expect(waits).toEqual([1_500]);
+    expect(out.model).toBe("c");
+  });
+
+  it("explains a wrong model name when no model exists", async () => {
+    generateContent.mockRejectedValue(Object.assign(new Error("not found"), { status: 404 }));
+    const err = await extractFromScreenshot({ apiKey: "k", model: "a", fallbackModel: ["b"], image: IMAGE, mimeType: "image/png", sleep: noWait }).catch((e) => e);
+    expect(err.retryable).toBe(false);
+    expect(err.message).toMatch(/model not found \(404\): a, b/);
+    expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
   it("gives a clear message when every attempt is overloaded", async () => {
@@ -157,7 +162,7 @@ describe("extractFromScreenshot", () => {
     expect(err).toBeInstanceOf(GeminiRequestError);
     expect(err.retryable).toBe(true);
     expect(err.message).toMatch(/overloaded right now/);
-    expect(err.message).toMatch(/Tried 5 times \(a then b\)/);
+    expect(err.message).toMatch(/Tried 6 times \(a then b\)/);
   });
 
   it("stops retrying when the time budget is used up", async () => {
@@ -243,11 +248,29 @@ describe("normalizeExtraction - server-side validation", () => {
 });
 
 describe("testGeminiKey", () => {
-  const client = (get: ReturnType<typeof vi.fn>) => ({ models: { get } }) as never;
+  const pager = (names: { name: string; supportedActions?: string[] }[]) => ({
+    async *[Symbol.asyncIterator]() {
+      yield* names;
+    },
+  });
+  const list = vi.fn().mockResolvedValue(
+    pager([
+      { name: "models/gemini-3.5-pro", supportedActions: ["generateContent"] },
+      { name: "models/gemini-3.5-flash-lite", supportedActions: ["generateContent"] },
+      { name: "models/gemini-3.8-flash", supportedActions: ["generateContent"] },
+      { name: "models/text-embedding-005", supportedActions: ["embedContent"] },
+      { name: "models/gemini-embedding-2", supportedActions: ["embedContent"] },
+    ]),
+  );
+  const client = (get: ReturnType<typeof vi.fn>) => ({ models: { get, list } }) as never;
 
   it("reports a working key", async () => {
     const get = vi.fn().mockResolvedValue({ name: "models/gemini-3.5-flash-lite", displayName: "Gemini 3.5 Flash-Lite" });
-    expect(await testGeminiKey({ apiKey: "k", model: "gemini-3.5-flash-lite", client: client(get) })).toEqual({ ok: true, model: "Gemini 3.5 Flash-Lite" });
+    expect(await testGeminiKey({ apiKey: "k", model: "gemini-3.5-flash-lite", client: client(get) })).toEqual({
+      ok: true,
+      model: "Gemini 3.5 Flash-Lite",
+      available: ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-pro"],
+    });
     expect(get.mock.calls[0][0].model).toBe("gemini-3.5-flash-lite");
   });
 
@@ -256,6 +279,8 @@ describe("testGeminiKey", () => {
     expect(rejected).toEqual({ ok: false, message: "Google rejected this API key." });
     const missing = await testGeminiKey({ apiKey: "k", model: "nope", client: client(vi.fn().mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }))) });
     expect(missing.ok).toBe(false);
+    // Lists the models the key can use so the right name can be picked.
+    expect(missing).toMatchObject({ available: ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-pro"] });
   });
 
   it("requires a key", async () => {

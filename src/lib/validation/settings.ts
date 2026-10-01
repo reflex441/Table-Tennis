@@ -27,6 +27,23 @@ export const geminiApiKeySchema = z
       .regex(/^[\x21-\x7E]+$/, "The key contains characters that can't be part of an API key"),
   );
 
+/** A Gemini model ID such as "gemini-3.5-flash-lite" ("models/" prefix allowed). */
+const modelId = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/^models\//, ""))
+  .pipe(z.string().min(1, "Enter a model name").max(80).regex(/^[a-z0-9][a-z0-9._-]*$/i, 'Use a model name like "gemini-3.5-flash-lite"'));
+
+export const geminiModelSchema = modelId;
+/** Comma-separated backup models, or "" to turn the backup off. */
+export const geminiFallbackSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .transform((v) => v.split(",").map((m) => m.trim().replace(/^models\//, "")).filter(Boolean))
+  .pipe(z.array(z.string().max(80).regex(/^[a-z0-9][a-z0-9._-]*$/i, 'Use model names like "gemini-3.8-flash", separated by commas')).max(4))
+  .transform((list) => list.join(","));
+
 export const settingsUpdateSchema = z
   .object({
     defaultReminderMinutes: reminderMinutesSchema,
@@ -39,28 +56,20 @@ export const settingsUpdateSchema = z
     includeStatsInNotification: z.boolean(),
     screenshotsAreToday: z.boolean(),
     screenshotTimesAreLocal: z.boolean(),
-    scanSpeed: z.enum(["fastest", "fast", "careful"]),
     ringUntilAck: z.boolean(),
     repeatSeconds: z.number().int().min(15, "At least 15 seconds").max(300, "At most 5 minutes"),
     unitSize: z.number().positive("Must be more than 0").max(1_000_000),
     currency: z.string().trim().min(1).max(4),
     useAverageOdds: z.boolean(),
     averageOdds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000),
+    geminiModel: geminiModelSchema,
+    geminiFallbackModel: geminiFallbackSchema,
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
   .partial();
 
 export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
-
-export type ScanSpeed = "fastest" | "fast" | "careful";
-
-/** How much Gemini "thinks" before answering, per scan speed. */
-export const SCAN_SPEED_THINKING: Record<ScanSpeed, "MINIMAL" | "LOW" | "MEDIUM"> = {
-  fastest: "MINIMAL",
-  fast: "LOW",
-  careful: "MEDIUM",
-};
 
 export interface SettingsDTO {
   defaultReminderMinutes: number;
@@ -73,7 +82,6 @@ export interface SettingsDTO {
   includeStatsInNotification: boolean;
   screenshotsAreToday: boolean;
   screenshotTimesAreLocal: boolean;
-  scanSpeed: ScanSpeed;
   /** Keep alerting until the user confirms the bet. */
   ringUntilAck: boolean;
   /** Seconds between repeated push notifications while ringing. */
@@ -86,6 +94,10 @@ export interface SettingsDTO {
   useAverageOdds: boolean;
   /** Decimal odds used for all bets when useAverageOdds is on. */
   averageOdds: number;
+  /** Gemini model used for scanning. */
+  geminiModel: string;
+  /** Comma-separated backup models ("" = off). */
+  geminiFallbackModel: string;
   /** Where the Gemini key comes from. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "env" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

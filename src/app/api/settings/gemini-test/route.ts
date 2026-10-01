@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { handle, parseJson } from "@/lib/api";
-import { getGeminiApiKey } from "@/lib/settings";
+import { getGeminiApiKey, getGeminiModels } from "@/lib/settings";
 import { testGeminiKey } from "@/lib/gemini/extract";
 import { geminiApiKeySchema } from "@/lib/validation/settings";
 
@@ -16,6 +16,7 @@ export const POST = handle(async (request: Request) => {
   const { apiKey } = await parseJson(request, schema);
   const config = env();
   const key = apiKey ?? (await getGeminiApiKey(db()));
-  const result = await testGeminiKey({ apiKey: key, model: config.GEMINI_MODEL, baseUrl: config.GEMINI_BASE_URL || undefined });
+  const { model } = await getGeminiModels(db());
+  const result = await testGeminiKey({ apiKey: key, model, baseUrl: config.GEMINI_BASE_URL || undefined });
   return NextResponse.json(result);
 });

@@ -11,7 +11,7 @@ import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState }
 import { listTimeZones } from "@/lib/format";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { useBrowserTimeZone } from "./useBrowserTimeZone";
-import type { ScanSpeed, SettingsUpdate } from "@/lib/validation/settings";
+import type { SettingsUpdate } from "@/lib/validation/settings";
 
 interface Health {
   database: boolean;
@@ -363,12 +363,6 @@ function Saving() {
   return <Loader2 className="ml-2 inline h-4 w-4 animate-spin text-muted" />;
 }
 
-const SPEEDS: { value: ScanSpeed; label: string; hint: string }[] = [
-  { value: "fastest", label: "Fastest", hint: "Least thinking (uses Fast if the model doesn't support it)" },
-  { value: "fast", label: "Fast (recommended)", hint: "Light thinking - quick and accurate" },
-  { value: "careful", label: "Careful", hint: "More thinking - slower, for tricky screenshots" },
-];
-
 /** Enter, test and remove the Gemini API key. The saved key is never sent back to the browser. */
 function GeminiKeySection() {
   const { settings, update } = useSettings();
@@ -376,16 +370,18 @@ function GeminiKeySection() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [available, setAvailable] = useState<string[]>([]);
 
   const test = async (apiKey?: string) => {
     setBusy("test");
     setResult(null);
     try {
-      const res = await api<{ ok: true; model: string } | { ok: false; message: string }>("/api/settings/gemini-test", {
+      const res = await api<{ ok: true; model: string; available: string[] } | { ok: false; message: string; available?: string[] }>("/api/settings/gemini-test", {
         method: "POST",
         json: apiKey ? { apiKey } : {},
       });
       setResult(res.ok ? { ok: true, text: `Key works (${res.model}).` } : { ok: false, text: res.message });
+      setAvailable(res.available ?? []);
       return res.ok;
     } catch (err) {
       setResult({ ok: false, text: err instanceof Error ? err.message : String(err) });
@@ -483,26 +479,7 @@ function GeminiKeySection() {
         )}
         {result && <span className={`text-xs ${result.ok ? "text-over" : "text-under"}`}>{result.text}</span>}
       </div>
-      <div className="mt-4">
-        <span className="label">Scan speed</span>
-        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Scan speed">
-          {SPEEDS.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              role="radio"
-              aria-checked={settings.scanSpeed === s.value}
-              onClick={() => void update({ scanSpeed: s.value })}
-              className={`rounded-lg border px-3 py-1.5 text-left text-xs ${
-                settings.scanSpeed === s.value ? "border-accent bg-accent/15 text-accent" : "border-line bg-bg text-muted hover:text-text"
-              }`}
-            >
-              <span className="block font-semibold">{s.label}</span>
-              <span className="block text-[11px] opacity-80">{s.hint}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <ModelFields available={available} />
 
       <p className="mt-2 text-xs text-muted">
         The key is stored on your server and is never shown again after saving. A key saved here overrides GEMINI_API_KEY. Set APP_PASSWORD so strangers can&apos;t change it.
@@ -695,5 +672,70 @@ function AverageOddsSection() {
         {formatMoney(settings.averageOdds - 1, settings.unitSize, settings.currency)}).
       </p>
     </Section>
+  );
+}
+
+/** Main and backup Gemini models, saved on the server. */
+function ModelFields({ available }: { available: string[] }) {
+  const { settings, update } = useSettings();
+  const [model, setModel] = useState(settings.geminiModel);
+  const [backup, setBackup] = useState(settings.geminiFallbackModel);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const dirty = model.trim() !== settings.geminiModel || backup.trim() !== settings.geminiFallbackModel;
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const s = await update({ geminiModel: model, geminiFallbackModel: backup });
+      setModel(s.geminiModel);
+      setBackup(s.geminiFallbackModel);
+      setMsg({ ok: true, text: "Models saved." });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 flex flex-col gap-3">
+      <label>
+        <span className="label">Model</span>
+        <input className="input font-mono" value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} aria-label="Gemini model" />
+        <span className="mt-1 block text-xs text-muted">Use a Flash model, e.g. gemini-3.5-flash-lite or gemini-3.5-flash. Flash models are on the free tier.</span>
+      </label>
+      <label>
+        <span className="label">Backup model</span>
+        <input className="input font-mono" value={backup} onChange={(e) => setBackup(e.target.value)} spellCheck={false} aria-label="Backup Gemini model" />
+        <span className="mt-1 block text-xs text-muted">
+          Used automatically when the main model is busy or out of requests. Leave empty to turn off. Test connection lists the model names your key can use.
+        </span>
+      </label>
+      {available.length > 0 && (
+        <div>
+          <span className="label">Models your key can use (click to use as the main model)</span>
+          <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto">
+            {available.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setModel(m)}
+                className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${m === model.trim() ? "border-accent bg-accent/15 text-accent" : "border-line bg-bg text-muted hover:text-text"}`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <button type="button" className="btn-primary" disabled={!dirty || busy} onClick={() => void save()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save models
+        </button>
+        {msg && <span className={`text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</span>}
+      </div>
+    </div>
   );
 }

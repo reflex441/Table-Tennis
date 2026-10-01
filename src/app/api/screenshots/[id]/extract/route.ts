@@ -6,8 +6,7 @@ import { extractFromScreenshot, GeminiConfigError, GeminiRequestError } from "@/
 import { ExtractionFormatError } from "@/lib/gemini/normalize";
 import { screenshotSelect, toScreenshotDTO } from "@/lib/screenshot-dto";
 import { Prisma } from "@/generated/prisma/client";
-import { getGeminiApiKey, getSettings } from "@/lib/settings";
-import { SCAN_SPEED_THINKING } from "@/lib/validation/settings";
+import { getGeminiApiKey, getGeminiModels } from "@/lib/settings";
 
 export const maxDuration = 120;
 
@@ -38,11 +37,11 @@ export const POST = handle(async (_request: Request, ctx: { params: Promise<{ id
   }
 
   try {
+    const models = await getGeminiModels(prisma);
     const out = await extractFromScreenshot({
       apiKey,
-      model: config.GEMINI_MODEL,
-      fallbackModel: config.GEMINI_FALLBACK_MODEL || undefined,
-      thinkingLevel: SCAN_SPEED_THINKING[(await getSettings(prisma)).scanSpeed],
+      model: models.model,
+      fallbackModel: models.fallback,
       baseUrl: config.GEMINI_BASE_URL || undefined,
       image: Buffer.from(shot.data),
       mimeType: shot.mimeType,

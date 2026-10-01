@@ -286,8 +286,6 @@ model Settings {
   screenshotsAreToday        Boolean  @default(true)
   /// Times in screenshots are in `timezone`; timezone labels read from images are ignored.
   screenshotTimesAreLocal    Boolean  @default(true)
-  /// Scan speed vs care: "fastest" (minimal thinking), "fast" (low), "careful" (medium).
-  scanSpeed                  String   @default("fast")
   /// Keep alerting (in-app siren + repeated push) until the user confirms the bet.
   ringUntilAck               Boolean  @default(true)
   /// Seconds between repeated push notifications while an alarm rings.
@@ -299,6 +297,10 @@ model Settings {
   /// When on, every bet's profit uses averageOdds instead of the bet's own odds.
   useAverageOdds             Boolean  @default(false)
   averageOdds                Float    @default(1.85)
+  /// Gemini model for scanning (overrides GEMINI_MODEL).
+  geminiModel                String   @default("gemini-3.5-flash-lite")
+  /// Comma-separated backup models; empty turns the backup off.
+  geminiFallbackModel        String   @default("gemini-3.8-flash")
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?

@@ -32,7 +32,7 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 | What | Required? | Where to get it | Env variable(s) |
 | --- | --- | --- | --- |
 | PostgreSQL 14+ database | **Yes** | Local install, Docker (`docker compose`), or a hosted service (Neon, Supabase, Railway, RDS…) | `DATABASE_URL` |
-| Google Gemini API key | **Yes**, for scanning | <https://aistudio.google.com/apikey> (free tier available) | `GEMINI_API_KEY`, or enter it in Settings (optionally `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`) |
+| Google Gemini API key | **Yes**, for scanning | <https://aistudio.google.com/apikey> (free tier available) | `GEMINI_API_KEY`, or enter it in Settings. The model and backup model are set in Settings → Gemini API |
 | VAPID key pair for Web Push | **Yes**, for background push | Run `npm run vapid` locally. No account is needed. | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | Cron secret | Only for `SCHEDULER_MODE=external` | `openssl rand -hex 32` | `CRON_SECRET` |
 | App password + session secret | Strongly recommended when deployed publicly | Choose a password; `openssl rand -hex 32` for the secret | `APP_PASSWORD`, `SESSION_SECRET` |
@@ -258,7 +258,8 @@ tests/                       # Vitest suites
 ## Troubleshooting
 
 - **"Cannot reach the database" banner:** check `DATABASE_URL` and run `npx prisma migrate deploy`.
-- **"Gemini is overloaded" / 503:** Google's servers are busy. The app already retries 3 times and then tries the backup model (`GEMINI_FALLBACK_MODEL`, default `gemini-3.8-flash`); if all fail, wait a minute and press **Retry**.
+- **"Gemini is overloaded" / 503:** Google's servers are busy. The app tries the main model and then the backup model straight away, and repeats that up to 3 rounds. If all fail, wait a minute and press **Retry**, or pick a different model in **Settings → Gemini API**. You can enter several backup models separated by commas.
+- **"Gemini model not found" (404):** the model name is wrong for your key. Press **Test current key** in Settings: it lists the models your key can use. Click one to use it.
 - **Scan fails with `gemini_not_configured`:** set `GEMINI_API_KEY` and restart the server. With `gemini_unavailable` (429/5xx), wait and click *Rescan*.
 - **No push notifications:**
   - Check Settings → Server status (VAPID keys) and the permission state.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareNames, comparePlayers, matchDedupeKey, mergeRecords, normalizeName, playersKey, suggestMerges } from "@/lib/matching/dedupe";
 import { createMatchesSchema, matchInputSchema, updateMatchSchema } from "@/lib/validation/match";
-import { SCAN_SPEED_THINKING, settingsUpdateSchema } from "@/lib/validation/settings";
+import { settingsUpdateSchema } from "@/lib/validation/settings";
 import { maskKey } from "@/lib/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, validateCandidate, type ScreenshotContext } from "@/lib/review/candidate";
 import type { SettingsDTO } from "@/lib/validation/settings";
@@ -70,13 +70,14 @@ const settings: SettingsDTO = {
   includeStatsInNotification: true,
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
-  scanSpeed: "fast",
   ringUntilAck: true,
   repeatSeconds: 30,
   unitSize: 10,
   currency: "$",
   useAverageOdds: false,
   averageOdds: 1.85,
+  geminiModel: "gemini-3.5-flash-lite",
+  geminiFallbackModel: "gemini-3.8-flash",
   geminiKeySource: "none",
   geminiKeyHint: null,
 };
@@ -95,6 +96,16 @@ const extracted = (over: Partial<ExtractedMatch>): ExtractedMatch => ({
   stakeUnits: null,
   confidence: null,
   ...over,
+});
+
+describe("Gemini model settings", () => {
+  it("accepts model names and cleans them", () => {
+    expect(settingsUpdateSchema.parse({ geminiModel: " models/gemini-3.5-flash-lite " })).toEqual({ geminiModel: "gemini-3.5-flash-lite" });
+    expect(settingsUpdateSchema.parse({ geminiFallbackModel: "gemini-3.8-flash, models/gemini-3.5-flash" })).toEqual({ geminiFallbackModel: "gemini-3.8-flash,gemini-3.5-flash" });
+    expect(settingsUpdateSchema.parse({ geminiFallbackModel: "" })).toEqual({ geminiFallbackModel: "" });
+    expect(settingsUpdateSchema.safeParse({ geminiModel: "" }).success).toBe(false);
+    expect(settingsUpdateSchema.safeParse({ geminiModel: "gemini 3.5 flash" }).success).toBe(false);
+  });
 });
 
 describe("review candidates", () => {
@@ -205,11 +216,6 @@ describe("API validation schemas", () => {
     expect(maskKey(null)).toBeNull();
   });
 
-  it("validates the scan speed and maps it to a thinking level", () => {
-    expect(settingsUpdateSchema.safeParse({ scanSpeed: "fastest" }).success).toBe(true);
-    expect(settingsUpdateSchema.safeParse({ scanSpeed: "turbo" }).success).toBe(false);
-    expect(SCAN_SPEED_THINKING).toEqual({ fastest: "MINIMAL", fast: "LOW", careful: "MEDIUM" });
-  });
 
   it("validates settings", () => {
     expect(settingsUpdateSchema.safeParse({ timezone: "Europe/Prague", defaultReminderMinutes: 15 }).success).toBe(true);

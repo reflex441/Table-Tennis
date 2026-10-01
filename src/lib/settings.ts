@@ -29,6 +29,14 @@ export async function getGeminiApiKey(prisma: PrismaClient): Promise<string> {
   return s.geminiApiKey || process.env.GEMINI_API_KEY || "";
 }
 
+/** Models to scan with, from Settings → Gemini API (Model / Backup model). */
+export async function getGeminiModels(prisma: PrismaClient): Promise<{ model: string; fallback: string[] }> {
+  const s = await ensureRow(prisma);
+  const model = s.geminiModel.trim() || "gemini-3.5-flash-lite";
+  const fallback = s.geminiFallbackModel.split(",").map((m) => m.trim()).filter(Boolean);
+  return { model, fallback };
+}
+
 export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
   const s = await ensureRow(prisma);
   const envKey = process.env.GEMINI_API_KEY;
@@ -43,13 +51,14 @@ export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
     includeStatsInNotification: s.includeStatsInNotification,
     screenshotsAreToday: s.screenshotsAreToday,
     screenshotTimesAreLocal: s.screenshotTimesAreLocal,
-    scanSpeed: s.scanSpeed === "fastest" || s.scanSpeed === "careful" ? s.scanSpeed : "fast",
     ringUntilAck: s.ringUntilAck,
     repeatSeconds: s.repeatSeconds,
     unitSize: s.unitSize,
     currency: s.currency,
     useAverageOdds: s.useAverageOdds,
     averageOdds: s.averageOdds,
+    geminiModel: s.geminiModel,
+    geminiFallbackModel: s.geminiFallbackModel,
     // Never include the key itself in this DTO: it is sent to the browser.
     geminiKeySource: s.geminiApiKey ? "settings" : envKey ? "env" : "none",
     geminiKeyHint: maskKey(s.geminiApiKey),
