@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
 
 const ERRORS: Record<string, string> = {
-  google_not_configured: "Google sign-in isn't set up on this server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).",
+  google_not_configured: "Google sign-in isn't set up yet: put the real Client ID and Client secret from Google Cloud Console in .env and restart.",
   google_cancelled: "Google sign-in was cancelled.",
   google_state: "Google sign-in expired or was started in another tab. Please try again.",
   google_failed: "Google sign-in failed. Please try again.",

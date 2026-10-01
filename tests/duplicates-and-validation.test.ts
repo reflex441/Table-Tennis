@@ -11,6 +11,7 @@ import { createSessionToken, verifySessionToken } from "@/lib/auth/session";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { registerSchema, safeNext } from "@/lib/validation/auth";
 import { rateLimited } from "@/lib/auth/rate-limit";
+import { googleConfigured, looksLikeGoogleClientId } from "@/lib/auth/google";
 
 describe("duplicate detection", () => {
   it("normalises names (case, accents, punctuation)", () => {
@@ -268,6 +269,24 @@ describe("uploads and auth helpers", () => {
     expect(safeNext("//evil.example")).toBe("/");
     expect(safeNext("https://evil.example")).toBe("/");
     expect(safeNext(null)).toBe("/");
+  });
+
+  it("only turns on Google sign-in with real-looking credentials", () => {
+    expect(looksLikeGoogleClientId("123456789012-abc123def456ghi789.apps.googleusercontent.com")).toBe(true);
+    expect(looksLikeGoogleClientId("PASTE-YOUR-CLIENT-ID.apps.googleusercontent.com")).toBe(false);
+    expect(looksLikeGoogleClientId("my-project-123")).toBe(false);
+    const saved = { id: process.env.GOOGLE_CLIENT_ID, secret: process.env.GOOGLE_CLIENT_SECRET };
+    try {
+      process.env.GOOGLE_CLIENT_ID = "PASTE-YOUR-CLIENT-ID.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "PASTE-YOUR-CLIENT-SECRET";
+      expect(googleConfigured()).toBe(false);
+      process.env.GOOGLE_CLIENT_ID = " 123456789012-abc123def456ghi789.apps.googleusercontent.com ";
+      process.env.GOOGLE_CLIENT_SECRET = "GOCSPX-abcdefghijklmnop";
+      expect(googleConfigured()).toBe(true);
+    } finally {
+      process.env.GOOGLE_CLIENT_ID = saved.id ?? "";
+      process.env.GOOGLE_CLIENT_SECRET = saved.secret ?? "";
+    }
   });
 
   it("rate-limits repeated attempts", () => {

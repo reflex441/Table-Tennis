@@ -2,8 +2,23 @@ import { createHash, randomBytes } from "node:crypto";
 
 /** Google sign-in (OAuth 2.0 authorization code flow with PKCE). */
 
+const clean = (v: string | undefined) => (v ?? "").trim().replace(/^["']|["']$/g, "");
+const clientId = () => clean(process.env.GOOGLE_CLIENT_ID);
+const clientSecret = () => clean(process.env.GOOGLE_CLIENT_SECRET);
+
+/** A real Google OAuth client ID ("<number>-<id>.apps.googleusercontent.com"), not a placeholder. */
+export function looksLikeGoogleClientId(id: string): boolean {
+  return /^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/i.test(id);
+}
+
+let warned = false;
 export function googleConfigured(): boolean {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const ok = looksLikeGoogleClientId(clientId()) && clientSecret().length >= 10 && !/paste/i.test(clientSecret());
+  if (!ok && (process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_SECRET) && !warned) {
+    warned = true;
+    console.warn("Google sign-in is off: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET don't look like real values (copy them from Google Cloud Console → Clients).");
+  }
+  return ok;
 }
 
 /** Public URL of the app (APP_URL, else derived from the request). */
@@ -26,7 +41,7 @@ export function newOAuthRequest() {
 
 export function googleAuthUrl(opts: { redirectUri: string; state: string; challenge: string }): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+    client_id: clientId(),
     redirect_uri: opts.redirectUri,
     response_type: "code",
     scope: "openid email profile",
@@ -53,8 +68,8 @@ export async function fetchGoogleProfile(opts: { code: string; verifier: string;
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code: opts.code,
-      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      client_id: clientId(),
+      client_secret: clientSecret(),
       redirect_uri: opts.redirectUri,
       grant_type: "authorization_code",
       code_verifier: opts.verifier,
