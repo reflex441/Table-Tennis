@@ -152,6 +152,7 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 - **Bot play vs personal play:** a match whose screenshot shows an OVER/UNDER pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**. The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
 - **Recording a bet:** "I've placed the bet" on the computer alarm asks for the stake (in units; bot plays default to the badge stake, personal plays to 1u) and, optionally, the decimal odds. You can also click **Record bet** on any match card. Then mark it **Won / Lost / Void**.
 - **Profit:** won = stake × (odds − 1), lost = −stake, void = 0. A win without odds is not counted until you add the odds.
+- **Average odds:** turn on **Settings → Average odds → Use average odds for all bets** to price every win (past and future) at one odds value, e.g. 1.85. The odds entered on each bet are kept. Turn the switch off to go back to them.
 - **Profit page:** everything is shown in **units**, with the money amount to the right (units × the unit size). Set what 1 unit is worth (and the currency symbol) in **Settings → Units**. The page has:
   - a Bot vs Personal comparison (profit, ROI, win rate, record, staked);
   - a **running profit graph** for the chosen period (7D / 30D / 90D / All) - hover or use the arrow keys to read any day;

@@ -296,6 +296,9 @@ model Settings {
   unitSize                   Float    @default(10)
   /// Currency symbol shown next to stakes and profit.
   currency                   String   @default("$")
+  /// When on, every bet's profit uses averageOdds instead of the bet's own odds.
+  useAverageOdds             Boolean  @default(false)
+  averageOdds                Float    @default(1.85)
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?

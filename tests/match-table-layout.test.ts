@@ -26,6 +26,8 @@ const settings: SettingsDTO = {
   repeatSeconds: 30,
   unitSize: 10,
   currency: "$",
+  useAverageOdds: false,
+  averageOdds: 1.85,
   geminiKeySource: "settings",
   geminiKeyHint: "…0000",
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeProfit, defaultStake, formatMoney, formatUnits, summarize, summarizeBy, type BetRow } from "@/lib/bets/profit";
+import { computeProfit, defaultStake, effectiveOdds, formatMoney, formatUnits, summarize, summarizeBy, type BetRow } from "@/lib/bets/profit";
 import { ackSchema, betInputSchema, matchInputSchema } from "@/lib/validation/match";
 import { settingsUpdateSchema, type SettingsDTO } from "@/lib/validation/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, type ScreenshotContext } from "@/lib/review/candidate";
@@ -69,6 +69,14 @@ describe("profit maths (units)", () => {
     ]);
   });
 
+  it("uses the average odds from Settings when switched on", () => {
+    expect(effectiveOdds(2.1, { useAverageOdds: true, averageOdds: 1.85 })).toBe(1.85);
+    expect(effectiveOdds(null, { useAverageOdds: true, averageOdds: 1.85 })).toBe(1.85);
+    expect(effectiveOdds(2.1, { useAverageOdds: false, averageOdds: 1.85 })).toBe(2.1);
+    expect(effectiveOdds(null, { useAverageOdds: false, averageOdds: 1.85 })).toBeNull();
+    expect(effectiveOdds(2.1, null)).toBe(2.1);
+  });
+
   it("defaults the stake to the badge units for bot plays and 1u for personal plays", () => {
     expect(defaultStake("BOT", 2)).toBe(2);
     expect(defaultStake("BOT", null)).toBe(1);
@@ -101,6 +109,8 @@ describe("bet validation", () => {
     expect(settingsUpdateSchema.parse({ unitSize: 25, currency: "$" })).toEqual({ unitSize: 25, currency: "$" });
     expect(settingsUpdateSchema.safeParse({ unitSize: 0 }).success).toBe(false);
     expect(settingsUpdateSchema.safeParse({ currency: "" }).success).toBe(false);
+    expect(settingsUpdateSchema.parse({ useAverageOdds: true, averageOdds: 1.9 })).toEqual({ useAverageOdds: true, averageOdds: 1.9 });
+    expect(settingsUpdateSchema.safeParse({ averageOdds: 1 }).success).toBe(false);
   });
 
   it("keeps an explicit play type on match input", () => {
@@ -127,6 +137,8 @@ describe("bot vs personal classification", () => {
     repeatSeconds: 30,
     unitSize: 10,
     currency: "$",
+    useAverageOdds: false,
+    averageOdds: 1.85,
     geminiKeySource: "none",
     geminiKeyHint: null,
   } as SettingsDTO;

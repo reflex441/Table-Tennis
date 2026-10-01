@@ -9,6 +9,7 @@ import { ReminderPicker } from "./ReminderPicker";
 import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { listTimeZones } from "@/lib/format";
+import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { useBrowserTimeZone } from "./useBrowserTimeZone";
 import type { ScanSpeed, SettingsUpdate } from "@/lib/validation/settings";
 
@@ -264,6 +265,8 @@ export function SettingsPage() {
       <AlarmSection />
 
       <UnitsSection />
+
+      <AverageOddsSection />
 
       <Section title="Notification preferences">
         <Toggle label="Browser push notifications" hint="Send reminders to subscribed devices, even when the app is closed." checked={settings.pushEnabled} onChange={(v) => void save({ pushEnabled: v }, "push")} />
@@ -622,5 +625,71 @@ function UnitsSection() {
         </p>
       </Section>
     </div>
+  );
+}
+
+/** Price every bet at one average odds value instead of each bet's own odds. */
+function AverageOddsSection() {
+  const { settings, update } = useSettings();
+  const [draft, setDraft] = useState(String(settings.averageOdds));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const save = async (patch: SettingsUpdate) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const s = await update(patch);
+      setDraft(String(s.averageOdds));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveOdds = () => {
+    const n = Number(draft.replace(",", "."));
+    if (!Number.isFinite(n) || n <= 1) return setError("Enter decimal odds above 1.00, e.g. 1.85.");
+    void save({ averageOdds: Math.round(n * 100) / 100 });
+  };
+
+  return (
+    <Section
+      title="Average odds"
+      description="Turn this on to work out the profit of every bet (past and future) with your average odds instead of the odds entered on each bet. The odds you entered are kept - turn it off to use them again."
+    >
+      <Toggle
+        label="Use average odds for all bets"
+        hint={settings.useAverageOdds ? `All wins are counted at ${settings.averageOdds.toFixed(2)}.` : "Each bet uses its own odds."}
+        checked={settings.useAverageOdds}
+        onChange={(v) => void save({ useAverageOdds: v })}
+      />
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <label className="w-28">
+          <span className="label">Average odds</span>
+          <input
+            className="input tabular"
+            inputMode="decimal"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveOdds()}
+            aria-label="Average decimal odds"
+          />
+        </label>
+        <button className="btn-primary" disabled={busy} onClick={saveOdds}>
+          {saved ? "Saved" : "Save"}
+        </button>
+        {busy && <Saving />}
+      </div>
+      {error && <p className="mt-1 text-xs text-under">{error}</p>}
+      <p className="mt-2 text-xs text-muted">
+        Example: a 1u win at {settings.averageOdds.toFixed(2)} = {formatUnits(settings.averageOdds - 1)} (
+        {formatMoney(settings.averageOdds - 1, settings.unitSize, settings.currency)}).
+      </p>
+    </Section>
   );
 }

@@ -187,6 +187,17 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await updateMatch(prisma, personalRes.match.id, { playType: "BOT" }, now);
     expect((await listBetRows(prisma, { playType: "BOT" })).length).toBe(2);
 
+    // Average odds from Settings re-price every win (past and future); the bet's own odds are kept.
+    await updateSettings(prisma, { useAverageOdds: true, averageOdds: 1.5 });
+    expect(await prisma.bet.findUnique({ where: { matchId: botRes.match.id } })).toMatchObject({ odds: 1.9, profit: 1 });
+    const third = await createMatchWithAlarm(prisma, input({ player1: "Q", player2: "R", startsAt: "2030-09-21T21:00:00Z" }), now);
+    if (third.status !== "created") throw new Error("not created");
+    expect((await updateBet(prisma, third.match.id, { result: "WON" }, now)).profit).toBe(0.5); // no odds entered: average used
+    await updateSettings(prisma, { useAverageOdds: false });
+    expect((await prisma.bet.findUnique({ where: { matchId: botRes.match.id } }))!.profit).toBe(1.8);
+    expect((await prisma.bet.findUnique({ where: { matchId: third.match.id } }))!.profit).toBeNull();
+    await deleteBet(prisma, third.match.id);
+
     await deleteBet(prisma, botRes.match.id);
     expect(await prisma.bet.count()).toBe(1);
   });

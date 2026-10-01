@@ -173,7 +173,7 @@ export function AlarmRinger() {
     if (!match.alarm) return;
     let bet: { stake?: number; odds?: number | null } = {};
     if (action === "placed") {
-      const odds = input.odds.trim() ? Number(input.odds) : null;
+      const odds = !settings.useAverageOdds && input.odds.trim() ? Number(input.odds) : null;
       if (!Number.isFinite(stakeNum) || stakeNum <= 0) return setBetError("Stake must be a number of units above 0.");
       if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return setBetError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
       bet = { stake: stakeNum, odds };
@@ -263,6 +263,14 @@ export function AlarmRinger() {
               <span className="mt-0.5 block text-[11px] text-muted">= {formatMoney(stakeNum, settings.unitSize, settings.currency, false)}</span>
             )}
           </label>
+          {settings.useAverageOdds ? (
+            <div>
+              <span className="label">Odds</span>
+              <p className="py-1.5 text-sm">
+                <span className="tabular font-semibold">{settings.averageOdds.toFixed(2)}</span> <span className="text-xs text-muted">average (Settings)</span>
+              </p>
+            </div>
+          ) : (
           <label>
             <span className="label">Odds (optional)</span>
             <input
@@ -274,6 +282,7 @@ export function AlarmRinger() {
               aria-label="Decimal odds"
             />
           </label>
+          )}
         </div>
         {betError && <p className="mt-1 text-xs text-under">{betError}</p>}
 

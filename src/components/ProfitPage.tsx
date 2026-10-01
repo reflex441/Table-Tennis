@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Bot, Trophy, User } from "lucide-react";
 import type { BetRowWithMatch } from "@/lib/bets/queries";
-import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
+import { effectiveOdds, formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
 import { formatDayLabel, formatTime } from "@/lib/format";
 import { PlayTypeChip, ProfitAmount, ResultChip } from "./BetBits";
 import { useSettings } from "./SettingsProvider";
@@ -30,8 +30,13 @@ function pct(n: number | null): string {
   return n === null ? "–" : `${n > 0 ? "+" : ""}${n}%`;
 }
 
-export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
+export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
   const { settings } = useSettings();
+  // With "average odds for all bets" on, show the odds profit is based on.
+  const initial = useMemo(
+    () => (settings.useAverageOdds ? rows.map((r) => ({ ...r, odds: effectiveOdds(r.odds, settings) })) : rows),
+    [rows, settings],
+  );
   const tz = settings.timezone;
   const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
   const [type, setType] = useState<TypeFilter>("ALL");
@@ -88,7 +93,8 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
           <h1 className="text-xl font-semibold tracking-tight">Profit</h1>
           <p className="text-sm text-muted">
             In units · 1u = {settings.currency}
-            {settings.unitSize} (change in{" "}
+            {settings.unitSize}
+            {settings.useAverageOdds ? ` · all bets at average odds ${settings.averageOdds.toFixed(2)}` : ""} (change in{" "}
             <Link href="/settings#units" className="underline hover:text-text">
               Settings
             </Link>

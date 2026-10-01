@@ -51,6 +51,8 @@ export function ResultChip({ result }: { result: Result }) {
  */
 export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: MatchDTO) => void }) {
   const bet = match.bet;
+  const { settings } = useSettings();
+  const avg = settings.useAverageOdds ? settings.averageOdds : null;
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,8 +97,8 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             <span className="label">Stake (u)</span>
             <input className="input py-1 tabular" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} aria-label="Stake in units" />
           </label>
-          <label className="w-24">
-            <span className="label">Odds</span>
+          <label className="w-24" title={avg ? `Profit uses your average odds (${avg.toFixed(2)}) - see Settings` : undefined}>
+            <span className="label">{avg ? "Own odds" : "Odds"}</span>
             <input className="input py-1 tabular" inputMode="decimal" placeholder="1.85" value={odds} onChange={(e) => setOdds(e.target.value)} aria-label="Decimal odds" />
           </label>
           <button className="btn-primary px-2 py-1 text-xs" disabled={busy} onClick={saveEditor}>
@@ -117,6 +119,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             </button>
           )}
         </div>
+        {avg && <p className="text-[11px] text-muted">Profit uses your average odds ({avg.toFixed(2)}) from Settings.</p>}
         {error && <p className="text-[11px] text-under">{error}</p>}
       </div>
     );
@@ -139,7 +142,11 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <button className="inline-flex items-center gap-1 text-muted hover:text-text" onClick={openEditor} aria-label="Edit bet">
           Bet <span className="tabular text-text">{formatUnits(bet.stake, false)}</span>
-          {bet.odds ? (
+          {avg ? (
+            <>
+              @ <span className="tabular text-text">{avg.toFixed(2)}</span> <span className="text-[10px]">avg</span>
+            </>
+          ) : bet.odds ? (
             <>
               @ <span className="tabular text-text">{bet.odds.toFixed(2)}</span>
             </>

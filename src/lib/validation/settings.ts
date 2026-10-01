@@ -44,6 +44,8 @@ export const settingsUpdateSchema = z
     repeatSeconds: z.number().int().min(15, "At least 15 seconds").max(300, "At most 5 minutes"),
     unitSize: z.number().positive("Must be more than 0").max(1_000_000),
     currency: z.string().trim().min(1).max(4),
+    useAverageOdds: z.boolean(),
+    averageOdds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -80,6 +82,10 @@ export interface SettingsDTO {
   unitSize: number;
   /** Currency symbol, e.g. "$". */
   currency: string;
+  /** Use averageOdds for every bet's profit (the bets' own odds are kept). */
+  useAverageOdds: boolean;
+  /** Decimal odds used for all bets when useAverageOdds is on. */
+  averageOdds: number;
   /** Where the Gemini key comes from. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "env" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

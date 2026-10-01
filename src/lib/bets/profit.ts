@@ -27,6 +27,17 @@ export function computeProfit(stake: number, odds: number | null | undefined, re
   }
 }
 
+export interface OddsPolicy {
+  useAverageOdds: boolean;
+  averageOdds: number;
+}
+
+/** Odds used for profit: the average odds from Settings when switched on, else the bet's own. */
+export function effectiveOdds(odds: number | null | undefined, policy: OddsPolicy | null | undefined): number | null {
+  if (policy?.useAverageOdds && policy.averageOdds > 1) return policy.averageOdds;
+  return odds ?? null;
+}
+
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

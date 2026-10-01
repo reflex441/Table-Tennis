@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Settings" ADD COLUMN     "averageOdds" DOUBLE PRECISION NOT NULL DEFAULT 1.85,
+ADD COLUMN     "useAverageOdds" BOOLEAN NOT NULL DEFAULT false;
