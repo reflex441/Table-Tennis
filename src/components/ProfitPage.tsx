@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Bot, Trophy, User } from "lucide-react";
 import type { BetRowWithMatch } from "@/lib/bets/queries";
-import { effectiveOdds, formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
+import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
 import { formatDayLabel, formatTime } from "@/lib/format";
 import { PlayTypeChip, ProfitAmount, ResultChip } from "./BetBits";
 import { useSettings } from "./SettingsProvider";
@@ -30,13 +30,8 @@ function pct(n: number | null): string {
   return n === null ? "–" : `${n > 0 ? "+" : ""}${n}%`;
 }
 
-export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
+export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
   const { settings } = useSettings();
-  // With "average odds for all bets" on, show the odds profit is based on.
-  const initial = useMemo(
-    () => rows.map((r) => ({ ...r, odds: effectiveOdds(r.odds, settings), usesAverage: !r.odds && settings.useAverageOdds })),
-    [rows, settings],
-  );
   const tz = settings.timezone;
   const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
   const [type, setType] = useState<TypeFilter>("ALL");
@@ -94,7 +89,7 @@ export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
           <p className="text-sm text-muted">
             In units · 1u = {settings.currency}
             {settings.unitSize}
-            {settings.useAverageOdds ? ` · bets without odds use ${settings.averageOdds.toFixed(2)}` : ""} (change in{" "}
+            {" "}(change in{" "}
             <Link href="/settings#units" className="underline hover:text-text">
               Settings
             </Link>
@@ -255,10 +250,7 @@ export function ProfitPage({ initial: rows }: { initial: BetRowWithMatch[] }) {
                       <PlayTypeChip playType={r.playType} />
                     </td>
                     <td className="px-3 py-1.5 text-right tabular">{formatUnits(r.stake, false)}</td>
-                    <td className="px-3 py-1.5 text-right tabular" title={r.usesAverage ? "Average odds from Settings" : undefined}>
-                      {r.odds ? r.odds.toFixed(2) : "–"}
-                      {r.usesAverage && <span className="ml-1 text-[10px] text-muted">avg</span>}
-                    </td>
+                    <td className="px-3 py-1.5 text-right tabular">{r.odds ? r.odds.toFixed(2) : "–"}</td>
                     <td className="px-3 py-1.5">
                       <ResultChip result={r.result} />
                     </td>

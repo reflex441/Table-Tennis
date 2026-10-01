@@ -34,8 +34,10 @@ export interface Candidate {
   edge: string;
   /** BOT when the screenshot showed an OVER/UNDER pick badge, else PERSONAL. */
   playType: "BOT" | "PERSONAL";
-  /** Stake from the pick badge ("1U OVER" -> "1"), in units. */
+  /** Stake in units (default 1u). */
   stakeUnits: string;
+  /** Decimal odds; pre-filled with the average odds from Settings when ticked. */
+  odds: string;
   reminderMinutes: number;
   confidence: number | null;
   conflicts: { field: string; kept: string; other: string }[];
@@ -108,13 +110,18 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     ouHitRate: numStr(m.ouHitRate),
     edge: numStr(m.edge),
     playType: m.selection ? "BOT" : "PERSONAL",
-    stakeUnits: numStr(m.stakeUnits),
+    ...defaultBet(settings),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: m.confidence,
     conflicts: [],
     allowSimilar: false,
     result: null,
   };
+}
+
+/** Every new match starts at 1u, with the average odds when that setting is ticked. */
+function defaultBet(settings: SettingsDTO): { stakeUnits: string; odds: string } {
+  return { stakeUnits: "1", odds: settings.useAverageOdds ? String(settings.averageOdds) : "" };
 }
 
 export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Candidate {
@@ -139,7 +146,7 @@ export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Ca
     ouHitRate: "",
     edge: "",
     playType: "PERSONAL",
-    stakeUnits: "",
+    ...defaultBet(settings),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: null,
     conflicts: [],
@@ -209,6 +216,7 @@ export function mergeCandidates(primary: Candidate, secondary: Candidate): Candi
     edge: (merged.edge as string | null) ?? "",
     playType: primary.playType === "BOT" || secondary.playType === "BOT" ? "BOT" : "PERSONAL",
     stakeUnits: primary.stakeUnits || secondary.stakeUnits,
+    odds: primary.odds || secondary.odds,
     screenshotIds: Array.from(new Set([...primary.screenshotIds, ...secondary.screenshotIds])),
     timeSourceId: timeFromPrimary ? primary.timeSourceId : sec.timeSourceId,
     ...(timeFromPrimary
@@ -231,7 +239,7 @@ export function mergeCandidates(primary: Candidate, secondary: Candidate): Candi
 
 export interface CandidateValidation {
   ok: boolean;
-  errors: Partial<Record<"player1" | "player2" | "startsAt" | "time" | "ouStats" | "ouHitRate" | "edge" | "pointsLine", string>>;
+  errors: Partial<Record<"player1" | "player2" | "startsAt" | "time" | "ouStats" | "ouHitRate" | "edge" | "pointsLine" | "stakeUnits" | "odds", string>>;
 }
 
 function optNumber(s: string, min: number, max: number): number | null | "invalid" {
@@ -253,6 +261,10 @@ export function validateCandidate(c: Candidate, timezone: string, now: Date = ne
   if (optNumber(c.ouHitRate, 0, 100) === "invalid") errors.ouHitRate = "0-100";
   if (optNumber(c.edge, -100, 100) === "invalid") errors.edge = "-100..100";
   if (optNumber(c.pointsLine, 0, 500) === "invalid") errors.pointsLine = "Invalid";
+  const stake = optNumber(c.stakeUnits, 0, 1000);
+  if (stake === "invalid" || stake === 0) errors.stakeUnits = "Stake must be above 0 units";
+  const odds = optNumber(c.odds, 0, 1000);
+  if (odds === "invalid" || (odds !== null && odds <= 1)) errors.odds = "Odds must be above 1.00";
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -279,8 +291,12 @@ export function candidateToPayload(c: Candidate, timezone: string) {
     edge: num(c.edge),
     playType: c.playType,
     stakeUnits: (() => {
-      const v = optNumber(c.stakeUnits, 0, 100);
-      return v === "invalid" ? null : v;
+      const v = optNumber(c.stakeUnits, 0, 1000);
+      return v === "invalid" || !v ? 1 : v;
+    })(),
+    odds: (() => {
+      const v = optNumber(c.odds, 0, 1000);
+      return v === "invalid" || v === null || v <= 1 ? null : v;
     })(),
   };
 }

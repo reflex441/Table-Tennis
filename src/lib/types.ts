@@ -50,6 +50,8 @@ export interface MatchDTO {
   screenshotIds: string[];
   playType: "BOT" | "PERSONAL";
   stakeUnits: number | null;
+  /** Odds filled in at upload; used as the bet's odds. */
+  odds: number | null;
   bet: BetDTO | null;
   statistics: MatchStatisticsDTO;
   alarm: AlarmDTO | null;

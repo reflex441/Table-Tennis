@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
-import { recomputeProfits } from "@/lib/bets/service";
 
 /**
  * Make sure the single settings row exists. `skipDuplicates` compiles to
@@ -66,11 +65,7 @@ export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
 }
 
 export async function updateSettings(prisma: PrismaClient, update: SettingsUpdate): Promise<SettingsDTO> {
-  const before = await ensureRow(prisma);
-  const after = await prisma.settings.update({ where: { id: 1 }, data: update });
-  // Switching average odds on/off (or changing them) re-prices every bet.
-  if (before.useAverageOdds !== after.useAverageOdds || (after.useAverageOdds && before.averageOdds !== after.averageOdds)) {
-    await recomputeProfits(prisma);
-  }
+  await ensureRow(prisma);
+  await prisma.settings.update({ where: { id: 1 }, data: update });
   return getSettings(prisma);
 }

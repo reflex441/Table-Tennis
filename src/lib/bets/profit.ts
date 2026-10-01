@@ -27,21 +27,6 @@ export function computeProfit(stake: number, odds: number | null | undefined, re
   }
 }
 
-export interface OddsPolicy {
-  useAverageOdds: boolean;
-  averageOdds: number;
-}
-
-/**
- * Odds used for profit: the bet's own odds when it has them (never
- * overridden), otherwise the average odds from Settings when switched on.
- */
-export function effectiveOdds(odds: number | null | undefined, policy: OddsPolicy | null | undefined): number | null {
-  if (odds && odds > 1) return odds;
-  if (policy?.useAverageOdds && policy.averageOdds > 1) return policy.averageOdds;
-  return null;
-}
-
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -128,9 +113,9 @@ export function summarizeBy(rows: BetRow[], key: (r: BetRow) => string): { key: 
     .sort((a, b) => b.summary.profit - a.summary.profit);
 }
 
-/** Default stake in units: bot plays use the badge ("1U", "2U"), personal plays 1 unit. */
-export function defaultStake(playType: PlayType, stakeUnits: number | null | undefined): number {
-  return playType === "BOT" && stakeUnits && stakeUnits > 0 ? stakeUnits : 1;
+/** Default stake in units: what was set when the match was uploaded, else 1u. */
+export function defaultStake(stakeUnits: number | null | undefined): number {
+  return stakeUnits && stakeUnits > 0 ? stakeUnits : 1;
 }
 
 /** "+2.35u" style unit amount. */

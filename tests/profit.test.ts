@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeProfit, defaultStake, effectiveOdds, formatMoney, formatUnits, summarize, summarizeBy, type BetRow } from "@/lib/bets/profit";
+import { computeProfit, defaultStake, formatMoney, formatUnits, summarize, summarizeBy, type BetRow } from "@/lib/bets/profit";
 import { ackSchema, betInputSchema, matchInputSchema } from "@/lib/validation/match";
 import { settingsUpdateSchema, type SettingsDTO } from "@/lib/validation/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, type ScreenshotContext } from "@/lib/review/candidate";
@@ -69,18 +69,10 @@ describe("profit maths (units)", () => {
     ]);
   });
 
-  it("uses the average odds from Settings only for bets without odds", () => {
-    expect(effectiveOdds(2.1, { useAverageOdds: true, averageOdds: 1.85 })).toBe(2.1);
-    expect(effectiveOdds(null, { useAverageOdds: true, averageOdds: 1.85 })).toBe(1.85);
-    expect(effectiveOdds(2.1, { useAverageOdds: false, averageOdds: 1.85 })).toBe(2.1);
-    expect(effectiveOdds(null, { useAverageOdds: false, averageOdds: 1.85 })).toBeNull();
-    expect(effectiveOdds(2.1, null)).toBe(2.1);
-  });
-
-  it("defaults the stake to the badge units for bot plays and 1u for personal plays", () => {
-    expect(defaultStake("BOT", 2)).toBe(2);
-    expect(defaultStake("BOT", null)).toBe(1);
-    expect(defaultStake("PERSONAL", 3)).toBe(1);
+  it("defaults the stake to what was set at upload, else 1u", () => {
+    expect(defaultStake(2)).toBe(2);
+    expect(defaultStake(null)).toBe(1);
+    expect(defaultStake(0)).toBe(1);
   });
 
   it("formats units with the money amount from the unit size", () => {
@@ -167,12 +159,21 @@ describe("bot vs personal classification", () => {
     const payload = candidateToPayload(c, settings.timezone);
     expect(payload.playType).toBe("BOT");
     expect(payload.stakeUnits).toBe(1);
+    expect(payload.odds).toBeNull(); // average odds not ticked
   });
 
   it("a row without a pick is a personal play", () => {
     const c = candidateFromExtraction(m({}), shot, settings, now);
     expect(c.playType).toBe("PERSONAL");
-    expect(candidateToPayload(c, settings.timezone).stakeUnits).toBeNull();
+    expect(candidateToPayload(c, settings.timezone).stakeUnits).toBe(1);
+  });
+
+  it("new uploads default to 1u and the average odds when ticked (even with a 2U badge)", () => {
+    const c = candidateFromExtraction(m({ selection: "OVER", stakeUnits: 2 }), shot, { ...settings, useAverageOdds: true, averageOdds: 1.87 }, now);
+    expect([c.stakeUnits, c.odds]).toEqual(["1", "1.87"]);
+    expect(candidateToPayload(c, settings.timezone)).toMatchObject({ stakeUnits: 1, odds: 1.87 });
+    // The odds can be changed on the review screen.
+    expect(candidateToPayload({ ...c, odds: "2.05", stakeUnits: "1.5" }, settings.timezone)).toMatchObject({ stakeUnits: 1.5, odds: 2.05 });
   });
 
   it("merging keeps BOT if either screenshot had the pick", () => {
@@ -180,7 +181,7 @@ describe("bot vs personal classification", () => {
     const b = candidateFromExtraction(m({ selection: "UNDER", stakeUnits: 2 }), shot, settings, now);
     const merged = mergeCandidates(a, b);
     expect(merged.playType).toBe("BOT");
-    expect(merged.stakeUnits).toBe("2");
+    expect(merged.stakeUnits).toBe("1");
   });
 
   it("reads the badge stake from Gemini output and rejects nonsense", () => {

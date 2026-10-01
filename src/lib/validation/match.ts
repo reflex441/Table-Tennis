@@ -61,7 +61,10 @@ export const matchInputSchema = z
     allowSimilar: z.boolean().default(false),
     /** BOT if the screenshot showed a pick badge; defaults from the selection. */
     playType: playTypeSchema.optional(),
-    stakeUnits: z.number().min(0).max(100).nullish().transform((v) => v ?? null),
+    /** Planned stake in units (default 1u). */
+    stakeUnits: z.number().min(0).max(1000).nullish().transform((v) => v ?? null),
+    /** Planned decimal odds (the average odds from Settings when ticked). */
+    odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish().transform((v) => v ?? null),
   })
   .and(statisticsSchema);
 

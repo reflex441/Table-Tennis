@@ -123,6 +123,8 @@ model Match {
   playType    PlayType @default(PERSONAL)
   /// Stake in units shown on the pick badge ("1U"), if any.
   stakeUnits  Float?
+  /// Odds filled in when the match was uploaded (the average odds from Settings if ticked); used as the bet's odds.
+  odds        Float?
 
   statistics MatchStatistics?
   alarm      Alarm?

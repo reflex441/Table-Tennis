@@ -166,7 +166,7 @@ export function AlarmRinger() {
   const tz = settings.timezone;
 
   const input =
-    betInput?.matchId === match.id ? betInput : { matchId: match.id, stake: String(defaultStake(match.playType, match.stakeUnits)), odds: "" };
+    betInput?.matchId === match.id ? betInput : { matchId: match.id, stake: String(defaultStake(match.stakeUnits)), odds: match.odds ? String(match.odds) : "" };
   const stakeNum = Number(input.stake);
 
   const ack = async (action: "placed" | "skipped") => {
@@ -268,14 +268,11 @@ export function AlarmRinger() {
             <input
               className="input tabular"
               inputMode="decimal"
-              placeholder={settings.useAverageOdds ? settings.averageOdds.toFixed(2) : "1.85"}
+              placeholder="1.85"
               value={input.odds}
               onChange={(e) => setBetInput({ ...input, odds: e.target.value })}
               aria-label="Decimal odds"
             />
-            {settings.useAverageOdds && (
-              <span className="mt-0.5 block text-[11px] text-muted">Blank = your average odds ({settings.averageOdds.toFixed(2)})</span>
-            )}
           </label>
         </div>
         {betError && <p className="mt-1 text-xs text-under">{betError}</p>}

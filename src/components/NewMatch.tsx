@@ -18,9 +18,11 @@ export function NewMatch() {
   const { notify } = useNotifications();
   const router = useRouter();
 
+  // Same defaults as uploads: 1u, plus the average odds when that setting is ticked.
+  const newBetDefaults = { stakeUnits: 1, odds: settings.useAverageOdds ? settings.averageOdds : null };
   const submit = async (v: MatchFormValues) => {
     const send = (allowSimilar: boolean) =>
-      api<CreateResponse>("/api/matches", { method: "POST", json: { matches: [{ ...v, screenshotIds: [], allowSimilar }] } });
+      api<CreateResponse>("/api/matches", { method: "POST", json: { matches: [{ ...v, screenshotIds: [], allowSimilar, ...newBetDefaults }] } });
     let res = await send(false);
     let r = res.results[0];
     if (r.status === "similar" && window.confirm(`${r.message}\n\nCreate it anyway?`)) {

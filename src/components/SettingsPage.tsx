@@ -637,14 +637,14 @@ function AverageOddsSection() {
   return (
     <Section
       title="Average odds"
-      description="Turn this on to use your average odds for bets that have no odds entered. Bets where you entered odds (including all past plays with odds) always keep their own odds."
+      description="Every new match you upload starts with a 1u stake. When this is ticked it also gets these odds, which you can change on the review screen before creating the alarms. Changing this setting never changes matches or bets you already have."
     >
       <Toggle
         label="Use average odds for bets without odds"
         hint={
           settings.useAverageOdds
-            ? `Wins without odds are counted at ${settings.averageOdds.toFixed(2)}. You don't need to type odds when placing a bet.`
-            : "Wins without odds aren't counted until you add the odds."
+            ? `New uploads get odds ${settings.averageOdds.toFixed(2)} and 1u.`
+            : "New uploads get 1u and no odds - add the odds yourself."
         }
         checked={settings.useAverageOdds}
         onChange={(v) => void save({ useAverageOdds: v })}

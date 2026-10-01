@@ -71,6 +71,7 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
         dedupeKey,
         playType: input.playType ?? (input.selection ? "BOT" : "PERSONAL"),
         stakeUnits: input.stakeUnits,
+        odds: input.odds,
         statistics: {
           create: {
             selection: input.selection,
@@ -267,6 +268,7 @@ export function toMatchDTO(m: MatchWithRelations): MatchDTO {
     screenshotIds: m.sources.map((s) => s.screenshotId),
     playType: m.playType,
     stakeUnits: m.stakeUnits,
+    odds: m.odds,
     bet: m.bet
       ? {
           id: m.bet.id,

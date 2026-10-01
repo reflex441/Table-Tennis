@@ -51,8 +51,6 @@ export function ResultChip({ result }: { result: Result }) {
  */
 export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: MatchDTO) => void }) {
   const bet = match.bet;
-  const { settings } = useSettings();
-  const avg = settings.useAverageOdds ? settings.averageOdds : null;
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,8 +73,10 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
   };
 
   const openEditor = () => {
-    setStake(String(bet?.stake ?? defaultStake(match.playType, match.stakeUnits)));
-    setOdds(bet?.odds ? String(bet.odds) : "");
+    setStake(String(bet?.stake ?? defaultStake(match.stakeUnits)));
+    // Odds filled in at upload (e.g. the average odds) are the default.
+    const o = bet ? bet.odds : match.odds;
+    setOdds(o ? String(o) : "");
     setError(null);
     setEditing(true);
   };
@@ -97,7 +97,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             <span className="label">Stake (u)</span>
             <input className="input py-1 tabular" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} aria-label="Stake in units" />
           </label>
-          <label className="w-24" title={avg ? `Leave blank to use your average odds (${avg.toFixed(2)})` : undefined}>
+          <label className="w-24">
             <span className="label">Odds</span>
             <input className="input py-1 tabular" inputMode="decimal" placeholder="1.85" value={odds} onChange={(e) => setOdds(e.target.value)} aria-label="Decimal odds" />
           </label>
@@ -119,7 +119,6 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             </button>
           )}
         </div>
-        {avg && <p className="text-[11px] text-muted">Leave the odds blank to use your average odds ({avg.toFixed(2)}) from Settings.</p>}
         {error && <p className="text-[11px] text-under">{error}</p>}
       </div>
     );
@@ -145,10 +144,6 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
           {bet.odds ? (
             <>
               @ <span className="tabular text-text">{bet.odds.toFixed(2)}</span>
-            </>
-          ) : avg ? (
-            <>
-              @ <span className="tabular text-text">{avg.toFixed(2)}</span> <span className="text-[10px]">avg</span>
             </>
           ) : (
             <span className="text-warn">· add odds</span>

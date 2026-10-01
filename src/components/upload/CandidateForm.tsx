@@ -168,7 +168,29 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
             </button>
           ))}
         </div>
-        {c.playType === "BOT" && c.stakeUnits && <span className="text-muted">Badge stake: {c.stakeUnits}u</span>}
+        <label className="flex items-center gap-1 text-muted">
+          Stake
+          <input
+            className="input w-14 px-1.5 py-0.5 text-xs tabular"
+            inputMode="decimal"
+            value={c.stakeUnits}
+            onChange={(e) => onChange({ stakeUnits: e.target.value })}
+            aria-label="Stake in units"
+          />
+          u
+        </label>
+        <label className="flex items-center gap-1 text-muted">
+          Odds
+          <input
+            className="input w-16 px-1.5 py-0.5 text-xs tabular"
+            inputMode="decimal"
+            placeholder="–"
+            value={c.odds}
+            onChange={(e) => onChange({ odds: e.target.value })}
+            aria-label="Decimal odds"
+          />
+        </label>
+        {(err.stakeUnits || err.odds) && <span className="text-under">{err.stakeUnits ?? err.odds}</span>}
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
