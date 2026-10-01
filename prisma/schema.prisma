@@ -1,0 +1,238 @@
+// Prisma schema for the Table Tennis match reminder application.
+// All timestamps are stored as UTC (`timestamptz`). Display timezones are
+// applied in the UI using the user's preferred IANA timezone.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ScreenshotStatus {
+  UPLOADED
+  PROCESSING
+  EXTRACTED
+  FAILED
+}
+
+/// Where the screenshot capture time came from. Only EXIF and MANUAL are
+/// treated as reliable when resolving relative times ("Today", "in 45 min").
+enum CaptureTimeSource {
+  EXIF
+  FILE_MODIFIED
+  MANUAL
+  NONE
+}
+
+enum Selection {
+  OVER
+  UNDER
+}
+
+enum AlarmStatus {
+  SCHEDULED
+  SENDING
+  TRIGGERED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum DeliveryChannel {
+  PUSH
+  IN_APP
+}
+
+enum DeliveryStatus {
+  SENT
+  FAILED
+}
+
+/// An uploaded screenshot. Image bytes are stored in Postgres so the app
+/// has no extra storage dependency (files are capped at 8 MB).
+model Screenshot {
+  id               String            @id @default(cuid())
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  filename         String
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  data             Bytes
+  capturedAt       DateTime?         @db.Timestamptz(3)
+  capturedAtSource CaptureTimeSource @default(NONE)
+  status           ScreenshotStatus  @default(UPLOADED)
+  error            String?
+
+  extractions Extraction[]
+  sources     MatchSource[]
+
+  @@index([sha256])
+  @@index([createdAt])
+}
+
+/// The raw and validated output of one Gemini run over a screenshot.
+model Extraction {
+  id           String     @id @default(cuid())
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  screenshotId String
+  screenshot   Screenshot @relation(fields: [screenshotId], references: [id], onDelete: Cascade)
+  model        String
+  durationMs   Int
+  /// Unmodified JSON returned by Gemini (for auditing / debugging).
+  rawResponse  Json
+  /// Server-validated result (invalid values replaced by null + warning).
+  result       Json
+  warnings     String[]
+
+  @@index([screenshotId, createdAt])
+}
+
+model Match {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  player1     String
+  player2     String
+  competition String?
+  /// Confirmed match start, UTC.
+  startsAt    DateTime @db.Timestamptz(3)
+  /// IANA timezone the user confirmed the time in (for display/auditing).
+  timezone    String
+  /// Verbatim time text from the screenshot, if any (e.g. "Today at 6:00 PM").
+  rawTimeText String?
+  notes       String?
+  /// Normalised "player-a|player-b|startMinute" key used to prevent duplicates.
+  dedupeKey   String   @unique
+
+  statistics MatchStatistics?
+  alarm      Alarm?
+  sources    MatchSource[]
+
+  @@index([startsAt])
+}
+
+/// Selection and statistics attached to a match. Every field is optional:
+/// screenshots frequently contain only part of the information.
+model MatchStatistics {
+  id         String     @id @default(cuid())
+  matchId    String     @unique
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  selection  Selection?
+  pointsLine Float?
+  /// O/U record exactly as shown, e.g. "20/9".
+  ouStats    String?
+  /// O/U hit rate percentage, 0-100.
+  ouHitRate  Float?
+  /// EDGE percentage, -100..100.
+  edge       Float?
+}
+
+/// Join table: which screenshots contributed to a match.
+model MatchSource {
+  matchId      String
+  screenshotId String
+  match        Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  screenshot   Screenshot @relation(fields: [screenshotId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, screenshotId])
+}
+
+/// One reminder per match. `generation` increments whenever the alarm is
+/// rescheduled so that delivery de-duplication applies per schedule.
+model Alarm {
+  id              String      @id @default(cuid())
+  createdAt       DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @db.Timestamptz(3)
+  matchId         String      @unique
+  match           Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reminderMinutes Int
+  /// When the notification should fire (startsAt - reminderMinutes), UTC.
+  fireAt          DateTime    @db.Timestamptz(3)
+  /// When the dispatcher should next process the alarm (fireAt, or a retry time).
+  nextAttemptAt   DateTime    @db.Timestamptz(3)
+  status          AlarmStatus @default(SCHEDULED)
+  generation      Int         @default(1)
+  attempts        Int         @default(0)
+  lockedAt        DateTime?   @db.Timestamptz(3)
+  lastError       String?
+  triggeredAt     DateTime?   @db.Timestamptz(3)
+  completedAt     DateTime?   @db.Timestamptz(3)
+  cancelledAt     DateTime?   @db.Timestamptz(3)
+
+  deliveries    NotificationDelivery[]
+  notifications InAppNotification[]
+
+  @@index([status, nextAttemptAt])
+}
+
+model PushSubscription {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  active        Boolean   @default(true)
+  failureCount  Int       @default(0)
+  lastSuccessAt DateTime? @db.Timestamptz(3)
+  lastFailureAt DateTime? @db.Timestamptz(3)
+  lastError     String?
+
+  deliveries NotificationDelivery[]
+}
+
+/// Log of every delivery attempt. The unique constraint guarantees a given
+/// alarm schedule (generation) is pushed at most once per subscription.
+model NotificationDelivery {
+  id             String           @id @default(cuid())
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  alarmId        String
+  alarm          Alarm            @relation(fields: [alarmId], references: [id], onDelete: Cascade)
+  generation     Int
+  channel        DeliveryChannel  @default(PUSH)
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  status         DeliveryStatus
+  error          String?
+  attempts       Int              @default(1)
+
+  @@unique([alarmId, generation, subscriptionId])
+}
+
+/// Notifications shown inside the app (toast + notification centre).
+model InAppNotification {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  alarmId    String?
+  alarm      Alarm?    @relation(fields: [alarmId], references: [id], onDelete: Cascade)
+  generation Int?
+  matchId    String?
+  title      String
+  body       String
+  url        String
+  readAt     DateTime? @db.Timestamptz(3)
+
+  @@unique([alarmId, generation])
+  @@index([createdAt])
+}
+
+/// Single-row application settings (id is always 1).
+model Settings {
+  id                         Int      @id @default(1)
+  updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
+  defaultReminderMinutes     Int      @default(5)
+  timezone                   String   @default("UTC")
+  /// False until the user has explicitly confirmed their timezone.
+  timezoneConfirmed          Boolean  @default(false)
+  /// Preferred interpretation of ambiguous numeric dates like 03/04/2026.
+  dateOrder                  String   @default("DMY")
+  pushEnabled                Boolean  @default(true)
+  inAppEnabled               Boolean  @default(true)
+  soundEnabled               Boolean  @default(true)
+  includeStatsInNotification Boolean  @default(true)
+}

@@ -1,0 +1,83 @@
+import { dispatchDueAlarms, type DispatchReport } from "@/lib/alarms/dispatcher";
+import { createPrismaStore } from "@/lib/alarms/prisma-store";
+import { createWebPushSender } from "@/lib/push/web-push";
+import { db } from "@/lib/db";
+
+/**
+ * Run one dispatch pass against the database. Used by the in-process loop,
+ * the standalone worker and the /api/cron/dispatch endpoint.
+ */
+export async function runDispatchOnce(log?: (msg: string) => void): Promise<DispatchReport> {
+  return dispatchDueAlarms({ store: createPrismaStore(db()), push: createWebPushSender(), log });
+}
+
+interface SchedulerState {
+  timer: ReturnType<typeof setTimeout> | null;
+  busy: boolean;
+  stopped: boolean;
+  tick: () => Promise<void>;
+}
+
+const globalState = globalThis as unknown as { __ttScheduler?: SchedulerState };
+
+/**
+ * Polling scheduler loop. Alarms live in Postgres, so nothing is lost on a
+ * restart: the next pass picks up everything that became due (late alarms
+ * within the grace period are still delivered). Between polls it also wakes
+ * up exactly when the next alarm is due, giving ~1 s precision.
+ */
+export function startScheduler(opts: { intervalMs: number; log?: (msg: string) => void }): () => void {
+  if (globalState.__ttScheduler && !globalState.__ttScheduler.stopped) return stopScheduler;
+  const log = opts.log ?? ((m: string) => console.log(`[scheduler] ${m}`));
+
+  const state: SchedulerState = {
+    timer: null,
+    busy: false,
+    stopped: false,
+    tick: async () => {
+      if (state.stopped || state.busy) return;
+      state.busy = true;
+      let delay = opts.intervalMs;
+      try {
+        const report = await runDispatchOnce(log);
+        if (report.claimed || report.completed) log(JSON.stringify(report));
+        const next = await createPrismaStore(db()).nextDueAt();
+        if (next) delay = Math.max(250, Math.min(opts.intervalMs, next.getTime() - Date.now() + 50));
+      } catch (err) {
+        log(`dispatch failed: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        state.busy = false;
+      }
+      schedule(state, delay);
+    },
+  };
+  globalState.__ttScheduler = state;
+  schedule(state, 1000);
+  log(`started (poll interval ${opts.intervalMs} ms)`);
+  return stopScheduler;
+}
+
+function schedule(state: SchedulerState, delay: number) {
+  if (state.stopped) return;
+  if (state.timer) clearTimeout(state.timer);
+  state.timer = setTimeout(() => void state.tick(), delay);
+}
+
+export function stopScheduler(): void {
+  const state = globalState.__ttScheduler;
+  if (!state) return;
+  state.stopped = true;
+  if (state.timer) clearTimeout(state.timer);
+  globalState.__ttScheduler = undefined;
+}
+
+/**
+ * Nudge the in-process loop so a newly created/edited alarm is re-evaluated
+ * promptly (e.g. a reminder that is already due fires within a second).
+ * No-op when the loop runs in a separate worker process.
+ */
+export function wakeScheduler(): void {
+  const state = globalState.__ttScheduler;
+  if (!state || state.stopped || state.busy) return;
+  schedule(state, 200);
+}

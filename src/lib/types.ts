@@ -1,0 +1,76 @@
+/** DTOs shared between API routes and client components (no server imports). */
+import type { ExtractionResult } from "@/lib/gemini/types";
+import type { CaptureSource } from "@/lib/time/resolve";
+
+export type AlarmStatus = "SCHEDULED" | "SENDING" | "TRIGGERED" | "COMPLETED" | "CANCELLED" | "FAILED";
+
+export interface MatchStatisticsDTO {
+  selection: "OVER" | "UNDER" | null;
+  pointsLine: number | null;
+  ouStats: string | null;
+  ouHitRate: number | null;
+  edge: number | null;
+}
+
+export interface AlarmDTO {
+  id: string;
+  status: AlarmStatus;
+  reminderMinutes: number;
+  fireAt: string;
+  attempts: number;
+  lastError: string | null;
+  triggeredAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface MatchDTO {
+  id: string;
+  player1: string;
+  player2: string;
+  competition: string | null;
+  startsAt: string;
+  timezone: string;
+  rawTimeText: string | null;
+  notes: string | null;
+  createdAt: string;
+  screenshotIds: string[];
+  statistics: MatchStatisticsDTO;
+  alarm: AlarmDTO | null;
+}
+
+export interface ScreenshotDTO {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  capturedAt: string | null;
+  capturedAtSource: CaptureSource;
+  status: "UPLOADED" | "PROCESSING" | "EXTRACTED" | "FAILED";
+  error: string | null;
+  imageUrl: string;
+  /** True when the same image had already been uploaded. */
+  duplicate: boolean;
+  extraction: {
+    id: string;
+    model: string;
+    result: ExtractionResult;
+    warnings: string[];
+    createdAt: string;
+  } | null;
+}
+
+export interface InAppNotificationDTO {
+  id: string;
+  createdAt: string;
+  title: string;
+  body: string;
+  url: string;
+  matchId: string | null;
+  readAt: string | null;
+}
+
+export interface ApiErrorBody {
+  error: { code: string; message: string; details?: unknown };
+}

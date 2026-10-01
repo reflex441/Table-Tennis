@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* Dark, compact dashboard palette. */
+@theme {
+  --color-bg: #0a0e14;
+  --color-panel: #111720;
+  --color-panel-2: #161e29;
+  --color-line: #222c3a;
+  --color-muted: #8391a7;
+  --color-text: #e6ebf2;
+  --color-over: #22c55e;
+  --color-under: #f43f5e;
+  --color-accent: #38bdf8;
+  --color-warn: #f59e0b;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Native date pickers in dark mode */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility card {
+  @apply rounded-xl border border-line bg-panel;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-accent text-slate-950 hover:bg-sky-300;
+}
+@utility btn-ghost {
+  @apply btn border border-line bg-panel-2 text-text hover:bg-line;
+}
+@utility btn-danger {
+  @apply btn border border-rose-900/60 bg-rose-950/40 text-rose-300 hover:bg-rose-900/50;
+}
+@utility input {
+  @apply w-full rounded-lg border border-line bg-bg px-2.5 py-1.5 text-sm text-text placeholder:text-muted/60 focus:border-accent focus:outline-none;
+}
+@utility label {
+  @apply mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted;
+}
+@utility chip {
+  @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold;
+}
