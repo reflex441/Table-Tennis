@@ -11,8 +11,8 @@ import { useNotifications } from "@/components/NotificationProvider";
 import { ReminderPicker } from "@/components/ReminderPicker";
 import { CandidateForm } from "./CandidateForm";
 import {
-  applyTimeResolution,
-  candidateFromExtraction,
+  candidatesFromExtraction,
+  resolveShotTimes,
   candidateToPayload,
   emptyCandidate,
   mergeCandidates,
@@ -23,6 +23,7 @@ import {
 import { suggestMerges } from "@/lib/matching/dedupe";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { useBrowserTimeZone } from "@/components/useBrowserTimeZone";
+import type { SettingsDTO } from "@/lib/validation/settings";
 
 type Phase = "queued" | "uploading" | "uploaded" | "scanning" | "scanned" | "error";
 
@@ -59,6 +60,16 @@ function shotContext(s: ScreenshotDTO): ScreenshotContext {
     visibleClock: s.extraction?.result.visibleClock ?? null,
     timezoneText: s.extraction?.result.timezoneText ?? null,
   };
+}
+
+/** Re-resolve start times (in row order) for the candidates of the given screenshots. */
+function reresolve(prev: Candidate[], shots: Map<string, ScreenshotContext>, settings: SettingsDTO): Candidate[] {
+  const updated = new Map<string, Candidate>();
+  for (const [shotId, ctx] of shots) {
+    const own = prev.filter((c) => c.timeSourceId === shotId && !c.result);
+    for (const c of resolveShotTimes(own, ctx, settings)) updated.set(c.id, c);
+  }
+  return prev.map((c) => updated.get(c.id) ?? c);
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -143,7 +154,7 @@ export function UploadReview() {
     (shot: ScreenshotDTO) => {
       if (!shot.extraction) return;
       const ctx = shotContext(shot);
-      const fresh = shot.extraction.result.matches.map((m) => candidateFromExtraction(m, ctx, settings));
+      const fresh = candidatesFromExtraction(shot.extraction.result.matches, ctx, settings);
       setCandidates((prev) => [
         // Replace candidates that came only from this screenshot (rescan).
         ...prev.filter((c) => !(c.screenshotIds.length === 1 && c.screenshotIds[0] === shot.id && !c.result)),
@@ -200,7 +211,7 @@ export function UploadReview() {
       const updated = { ...res.screenshot, extraction: res.screenshot.extraction ?? item.screenshot.extraction };
       patchItem(item.key, { screenshot: updated });
       const ctx = shotContext(updated);
-      setCandidates((prev) => prev.map((c) => (c.timeSourceId === updated.id && !c.result ? applyTimeResolution(c, ctx, settings) : c)));
+      setCandidates((prev) => reresolve(prev, new Map([[updated.id, ctx]]), settings));
     } catch (err) {
       notify("Could not save capture time", err instanceof Error ? err.message : String(err));
     }
@@ -220,13 +231,13 @@ export function UploadReview() {
   };
 
   // Re-resolve times when the timezone/date-order settings change.
-  const settingsKey = `${settings.timezone}|${settings.timezoneConfirmed}|${settings.dateOrder}`;
+  const settingsKey = `${settings.timezone}|${settings.timezoneConfirmed}|${settings.dateOrder}|${settings.screenshotsAreToday}|${settings.screenshotTimesAreLocal}`;
   const lastSettingsKey = useRef(settingsKey);
   useEffect(() => {
     if (lastSettingsKey.current === settingsKey) return;
     lastSettingsKey.current = settingsKey;
     const shots = new Map(itemsRef.current.filter((i) => i.screenshot).map((i) => [i.screenshot!.id, shotContext(i.screenshot!)]));
-    setCandidates((prev) => prev.map((c) => (c.result ? c : applyTimeResolution(c, c.timeSourceId ? shots.get(c.timeSourceId) ?? null : null, settings))));
+    setCandidates((prev) => reresolve(prev, shots, settings));
   }, [settingsKey, settings]);
 
   const openCandidates = candidates.filter((c) => c.result?.status !== "created");

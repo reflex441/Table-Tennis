@@ -172,6 +172,20 @@ export function SettingsPage() {
           </div>
           <p className="mt-1 text-xs text-muted">Ambiguous dates are always shown for confirmation.</p>
         </div>
+        <div className="mt-3 border-t border-line pt-2">
+          <Toggle
+            label="Screenshots show today's matches"
+            hint="A time like 8:10 PM is today; once the list passes midnight (11:30 PM → 12:15 AM) the rest is tomorrow. No confirmation needed."
+            checked={settings.screenshotsAreToday}
+            onChange={(v) => void save({ screenshotsAreToday: v }, "today")}
+          />
+          <Toggle
+            label="Screenshot times are in my timezone"
+            hint="Ignore timezone labels read from screenshots (e.g. a cropped 'GMT+10' header misread as 'GMT+3') and use the timezone above."
+            checked={settings.screenshotTimesAreLocal}
+            onChange={(v) => void save({ screenshotTimesAreLocal: v }, "local")}
+          />
+        </div>
       </Section>
 
       <Section title="Notifications on this device" description="Background notifications use the Web Push API and a service worker.">

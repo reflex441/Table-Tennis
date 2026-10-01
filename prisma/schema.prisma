@@ -235,6 +235,10 @@ model Settings {
   inAppEnabled               Boolean  @default(true)
   soundEnabled               Boolean  @default(true)
   includeStatsInNotification Boolean  @default(true)
+  /// Screenshots list today's matches: bare times are today (or tomorrow after midnight).
+  screenshotsAreToday        Boolean  @default(true)
+  /// Times in screenshots are in `timezone`; timezone labels read from images are ignored.
+  screenshotTimesAreLocal    Boolean  @default(true)
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?

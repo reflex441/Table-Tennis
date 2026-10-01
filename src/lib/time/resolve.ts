@@ -31,6 +31,23 @@ export interface ResolveInput {
   /** Timezone text visible in the screenshot, e.g. "CET" or "UTC+2". */
   screenshotTimezone?: string | null;
   dateOrder?: DateOrder;
+  /**
+   * Ignore timezone labels read from the screenshot and always use
+   * `timezone` (for sites that show times in the viewer's local time;
+   * avoids mistakes when Gemini misreads a cropped header).
+   */
+  ignoreScreenshotTimezone?: boolean;
+  /**
+   * The screenshot is a list of today's matches: a bare time ("8:10 PM")
+   * is on the capture date, or the next day once the list passes midnight.
+   * Such times are then resolved without asking for confirmation.
+   */
+  assumeToday?: boolean;
+  /**
+   * Start of the previous row in the same screenshot (ISO). Rows are in
+   * chronological order, so a bare time is placed at or after it.
+   */
+  notBefore?: string | null;
   /** Current time, injectable for tests. */
   now?: Date;
 }
@@ -84,8 +101,8 @@ const ABBREVIATION_OFFSETS: Record<string, string> = {
   AEDT: "UTC+11",
 };
 
-/** A time-only match this far before the capture time is assumed to be tomorrow. */
-const TIME_ONLY_PAST_TOLERANCE_MS = 60 * 60_000;
+/** A bare time is placed on the occurrence within ±12 h of the capture time. */
+const HALF_DAY_MS = 12 * 60 * 60_000;
 
 const MONTHS: Record<string, number> = {
   jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
@@ -256,8 +273,13 @@ export function resolveMatchTime(input: ResolveInput): ResolveResult {
   // ---- Zone -------------------------------------------------------------
   let zone: Zone | null = null;
   let zoneReliable = false;
-  const textZone = rawText ? findZoneInText(rawText) : null;
-  const screenshotZone = parseZone(input.screenshotTimezone);
+  let textZone = rawText ? findZoneInText(rawText) : null;
+  let screenshotZone = parseZone(input.screenshotTimezone);
+  if (input.ignoreScreenshotTimezone && (textZone || screenshotZone)) {
+    notes.push(`Timezone label "${textZone?.label ?? input.screenshotTimezone}" in the screenshot ignored - times are read as ${input.timezone}.`);
+    textZone = null;
+    screenshotZone = null;
+  }
   if (textZone) {
     zone = textZone.zone;
     zoneReliable = true;
@@ -381,20 +403,33 @@ export function resolveMatchTime(input: ResolveInput): ResolveResult {
     return finalise(dt, "weekday", zoneName, issues, notes, now);
   }
 
-  // Time only - assume the capture date, but always ask for confirmation.
-  // Upcoming-match lists often run past midnight ("11:30 PM", then "12:15 AM"):
-  // a time that had already passed when the screenshot was taken is assumed
-  // to be on the following day.
+  // Time only ("8:10 PM"). The first row is placed on the occurrence
+  // closest to the capture time (so "12:15 AM" captured at 11:50 PM is the
+  // next day); later rows are placed at or after the previous row, because
+  // match lists are chronological and run past midnight.
   if (!reference) {
     return emptyResult(zoneName, "time-only", "needs_confirmation", ["Only a time is shown and the capture date is unknown - choose the date."], notes);
   }
-  if (referenceIssue) issues.push(referenceIssue);
   let dt = reference.startOf("day").set({ hour: timeOfDay.hour, minute: timeOfDay.minute });
-  if (dt.toMillis() < reference.toMillis() - TIME_ONLY_PAST_TOLERANCE_MS) {
+  const floor = input.notBefore ? DateTime.fromISO(input.notBefore).setZone(zone) : null;
+  if (floor && floor.isValid) {
+    for (let i = 0; i < 3 && dt.toMillis() < floor.toMillis(); i++) dt = dt.plus({ days: 1 });
+  } else if (reference.toMillis() - dt.toMillis() > HALF_DAY_MS) {
     dt = dt.plus({ days: 1 });
-    issues.push(`Only a time is shown - assumed the next day ${dt.toFormat("ccc dd LLL")}, because ${timeOfDay.match.trim()} had already passed when the screenshot was taken.`);
+  } else if (dt.toMillis() - reference.toMillis() > HALF_DAY_MS) {
+    dt = dt.minus({ days: 1 });
+  }
+  const sameDay = dt.hasSame(reference, "day");
+  const dayText = dt.toFormat("ccc dd LLL");
+  if (input.assumeToday) {
+    notes.push(sameDay ? `Today's list - ${dayText}.` : `After midnight in today's list - ${dayText}.`);
   } else {
-    issues.push(`Only a time is shown - assumed the capture date ${reference.toFormat("ccc dd LLL")}.`);
+    if (referenceIssue) issues.push(referenceIssue);
+    issues.push(
+      sameDay
+        ? `Only a time is shown - assumed the capture date ${dayText}.`
+        : `Only a time is shown - assumed ${dayText} (the list runs past midnight / time had passed at capture).`,
+    );
   }
   return finalise(dt, "time-only", zoneName, issues, notes, now);
 }

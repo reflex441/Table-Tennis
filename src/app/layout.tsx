@@ -32,6 +32,8 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   inAppEnabled: true,
   soundEnabled: true,
   includeStatsInNotification: true,
+  screenshotsAreToday: true,
+  screenshotTimesAreLocal: true,
   geminiKeySource: "none",
   geminiKeyHint: null,
 };

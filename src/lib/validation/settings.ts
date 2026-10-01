@@ -37,6 +37,8 @@ export const settingsUpdateSchema = z
     inAppEnabled: z.boolean(),
     soundEnabled: z.boolean(),
     includeStatsInNotification: z.boolean(),
+    screenshotsAreToday: z.boolean(),
+    screenshotTimesAreLocal: z.boolean(),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -53,6 +55,8 @@ export interface SettingsDTO {
   inAppEnabled: boolean;
   soundEnabled: boolean;
   includeStatsInNotification: boolean;
+  screenshotsAreToday: boolean;
+  screenshotTimesAreLocal: boolean;
   /** Where the Gemini key comes from. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "env" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

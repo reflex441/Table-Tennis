@@ -55,8 +55,35 @@ export function newCandidateId(): string {
   return `c${Date.now().toString(36)}${counter}`;
 }
 
+/** Build review candidates for all matches of one screenshot (rows in order). */
+export function candidatesFromExtraction(matches: ExtractedMatch[], shot: ScreenshotContext, settings: SettingsDTO, now?: Date): Candidate[] {
+  return resolveShotTimes(matches.map((m) => baseCandidate(m, shot, settings)), shot, settings, now, { untickPast: true });
+}
+
 export function candidateFromExtraction(m: ExtractedMatch, shot: ScreenshotContext, settings: SettingsDTO, now?: Date): Candidate {
-  const c: Candidate = {
+  return candidatesFromExtraction([m], shot, settings, now)[0];
+}
+
+/**
+ * Resolve start times for one screenshot's candidates in row order: each
+ * bare time is placed at or after the previous row, so a list that runs
+ * past midnight moves to the next day. Optionally unticks matches that have
+ * already started so they don't block creating the rest.
+ */
+export function resolveShotTimes(cands: Candidate[], shot: ScreenshotContext | null, settings: SettingsDTO, now?: Date, opts?: { untickPast?: boolean }): Candidate[] {
+  const nowMs = (now ?? new Date()).getTime();
+  let previous: string | null = null;
+  return cands.map((c) => {
+    const r = applyTimeResolution(c, shot, settings, now, previous);
+    const iso = fromLocalInputValue(r.startsAtLocal, settings.timezone);
+    if (iso) previous = iso;
+    if (opts?.untickPast && iso && new Date(iso).getTime() <= nowMs) return { ...r, include: false };
+    return r;
+  });
+}
+
+function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: SettingsDTO): Candidate {
+  return {
     id: newCandidateId(),
     screenshotIds: [shot.id],
     timeSourceId: shot.id,
@@ -82,12 +109,6 @@ export function candidateFromExtraction(m: ExtractedMatch, shot: ScreenshotConte
     allowSimilar: false,
     result: null,
   };
-  const resolved = applyTimeResolution(c, shot, settings, now);
-  // A match that has already started can't get a reminder: leave it unticked
-  // so it doesn't block creating alarms for the rest of the screenshot.
-  const iso = fromLocalInputValue(resolved.startsAtLocal, settings.timezone);
-  if (iso && new Date(iso).getTime() <= (now ?? new Date()).getTime()) return { ...resolved, include: false };
-  return resolved;
 }
 
 export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Candidate {
@@ -120,7 +141,7 @@ export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Ca
 }
 
 /** (Re)compute the proposed start time from the screenshot's time text. */
-export function applyTimeResolution(c: Candidate, shot: ScreenshotContext | null, settings: SettingsDTO, now?: Date): Candidate {
+export function applyTimeResolution(c: Candidate, shot: ScreenshotContext | null, settings: SettingsDTO, now?: Date, notBefore?: string | null): Candidate {
   if (c.timeStatus === "manual") return c;
   const corroborated =
     shot?.capturedAtSource === "FILE_MODIFIED" && isCaptureCorroborated(shot.capturedAt, shot.visibleClock, settings.timezone);
@@ -134,6 +155,9 @@ export function applyTimeResolution(c: Candidate, shot: ScreenshotContext | null
     timezoneConfirmed: settings.timezoneConfirmed,
     screenshotTimezone: shot?.timezoneText ?? null,
     dateOrder: settings.dateOrder,
+    ignoreScreenshotTimezone: settings.screenshotTimesAreLocal,
+    assumeToday: settings.screenshotsAreToday,
+    notBefore,
     now,
   });
   const notes = corroborated ? [...r.notes, "Capture time matches the clock visible in the screenshot."] : r.notes;
