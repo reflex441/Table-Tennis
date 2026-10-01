@@ -154,9 +154,12 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 - **Profit:** won = stake × (odds − 1), lost = −stake, void = 0. A win without odds is not counted until you add the odds.
 - **Profit page:** everything is shown in **units**, with the money amount to the right (units × the unit size). Set what 1 unit is worth (and the currency symbol) in **Settings → Units**. The page has:
   - a Bot vs Personal comparison (profit, ROI, win rate, record, staked);
+  - a **running profit graph** for the chosen period (7D / 30D / 90D / All) - hover or use the arrow keys to read any day;
+  - a **daily P/L calendar** (green/red by the day's result). Click a day to list that day's bets;
+  - clicking **Bot** or **Personal** (the filter or the comparison cards) limits the graph, the calendar and the list to those plays;
   - a breakdown per competition;
   - a sortable bet list (date / stake / odds / profit);
-  - period (24h / 7 / 30 days / all) and play-type filters.
+  - period and play-type filters at the top that apply to the whole page.
 - **API:** `PUT/DELETE /api/matches/:id/bet` (`{stake, odds, result}`), and `GET /api/stats?days=30&type=BOT`.
 
 ## Notifications: what browsers and phones can and cannot do

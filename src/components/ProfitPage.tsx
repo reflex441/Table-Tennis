@@ -8,16 +8,22 @@ import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/b
 import { formatDayLabel, formatTime } from "@/lib/format";
 import { PlayTypeChip, ProfitAmount, ResultChip } from "./BetBits";
 import { useSettings } from "./SettingsProvider";
+import { useToday } from "./useNow";
+import { ProfitChart } from "./ProfitChart";
+import { DailyCalendar } from "./DailyCalendar";
+import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
+import { X } from "lucide-react";
+import { DateTime } from "luxon";
 
-type Period = "today" | "7d" | "30d" | "all";
+type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
 type SortKey = "date" | "profit" | "stake" | "odds";
 
 const PERIODS: { id: Period; label: string; days: number | null }[] = [
-  { id: "today", label: "24h", days: 1 },
-  { id: "7d", label: "7 days", days: 7 },
-  { id: "30d", label: "30 days", days: 30 },
-  { id: "all", label: "All time", days: null },
+  { id: "7d", label: "7D", days: 7 },
+  { id: "30d", label: "30D", days: 30 },
+  { id: "90d", label: "90D", days: 90 },
+  { id: "all", label: "All", days: null },
 ];
 
 function pct(n: number | null): string {
@@ -27,19 +33,30 @@ function pct(n: number | null): string {
 export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
   const { settings } = useSettings();
   const tz = settings.timezone;
-  const [period, setPeriod] = useState<{ id: Period; since: number | null }>({ id: "all", since: null });
+  const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
   const [type, setType] = useState<TypeFilter>("ALL");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "date", desc: true });
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const today = useToday(tz);
 
   const inPeriod = useMemo(
-    () => (period.since === null ? initial : initial.filter((r) => new Date(r.startsAt).getTime() >= period.since!)),
-    [initial, period.since],
+    () => (period.fromDay === null ? initial : initial.filter((r) => dayKey(r.startsAt, tz) >= period.fromDay!)),
+    [initial, period.fromDay, tz],
   );
   const bot = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "BOT")), [inPeriod]);
   const personal = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "PERSONAL")), [inPeriod]);
   const filtered = useMemo(() => (type === "ALL" ? inPeriod : inPeriod.filter((r) => r.playType === type)), [inPeriod, type]);
   const overall = useMemo(() => summarize(filtered), [filtered]);
   const byCompetition = useMemo(() => summarizeBy(filtered, (r) => r.competition ?? "Unknown competition"), [filtered]);
+
+  // Daily P/L for the chosen play type (the calendar can page through any month).
+  const daily = useMemo(() => dailyPL(type === "ALL" ? initial : initial.filter((r) => r.playType === type), tz), [initial, type, tz]);
+  const series = useMemo(() => {
+    const keys = [...daily.keys()].sort();
+    const to = today ?? keys[keys.length - 1];
+    const from = period.fromDay ?? keys[0];
+    return from && to ? cumulativeSeries(daily, from, to < from ? from : to) : [];
+  }, [daily, today, period.fromDay]);
 
   const sorted = useMemo(() => {
     const val = (r: BetRowWithMatch): number => {
@@ -54,8 +71,12 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
           return new Date(r.startsAt).getTime();
       }
     };
-    return [...filtered].sort((a, b) => (sort.desc ? val(b) - val(a) : val(a) - val(b)));
-  }, [filtered, sort]);
+    // A day picked on the calendar shows that day's bets, whatever the period.
+    const rows = selectedDay
+      ? initial.filter((r) => (type === "ALL" || r.playType === type) && dayKey(r.startsAt, tz) === selectedDay)
+      : filtered;
+    return [...rows].sort((a, b) => (sort.desc ? val(b) - val(a) : val(a) - val(b)));
+  }, [filtered, initial, type, sort, selectedDay, tz]);
 
   const leader = bot.settled && personal.settled ? (bot.profit === personal.profit ? null : bot.profit > personal.profit ? "BOT" : "PERSONAL") : null;
   const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }));
@@ -81,7 +102,9 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
             options={PERIODS.map((p) => ({ id: p.id, label: p.label }))}
             onChange={(id) => {
               const p = PERIODS.find((x) => x.id === id)!;
-              setPeriod({ id: p.id, since: p.days ? Date.now() - p.days * 86_400_000 : null });
+              // "7D" = today and the 6 days before it (calendar days in the user's timezone).
+              const fromDay = p.days ? DateTime.now().setZone(tz).minus({ days: p.days - 1 }).toISODate() : null;
+              setPeriod({ id: p.id, fromDay });
             }}
           />
           <Segmented
@@ -125,6 +148,26 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
         />
       </section>
 
+      <section className="grid gap-3 lg:grid-cols-2">
+        <div className="card p-3">
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold">
+              Running profit
+              <span className="font-normal text-muted"> · {type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays"}</span>
+            </h2>
+            <span className="text-xs text-muted">{period.fromDay ? `last ${PERIODS.find((x) => x.id === period.id)!.days} days` : "all time"}</span>
+          </div>
+          <ProfitChart points={series} unitSize={settings.unitSize} currency={settings.currency} />
+        </div>
+        <div className="card p-3">
+          <h2 className="mb-2 text-sm font-semibold">
+            Daily P/L
+            <span className="font-normal text-muted"> · {type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays"}</span>
+          </h2>
+          <DailyCalendar days={daily} today={today} selected={selectedDay} onSelect={setSelectedDay} unitSize={settings.unitSize} currency={settings.currency} />
+        </div>
+      </section>
+
       {byCompetition.length > 1 && (
         <section className="card overflow-hidden">
           <h2 className="border-b border-line px-3 py-2 text-sm font-semibold">By competition</h2>
@@ -159,7 +202,14 @@ export function ProfitPage({ initial }: { initial: BetRowWithMatch[] }) {
 
       <section className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <h2 className="text-sm font-semibold">Bets</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            Bets
+            {selectedDay && (
+              <button className="chip gap-1 bg-accent/15 text-accent" onClick={() => setSelectedDay(null)} aria-label="Show all days">
+                {DateTime.fromISO(selectedDay).toFormat("ccc d LLL")} <X className="h-3 w-3" />
+              </button>
+            )}
+          </h2>
           <span className="text-xs text-muted">{sorted.length} shown</span>
         </div>
         {sorted.length === 0 ? (
