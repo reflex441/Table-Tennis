@@ -25,7 +25,7 @@ Upload screenshots of upcoming table tennis matches, selections and statistics. 
 
 ## Tech stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini 3.5 Flash, with Gemini 3.8 Flash as automatic backup) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini 3.5 Flash-Lite, with Gemini 3.8 Flash as automatic backup) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
 
 ## Credentials and external services you need to configure
 

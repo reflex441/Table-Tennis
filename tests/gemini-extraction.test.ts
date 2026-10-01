@@ -126,8 +126,8 @@ describe("extractFromScreenshot", () => {
     const overloaded = Object.assign(new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'), { status: 503 });
     generateContent.mockRejectedValueOnce(overloaded).mockRejectedValueOnce(overloaded).mockResolvedValue({ text: JSON.stringify(sample) });
     const waits: number[] = [];
-    const out = await extractFromScreenshot({ apiKey: "k", model: "gemini-3.5-flash", image: IMAGE, mimeType: "image/png", sleep: async (ms) => void waits.push(ms) });
-    expect(out.model).toBe("gemini-3.5-flash");
+    const out = await extractFromScreenshot({ apiKey: "k", model: "gemini-3.5-flash-lite", image: IMAGE, mimeType: "image/png", sleep: async (ms) => void waits.push(ms) });
+    expect(out.model).toBe("gemini-3.5-flash-lite");
     expect(out.result.matches).toHaveLength(1);
     expect(generateContent).toHaveBeenCalledTimes(3);
     expect(waits).toEqual([2_000, 6_000]);
@@ -136,19 +136,19 @@ describe("extractFromScreenshot", () => {
   it("falls back to the lighter model when the main one stays overloaded", async () => {
     const overloaded = Object.assign(new Error("UNAVAILABLE"), { status: 503 });
     generateContent.mockImplementation(async (req: { model: string }) => {
-      if (req.model === "gemini-3.5-flash") throw overloaded;
+      if (req.model === "gemini-3.5-flash-lite") throw overloaded;
       return { text: JSON.stringify(sample) };
     });
     const out = await extractFromScreenshot({
       apiKey: "k",
-      model: "gemini-3.5-flash",
+      model: "gemini-3.5-flash-lite",
       fallbackModel: "gemini-3.8-flash",
       image: IMAGE,
       mimeType: "image/png",
       sleep: noWait,
     });
     expect(out.model).toBe("gemini-3.8-flash");
-    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.8-flash"]);
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"]);
   });
 
   it("gives a clear message when every attempt is overloaded", async () => {
@@ -246,9 +246,9 @@ describe("testGeminiKey", () => {
   const client = (get: ReturnType<typeof vi.fn>) => ({ models: { get } }) as never;
 
   it("reports a working key", async () => {
-    const get = vi.fn().mockResolvedValue({ name: "models/gemini-3.5-flash", displayName: "Gemini 3.5 Flash" });
-    expect(await testGeminiKey({ apiKey: "k", model: "gemini-3.5-flash", client: client(get) })).toEqual({ ok: true, model: "Gemini 3.5 Flash" });
-    expect(get.mock.calls[0][0].model).toBe("gemini-3.5-flash");
+    const get = vi.fn().mockResolvedValue({ name: "models/gemini-3.5-flash-lite", displayName: "Gemini 3.5 Flash-Lite" });
+    expect(await testGeminiKey({ apiKey: "k", model: "gemini-3.5-flash-lite", client: client(get) })).toEqual({ ok: true, model: "Gemini 3.5 Flash-Lite" });
+    expect(get.mock.calls[0][0].model).toBe("gemini-3.5-flash-lite");
   });
 
   it("explains rejected keys and unknown models", async () => {
