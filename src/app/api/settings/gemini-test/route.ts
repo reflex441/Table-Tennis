@@ -5,10 +5,11 @@ import { env } from "@/lib/env";
 import { handle, parseJson } from "@/lib/api";
 import { getGeminiApiKey } from "@/lib/settings";
 import { testGeminiKey } from "@/lib/gemini/extract";
+import { geminiApiKeySchema } from "@/lib/validation/settings";
 
 const schema = z.object({
   /** Test this key before saving it; omit to test the key currently in use. */
-  apiKey: z.string().trim().min(1).max(200).optional(),
+  apiKey: geminiApiKeySchema.optional(),
 });
 
 export const POST = handle(async (request: Request) => {

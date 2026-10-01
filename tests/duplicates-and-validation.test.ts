@@ -184,7 +184,12 @@ describe("API validation schemas", () => {
     expect(settingsUpdateSchema.parse({ geminiApiKey: "  AIzaSyD-abcdefghijklmnopqrstuvwxyz12345 \n" }).geminiApiKey).toBe("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345");
     expect(settingsUpdateSchema.safeParse({ geminiApiKey: null }).success).toBe(true);
     expect(settingsUpdateSchema.safeParse({ geminiApiKey: "short" }).success).toBe(false);
-    expect(settingsUpdateSchema.safeParse({ geminiApiKey: "AIza key with spaces in it 123456" }).success).toBe(false);
+    // Copy/paste artefacts are cleaned up rather than rejected.
+    expect(settingsUpdateSchema.parse({ geminiApiKey: "AIzaSyD-abcdefghij\u200Bklmnopqrstuvwxyz12345" }).geminiApiKey).toBe("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345");
+    expect(settingsUpdateSchema.parse({ geminiApiKey: "AIzaSyD-abcdefghij\nklmnopqrstuvwxyz12345" }).geminiApiKey).toBe("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345");
+    // Other Google key formats (e.g. containing '.') are accepted.
+    expect(settingsUpdateSchema.safeParse({ geminiApiKey: "AQ.Ab8RN6LxYz-abc_DEF.ghijklmnopqrstuv" }).success).toBe(true);
+    expect(settingsUpdateSchema.safeParse({ geminiApiKey: "AIzaSyD-abcdéfghijklmnopqrstuvwxyz12345" }).success).toBe(false);
     expect(maskKey("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345")).toBe("…2345");
     expect(maskKey(null)).toBeNull();
   });

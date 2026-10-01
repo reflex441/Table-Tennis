@@ -10,6 +10,23 @@ export function isValidTimeZone(tz: string): boolean {
   }
 }
 
+/**
+ * Gemini API key as pasted by the user. Whitespace and invisible characters
+ * (often picked up when copying) are removed; any printable ASCII character
+ * is allowed because Google's key formats vary (some contain '.').
+ * Shared by "Test" and "Save" so both always accept the same keys.
+ */
+export const geminiApiKeySchema = z
+  .string()
+  .transform((s) => s.replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, ""))
+  .pipe(
+    z
+      .string()
+      .min(20, "That doesn't look like a Gemini API key (too short)")
+      .max(200, "That doesn't look like a Gemini API key (too long)")
+      .regex(/^[\x21-\x7E]+$/, "The key contains characters that can't be part of an API key"),
+  );
+
 export const settingsUpdateSchema = z
   .object({
     defaultReminderMinutes: reminderMinutesSchema,
@@ -21,13 +38,7 @@ export const settingsUpdateSchema = z
     soundEnabled: z.boolean(),
     includeStatsInNotification: z.boolean(),
     /** New Gemini API key, or null to remove the stored key. */
-    geminiApiKey: z
-      .string()
-      .trim()
-      .min(20, "That doesn't look like a Gemini API key")
-      .max(200, "That doesn't look like a Gemini API key")
-      .regex(/^[A-Za-z0-9_-]+$/, "API keys contain only letters, digits, '-' and '_'")
-      .nullable(),
+    geminiApiKey: geminiApiKeySchema.nullable(),
   })
   .partial();
 
