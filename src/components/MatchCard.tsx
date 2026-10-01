@@ -7,12 +7,15 @@ import type { MatchDTO } from "@/lib/types";
 import { formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
 import { Countdown, EdgeIndicator, PercentBar, SelectionBadge, StatusBadge } from "./MatchBits";
 import { useNow } from "./useNow";
+import { BetPanel, PlayTypeChip } from "./BetBits";
 
 export interface MatchCardActions {
   onCancel: (m: MatchDTO) => Promise<void>;
   onReactivate: (m: MatchDTO) => Promise<void>;
   onComplete: (m: MatchDTO) => Promise<void>;
   onDelete: (m: MatchDTO) => Promise<void>;
+  /** The match changed (e.g. its bet was recorded or settled). */
+  onUpdate: (m: MatchDTO) => void;
 }
 
 export function MatchCard({ match, timezone, actions, highlight }: { match: MatchDTO; timezone: string; actions: MatchCardActions; highlight?: boolean }) {
@@ -40,7 +43,10 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
           <Link href={`/matches/${match.id}`} className="block truncate text-[15px] font-semibold leading-tight hover:underline">
             {match.player1} <span className="font-normal text-muted">vs</span> {match.player2}
           </Link>
-          <p className="truncate text-xs text-muted">{match.competition ?? "Unknown competition"}</p>
+          <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+            <PlayTypeChip playType={match.playType} />
+            <span className="truncate">{match.competition ?? "Unknown competition"}</span>
+          </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Countdown target={match.startsAt} status={status} />
@@ -80,6 +86,12 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
         <div className="grid grid-cols-2 gap-3 pt-0.5">
           <PercentBar value={s.ouHitRate} tone={s.selection === "UNDER" ? "under" : "over"} label="O/U hit rate" />
           <PercentBar value={s.edge} tone="edge" label="Edge" />
+        </div>
+      )}
+
+      {(match.bet || status !== "CANCELLED") && (
+        <div className="border-t border-line/60 pt-1.5">
+          <BetPanel match={match} onChange={actions.onUpdate} />
         </div>
       )}
 

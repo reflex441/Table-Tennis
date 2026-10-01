@@ -27,6 +27,16 @@ export interface AlarmDTO {
   ackAction: "placed" | "skipped" | null;
 }
 
+export interface BetDTO {
+  id: string;
+  stake: number;
+  odds: number | null;
+  result: "PENDING" | "WON" | "LOST" | "VOID";
+  profit: number | null;
+  placedAt: string;
+  settledAt: string | null;
+}
+
 export interface MatchDTO {
   id: string;
   player1: string;
@@ -38,6 +48,9 @@ export interface MatchDTO {
   notes: string | null;
   createdAt: string;
   screenshotIds: string[];
+  playType: "BOT" | "PERSONAL";
+  stakeUnits: number | null;
+  bet: BetDTO | null;
   statistics: MatchStatisticsDTO;
   alarm: AlarmDTO | null;
 }

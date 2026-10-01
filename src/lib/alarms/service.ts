@@ -4,17 +4,15 @@ import { checkSchedule, computeFireAt } from "./schedule";
 import { matchDedupeKey, playersKey } from "@/lib/matching/dedupe";
 import type { MatchInput, UpdateMatchInput } from "@/lib/validation/match";
 import type { MatchDTO } from "@/lib/types";
+import { placeBet } from "@/lib/bets/service";
 
-export class ServiceError extends Error {
-  constructor(message: string, readonly status: number, readonly code: string, readonly details?: unknown) {
-    super(message);
-    this.name = "ServiceError";
-  }
-}
+export { ServiceError } from "./service-error";
+import { ServiceError } from "./service-error";
 
 export const matchInclude = {
   statistics: true,
   alarm: true,
+  bet: true,
   sources: { select: { screenshotId: true } },
 } satisfies Prisma.MatchInclude;
 
@@ -71,6 +69,8 @@ export async function createMatchWithAlarm(prisma: PrismaClient, input: MatchInp
         rawTimeText: input.rawTimeText,
         notes: input.notes,
         dedupeKey,
+        playType: input.playType ?? (input.selection ? "BOT" : "PERSONAL"),
+        stakeUnits: input.stakeUnits,
         statistics: {
           create: {
             selection: input.selection,
@@ -164,6 +164,7 @@ export async function updateMatch(prisma: PrismaClient, id: string, input: Updat
         ...(input.competition !== undefined ? { competition: input.competition } : {}),
         ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.playType !== undefined ? { playType: input.playType } : {}),
         ...(Object.keys(statsUpdate).length
           ? { statistics: { upsert: { create: statsUpdate, update: statsUpdate } } }
           : {}),
@@ -218,12 +219,20 @@ const CLEAR_RINGING = { ackAt: null, ackAction: null, nextRepeatAt: null, repeat
  * The user confirmed a ringing alarm ("I've placed the bet" or "Skip"):
  * stops the in-app siren and the repeated notifications on every device.
  */
-export async function acknowledgeAlarm(prisma: PrismaClient, alarmId: string, action: "placed" | "skipped", now = new Date()): Promise<MatchWithRelations> {
+export async function acknowledgeAlarm(
+  prisma: PrismaClient,
+  alarmId: string,
+  action: "placed" | "skipped",
+  now = new Date(),
+  bet?: { stake?: number; odds?: number | null },
+): Promise<MatchWithRelations> {
   const alarm = await prisma.alarm.findUnique({ where: { id: alarmId }, select: { matchId: true, ackAt: true } });
   if (!alarm) throw new ServiceError("Alarm not found.", 404, "not_found");
   if (!alarm.ackAt) {
     await prisma.alarm.updateMany({ where: { id: alarmId, ackAt: null }, data: { ackAt: now, ackAction: action, nextRepeatAt: null } });
   }
+  // "I've placed the bet" records the bet for profit tracking.
+  if (action === "placed") await placeBet(prisma, alarm.matchId, bet ?? {}, now);
   return (await prisma.match.findUnique({ where: { id: alarm.matchId }, include: matchInclude }))!;
 }
 
@@ -256,6 +265,19 @@ export function toMatchDTO(m: MatchWithRelations): MatchDTO {
     notes: m.notes,
     createdAt: m.createdAt.toISOString(),
     screenshotIds: m.sources.map((s) => s.screenshotId),
+    playType: m.playType,
+    stakeUnits: m.stakeUnits,
+    bet: m.bet
+      ? {
+          id: m.bet.id,
+          stake: m.bet.stake,
+          odds: m.bet.odds,
+          result: m.bet.result,
+          profit: m.bet.profit,
+          placedAt: m.bet.placedAt.toISOString(),
+          settledAt: m.bet.settledAt?.toISOString() ?? null,
+        }
+      : null,
     statistics: {
       selection: m.statistics?.selection ?? null,
       pointsLine: m.statistics?.pointsLine ?? null,

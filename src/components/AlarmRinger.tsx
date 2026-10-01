@@ -12,6 +12,8 @@ import { formatDayLabel, formatPct, formatTime } from "@/lib/format";
 import { useSettings } from "./SettingsProvider";
 import { NOTIFICATION_EVENT } from "./NotificationProvider";
 import { Countdown, SelectionBadge } from "./MatchBits";
+import { PlayTypeChip } from "./BetBits";
+import { defaultStake, formatMoney } from "@/lib/bets/profit";
 
 const POLL_MS = 5_000;
 const noopSubscribe = () => () => {};
@@ -29,6 +31,9 @@ export function AlarmRinger() {
   const [busy, setBusy] = useState(false);
   const [soundBlocked, setSoundBlocked] = useState(false);
   const stopRef = useRef<(() => void) | null>(null);
+  // Stake (units) / odds typed for the alarm on screen, keyed by match.
+  const [betInput, setBetInput] = useState<{ matchId: string; stake: string; odds: string } | null>(null);
+  const [betError, setBetError] = useState<string | null>(null);
   const enabled = isDesktop && settings.ringUntilAck && pathname !== "/login";
 
   const refresh = useCallback(async () => {
@@ -160,11 +165,23 @@ export function AlarmRinger() {
   const s = match.statistics;
   const tz = settings.timezone;
 
+  const input =
+    betInput?.matchId === match.id ? betInput : { matchId: match.id, stake: String(defaultStake(match.playType, match.stakeUnits)), odds: "" };
+  const stakeNum = Number(input.stake);
+
   const ack = async (action: "placed" | "skipped") => {
     if (!match.alarm) return;
+    let bet: { stake?: number; odds?: number | null } = {};
+    if (action === "placed") {
+      const odds = input.odds.trim() ? Number(input.odds) : null;
+      if (!Number.isFinite(stakeNum) || stakeNum <= 0) return setBetError("Stake must be a number of units above 0.");
+      if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return setBetError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
+      bet = { stake: stakeNum, odds };
+    }
+    setBetError(null);
     setBusy(true);
     try {
-      await api(`/api/alarms/${match.alarm.id}/ack`, { method: "POST", json: { action } });
+      await api(`/api/alarms/${match.alarm.id}/ack`, { method: "POST", json: { action, ...bet } });
       // Remove the side notification for this alarm too.
       const reg = await navigator.serviceWorker?.getRegistration("/");
       (await reg?.getNotifications({ tag: `alarm-${match.alarm.id}` }))?.forEach((n) => n.close());
@@ -187,7 +204,10 @@ export function AlarmRinger() {
             <h2 id="alarm-title" className="truncate text-xl font-bold">
               {match.player1} <span className="font-normal text-muted">vs</span> {match.player2}
             </h2>
-            <p className="text-sm text-muted">{match.competition ?? "Unknown competition"}</p>
+            <p className="flex items-center gap-1.5 text-sm text-muted">
+              <PlayTypeChip playType={match.playType} />
+              <span className="truncate">{match.competition ?? "Unknown competition"}</span>
+            </p>
           </div>
         </div>
 
@@ -229,8 +249,36 @@ export function AlarmRinger() {
           </button>
         )}
 
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <label>
+            <span className="label">Stake (units)</span>
+            <input
+              className="input tabular"
+              inputMode="decimal"
+              value={input.stake}
+              onChange={(e) => setBetInput({ ...input, stake: e.target.value })}
+              aria-label="Stake in units"
+            />
+            {Number.isFinite(stakeNum) && stakeNum > 0 && (
+              <span className="mt-0.5 block text-[11px] text-muted">= {formatMoney(stakeNum, settings.unitSize, settings.currency, false)}</span>
+            )}
+          </label>
+          <label>
+            <span className="label">Odds (optional)</span>
+            <input
+              className="input tabular"
+              inputMode="decimal"
+              placeholder="1.85"
+              value={input.odds}
+              onChange={(e) => setBetInput({ ...input, odds: e.target.value })}
+              aria-label="Decimal odds"
+            />
+          </label>
+        </div>
+        {betError && <p className="mt-1 text-xs text-under">{betError}</p>}
+
         <button
-          className="btn mt-4 w-full bg-over py-3 text-base font-bold text-slate-950 hover:bg-emerald-400"
+          className="btn mt-3 w-full bg-over py-3 text-base font-bold text-slate-950 hover:bg-emerald-400"
           disabled={busy}
           onClick={() => void ack("placed")}
           autoFocus

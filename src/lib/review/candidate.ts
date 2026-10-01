@@ -32,6 +32,10 @@ export interface Candidate {
   ouStats: string;
   ouHitRate: string;
   edge: string;
+  /** BOT when the screenshot showed an OVER/UNDER pick badge, else PERSONAL. */
+  playType: "BOT" | "PERSONAL";
+  /** Stake from the pick badge ("1U OVER" -> "1"), in units. */
+  stakeUnits: string;
   reminderMinutes: number;
   confidence: number | null;
   conflicts: { field: string; kept: string; other: string }[];
@@ -103,6 +107,8 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     ouStats: m.ouStats ?? "",
     ouHitRate: numStr(m.ouHitRate),
     edge: numStr(m.edge),
+    playType: m.selection ? "BOT" : "PERSONAL",
+    stakeUnits: numStr(m.stakeUnits),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: m.confidence,
     conflicts: [],
@@ -132,6 +138,8 @@ export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Ca
     ouStats: "",
     ouHitRate: "",
     edge: "",
+    playType: "PERSONAL",
+    stakeUnits: "",
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: null,
     conflicts: [],
@@ -199,6 +207,8 @@ export function mergeCandidates(primary: Candidate, secondary: Candidate): Candi
     ouStats: (merged.ouStats as string | null) ?? "",
     ouHitRate: (merged.ouHitRate as string | null) ?? "",
     edge: (merged.edge as string | null) ?? "",
+    playType: primary.playType === "BOT" || secondary.playType === "BOT" ? "BOT" : "PERSONAL",
+    stakeUnits: primary.stakeUnits || secondary.stakeUnits,
     screenshotIds: Array.from(new Set([...primary.screenshotIds, ...secondary.screenshotIds])),
     timeSourceId: timeFromPrimary ? primary.timeSourceId : sec.timeSourceId,
     ...(timeFromPrimary
@@ -267,5 +277,10 @@ export function candidateToPayload(c: Candidate, timezone: string) {
     ouStats: c.ouStats.trim() || null,
     ouHitRate: num(c.ouHitRate),
     edge: num(c.edge),
+    playType: c.playType,
+    stakeUnits: (() => {
+      const v = optNumber(c.stakeUnits, 0, 100);
+      return v === "invalid" ? null : v;
+    })(),
   };
 }

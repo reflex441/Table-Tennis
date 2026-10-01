@@ -75,6 +75,7 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
     onCancel: alarmAction("cancel"),
     onReactivate: alarmAction("reactivate"),
     onComplete: alarmAction("complete"),
+    onUpdate: replace,
     onDelete: async (m) => {
       try {
         await api(`/api/matches/${m.id}`, { method: "DELETE" });

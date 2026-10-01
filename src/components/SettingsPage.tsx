@@ -263,6 +263,8 @@ export function SettingsPage() {
 
       <AlarmSection />
 
+      <UnitsSection />
+
       <Section title="Notification preferences">
         <Toggle label="Browser push notifications" hint="Send reminders to subscribed devices, even when the app is closed." checked={settings.pushEnabled} onChange={(v) => void save({ pushEnabled: v }, "push")} />
         <Toggle label="In-app notifications" hint="Show reminders in the notification centre and as pop-ups while the app is open." checked={settings.inAppEnabled} onChange={(v) => void save({ inAppEnabled: v }, "inapp")} />
@@ -559,5 +561,66 @@ function AlarmSection() {
         Windows: if pop-ups don&apos;t appear, turn off &quot;Do not disturb&quot; (bell icon at the bottom right of the taskbar) or add your browser under Settings → System → Notifications → Set priority notifications. Keep a TT Alarms tab open on your computer (it can be in the background) - the siren plays from that tab. Websites can&apos;t play a continuous sound when the browser is closed; then you&apos;ll still get the repeating notification.
       </p>
     </Section>
+  );
+}
+
+/** What one betting unit is worth; the Profit page shows units with this money amount next to them. */
+function UnitsSection() {
+  const { settings, update } = useSettings();
+  const [size, setSize] = useState(String(settings.unitSize));
+  const [currency, setCurrency] = useState(settings.currency);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    const n = Number(size.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(n) || n <= 0) return setError("Enter how much 1 unit is worth, e.g. 10.");
+    if (!currency.trim()) return setError("Enter a currency symbol, e.g. $.");
+    setBusy(true);
+    setError(null);
+    try {
+      const s = await update({ unitSize: Math.round(n * 100) / 100, currency: currency.trim() });
+      setSize(String(s.unitSize));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div id="units" className="scroll-mt-16">
+      <Section title="Units" description="Profit is tracked in units. Set what 1 unit is worth - the Profit page shows the money amount next to every unit figure.">
+        <div className="flex flex-wrap items-end gap-2">
+          <span className="pb-1.5 text-sm">1 unit =</span>
+          <label className="w-16">
+            <span className="label">Currency</span>
+            <input className="input" value={currency} maxLength={4} onChange={(e) => setCurrency(e.target.value)} aria-label="Currency symbol" />
+          </label>
+          <label className="w-28">
+            <span className="label">Amount</span>
+            <input
+              className="input tabular"
+              inputMode="decimal"
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void save()}
+              aria-label="Value of one unit"
+            />
+          </label>
+          <button className="btn-primary" disabled={busy} onClick={() => void save()}>
+            {saved ? "Saved" : "Save"}
+          </button>
+        </div>
+        {error && <p className="mt-1 text-xs text-under">{error}</p>}
+        <p className="mt-2 text-xs text-muted">
+          Example: a +2.5u day = {settings.currency}
+          {(2.5 * settings.unitSize).toFixed(2)}. Bot plays default to the stake on the pick badge (&quot;1U OVER&quot; = 1 unit); personal plays default to 1 unit.
+        </p>
+      </Section>
+    </div>
   );
 }

@@ -51,6 +51,19 @@ enum DeliveryStatus {
   FAILED
 }
 
+/// BOT = the screenshot showed a pick badge (e.g. "1U OVER (12/17, 71%)"); PERSONAL = your own play.
+enum PlayType {
+  BOT
+  PERSONAL
+}
+
+enum BetResult {
+  PENDING
+  WON
+  LOST
+  VOID
+}
+
 /// An uploaded screenshot. Image bytes are stored in Postgres so the app
 /// has no extra storage dependency (files are capped at 8 MB).
 model Screenshot {
@@ -107,10 +120,14 @@ model Match {
   notes       String?
   /// Normalised "player-a|player-b|startMinute" key used to prevent duplicates.
   dedupeKey   String   @unique
+  playType    PlayType @default(PERSONAL)
+  /// Stake in units shown on the pick badge ("1U"), if any.
+  stakeUnits  Float?
 
   statistics MatchStatistics?
   alarm      Alarm?
   sources    MatchSource[]
+  bet        Bet?
 
   @@index([startsAt])
 }
@@ -175,6 +192,26 @@ model Alarm {
 
   @@index([status, nextAttemptAt])
   @@index([status, nextRepeatAt])
+}
+
+/// A bet actually placed on a match (created by "I've placed the bet").
+model Bet {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  matchId   String    @unique
+  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  /// Units staked (1 unit = Settings.unitSize in money).
+  stake     Float
+  /// Decimal odds, e.g. 1.85. Needed to compute profit for a win.
+  odds      Float?
+  result    BetResult @default(PENDING)
+  /// Profit in units, stored for sorting/aggregation: WON stake*(odds-1), LOST -stake, VOID 0.
+  profit    Float?
+  placedAt  DateTime  @default(now()) @db.Timestamptz(3)
+  settledAt DateTime? @db.Timestamptz(3)
+
+  @@index([result])
 }
 
 model PushSubscription {
@@ -255,6 +292,10 @@ model Settings {
   ringUntilAck               Boolean  @default(true)
   /// Seconds between repeated push notifications while an alarm rings.
   repeatSeconds              Int      @default(30)
+  /// Money per unit (a "1U" bot play stakes this amount).
+  unitSize                   Float    @default(10)
+  /// Currency symbol shown next to stakes and profit.
+  currency                   String   @default("$")
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?

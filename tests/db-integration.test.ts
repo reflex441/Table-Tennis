@@ -13,6 +13,9 @@ import { dispatchDueAlarms, type PushSender } from "@/lib/alarms/dispatcher";
 import { acknowledgeAlarm, changeAlarmState, createMatchWithAlarm, listRingingAlarms, updateMatch } from "@/lib/alarms/service";
 import { matchInputSchema } from "@/lib/validation/match";
 import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
+import { deleteBet, updateBet } from "@/lib/bets/service";
+import { listBetRows } from "@/lib/bets/queries";
+import { summarize } from "@/lib/bets/profit";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -32,7 +35,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings" CASCADE`,
+      `TRUNCATE "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings" CASCADE`,
     );
   });
 
@@ -145,6 +148,47 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // Rescheduling clears the confirmation so the alarm rings again.
     const updated = await updateMatch(prisma, res.match.id, { reminderMinutes: 4 }, new Date("2030-09-21T17:55:50Z"));
     expect(updated.alarm?.ackAt).toBeNull();
+  });
+
+  it("classifies bot/personal plays and tracks bet profit in units", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const botRes = await createMatchWithAlarm(prisma, input({ stakeUnits: 2 }), now);
+    const personalRes = await createMatchWithAlarm(prisma, input({ player1: "Novak P", player2: "Kral T", selection: null, startsAt: "2030-09-21T19:00:00Z" }), now);
+    if (botRes.status !== "created" || personalRes.status !== "created") throw new Error("not created");
+    expect(botRes.match.playType).toBe("BOT");
+    expect(personalRes.match.playType).toBe("PERSONAL");
+
+    // "I've placed the bet" records the bet; the stake defaults to the badge units.
+    const acked = await acknowledgeAlarm(prisma, botRes.match.alarm!.id, "placed", now, { odds: 1.9 });
+    expect(acked.bet).toMatchObject({ stake: 2, odds: 1.9, result: "PENDING", profit: null });
+    // Acknowledging again keeps a single bet.
+    await acknowledgeAlarm(prisma, botRes.match.alarm!.id, "placed", now);
+    expect(await prisma.bet.count()).toBe(1);
+
+    const won = await updateBet(prisma, botRes.match.id, { result: "WON" }, now);
+    expect(won.profit).toBe(1.8);
+    expect(won.settledAt).not.toBeNull();
+
+    // Settling a match without a recorded bet records it with 1 unit.
+    const lost = await updateBet(prisma, personalRes.match.id, { result: "LOST" }, now);
+    expect(lost).toMatchObject({ stake: 1, profit: -1 });
+
+    // Skipping does not record a bet.
+    const skipRes = await createMatchWithAlarm(prisma, input({ player1: "X", player2: "Y", startsAt: "2030-09-21T20:00:00Z" }), now);
+    if (skipRes.status !== "created") throw new Error("not created");
+    expect((await acknowledgeAlarm(prisma, skipRes.match.alarm!.id, "skipped", now)).bet).toBeNull();
+
+    const rows = await listBetRows(prisma);
+    expect(summarize(rows.filter((r) => r.playType === "BOT")).profit).toBe(1.8);
+    expect(summarize(rows.filter((r) => r.playType === "PERSONAL")).profit).toBe(-1);
+    expect((await listBetRows(prisma, { playType: "PERSONAL" })).map((r) => r.matchId)).toEqual([personalRes.match.id]);
+
+    // Re-classifying a match moves its bet to the other group.
+    await updateMatch(prisma, personalRes.match.id, { playType: "BOT" }, now);
+    expect((await listBetRows(prisma, { playType: "BOT" })).length).toBe(2);
+
+    await deleteBet(prisma, botRes.match.id);
+    expect(await prisma.bet.count()).toBe(1);
   });
 
   it("reschedules on edit and ignores cancelled alarms", async () => {

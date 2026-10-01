@@ -15,6 +15,8 @@ export interface ExtractedMatch {
   ouHitRate: number | null;
   /** EDGE percentage -100..100. */
   edge: number | null;
+  /** Stake in units from a pick badge, e.g. "1U OVER (...)" -> 1. */
+  stakeUnits: number | null;
   /** Model's confidence 0-1 that this entry was read correctly. */
   confidence: number | null;
 }

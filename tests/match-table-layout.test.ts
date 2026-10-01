@@ -24,6 +24,8 @@ const settings: SettingsDTO = {
   scanSpeed: "fast",
   ringUntilAck: true,
   repeatSeconds: 30,
+  unitSize: 10,
+  currency: "$",
   geminiKeySource: "settings",
   geminiKeyHint: "…0000",
 };

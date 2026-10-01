@@ -153,12 +153,33 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
         )}
       </div>
 
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Play type">
+          {(["BOT", "PERSONAL"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="radio"
+              aria-checked={c.playType === t}
+              className={`rounded-md px-2 py-0.5 ${c.playType === t ? (t === "BOT" ? "bg-violet-500/20 font-semibold text-violet-300" : "bg-amber-500/15 font-semibold text-amber-300") : "text-muted hover:text-text"}`}
+              onClick={() => onChange({ playType: t })}
+            >
+              {t === "BOT" ? "Bot play" : "Personal play"}
+            </button>
+          ))}
+        </div>
+        {c.playType === "BOT" && c.stakeUnits && <span className="text-muted">Badge stake: {c.stakeUnits}u</span>}
+      </div>
+
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Field label="Selection">
           <select
             className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : ""}`}
             value={c.selection}
-            onChange={(e) => onChange({ selection: e.target.value as Candidate["selection"] })}
+            onChange={(e) => {
+              const selection = e.target.value as Candidate["selection"];
+              onChange({ selection, playType: selection ? "BOT" : "PERSONAL" });
+            }}
           >
             <option value="">—</option>
             <option value="OVER">OVER</option>

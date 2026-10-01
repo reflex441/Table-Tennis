@@ -96,6 +96,7 @@ function normaliseMatch(raw: unknown, index: number, warnings: string[]): Extrac
     ouStats: cleanOuStats(r.ouStats, `${p}ouStats`, warnings),
     ouHitRate: cleanNumber(r.ouHitRate, `${p}ouHitRate`, warnings, 0, 100),
     edge: cleanNumber(r.edge, `${p}edge`, warnings, -100, 100),
+    stakeUnits: cleanNumber(r.stakeUnits, `${p}stakeUnits`, warnings, 0, 100),
     confidence: cleanNumber(r.confidence, `${p}confidence`, warnings, 0, 1),
   };
 

@@ -35,6 +35,17 @@ export const statisticsSchema = z.object({
 
 const isoDate = z.iso.datetime({ offset: true, error: "Start time must be an ISO date-time" });
 
+export const playTypeSchema = z.enum(["BOT", "PERSONAL"]);
+
+/** Record / edit a placed bet. Stake in units; decimal odds. */
+export const betInputSchema = z.object({
+  stake: z.number().positive("Stake must be more than 0").max(1000, "At most 1000 units").optional(),
+  odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish(),
+  result: z.enum(["PENDING", "WON", "LOST", "VOID"]).optional(),
+});
+
+export type BetInput = z.infer<typeof betInputSchema>;
+
 export const matchInputSchema = z
   .object({
     player1: nameSchema,
@@ -48,6 +59,9 @@ export const matchInputSchema = z
     screenshotIds: z.array(z.string().min(1).max(40)).max(20).default([]),
     /** Create even if a similar match already exists. */
     allowSimilar: z.boolean().default(false),
+    /** BOT if the screenshot showed a pick badge; defaults from the selection. */
+    playType: playTypeSchema.optional(),
+    stakeUnits: z.number().min(0).max(100).nullish().transform((v) => v ?? null),
   })
   .and(statisticsSchema);
 
@@ -66,10 +80,17 @@ export const updateMatchSchema = z
     timezone: z.string().trim().min(1).max(64).optional(),
     notes: optionalText(500).optional(),
     reminderMinutes: reminderMinutesSchema.optional(),
+    playType: playTypeSchema.optional(),
   })
   .and(statisticsSchema.partial());
 
 export type UpdateMatchInput = z.infer<typeof updateMatchSchema>;
+
+export const ackSchema = z.object({
+  action: z.enum(["placed", "skipped"]).default("placed"),
+  stake: z.number().positive().max(1000).optional(),
+  odds: z.number().gt(1).max(1000).nullish(),
+});
 
 export const alarmActionSchema = z.object({
   action: z.enum(["cancel", "reactivate", "complete"]),

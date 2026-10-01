@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, LayoutDashboard, Settings, Upload, AlertTriangle } from "lucide-react";
+import { Bell, LayoutDashboard, Settings, Upload, AlertTriangle, TrendingUp } from "lucide-react";
 import { useNotifications } from "./NotificationProvider";
 import { DateTime } from "luxon";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/upload", label: "Upload", icon: Upload },
+  { href: "/profit", label: "Profit", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -55,7 +56,7 @@ export function AppShell({ children, dbError }: { children: React.ReactNode; dbE
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 pb-24 pt-4 sm:px-4 sm:pb-10">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-4">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (

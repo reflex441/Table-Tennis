@@ -38,6 +38,8 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   scanSpeed: "fast",
   ringUntilAck: true,
   repeatSeconds: 30,
+  unitSize: 10,
+  currency: "$",
   geminiKeySource: "none",
   geminiKeyHint: null,
 };

@@ -12,6 +12,7 @@ import { MatchEditor, type MatchFormValues } from "./MatchEditor";
 import { useSettings } from "./SettingsProvider";
 import { useNow } from "./useNow";
 import { useNotifications } from "./NotificationProvider";
+import { BetPanel, PlayTypeChip } from "./BetBits";
 
 export function MatchDetail({ initial }: { initial: MatchDTO }) {
   const { settings } = useSettings();
@@ -56,6 +57,16 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
     }
   };
 
+  const setPlayType = async (playType: "BOT" | "PERSONAL") => {
+    if (playType === match.playType) return;
+    try {
+      const res = await api<{ match: MatchDTO }>(`/api/matches/${match.id}`, { method: "PATCH", json: { playType } });
+      setMatch(res.match);
+    } catch (err) {
+      notify("Update failed", err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const future = new Date(match.startsAt).getTime() > now;
 
   return (
@@ -70,7 +81,10 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
             <h1 className="text-xl font-semibold leading-tight">
               {match.player1} <span className="font-normal text-muted">vs</span> {match.player2}
             </h1>
-            <p className="text-sm text-muted">{match.competition ?? "Unknown competition"}</p>
+            <p className="flex items-center gap-2 text-sm text-muted">
+              <PlayTypeChip playType={match.playType} />
+              {match.competition ?? "Unknown competition"}
+            </p>
           </div>
           <div className="text-right">
             <Countdown target={match.startsAt} status={alarm?.status} />
@@ -156,6 +170,27 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
             <Trash2 className="h-4 w-4" /> Delete
           </button>
         </div>
+      </div>
+
+      <div className="card flex flex-col gap-2 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Bet & profit</h2>
+          <div className="flex rounded-lg border border-line p-0.5 text-xs" role="radiogroup" aria-label="Play type">
+            {(["BOT", "PERSONAL"] as const).map((t) => (
+              <button
+                key={t}
+                role="radio"
+                aria-checked={match.playType === t}
+                className={`rounded-md px-2.5 py-1 ${match.playType === t ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
+                onClick={() => void setPlayType(t)}
+              >
+                {t === "BOT" ? "Bot play" : "Personal play"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <BetPanel match={match} onChange={setMatch} />
+        <p className="text-[11px] text-muted">Stake and profit are in units; the money amount uses the unit size from Settings.</p>
       </div>
 
       {editing && (

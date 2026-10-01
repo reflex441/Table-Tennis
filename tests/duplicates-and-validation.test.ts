@@ -73,6 +73,8 @@ const settings: SettingsDTO = {
   scanSpeed: "fast",
   ringUntilAck: true,
   repeatSeconds: 30,
+  unitSize: 10,
+  currency: "$",
   geminiKeySource: "none",
   geminiKeyHint: null,
 };
@@ -88,6 +90,7 @@ const extracted = (over: Partial<ExtractedMatch>): ExtractedMatch => ({
   ouStats: null,
   ouHitRate: null,
   edge: null,
+  stakeUnits: null,
   confidence: null,
   ...over,
 });

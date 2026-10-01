@@ -21,6 +21,7 @@ Upload screenshots of upcoming table tennis matches, selections and statistics. 
 - **Reliable scheduling**: alarms are stored in PostgreSQL and dispatched by a server-side loop that claims work atomically. Retries, crash recovery and de-duplication are covered in [Scheduling](#scheduling-architecture).
 - **Settings**: default reminder, timezone, date order, push/in-app/sound/statistics preferences, device subscriptions, test notification and server status.
 - **Optional password protection** for internet-facing deployments.
+- **Bot vs personal plays + profit tracking**: rows with an OVER/UNDER pick badge are bot plays, the rest are personal plays. Bets are tracked in units, and the **Profit** page compares the two (see [Profit tracking](#profit-tracking)).
 
 ## Tech stack
 
@@ -145,6 +146,18 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 - Confirming on any device stops the alarm everywhere. The match card then shows **Bet placed ✓** or **Skipped**.
 - The siren can only play from an open browser tab (it can be in the background). Keep a TT Alarms tab open on the computer. Browsers block sound until you've clicked the page once; use **Settings → Test alarm sound**.
 - Turn it off with **Settings → Alarm on computers → Ring until I confirm the bet**.
+
+## Profit tracking
+
+- **Bot play vs personal play:** a match whose screenshot shows an OVER/UNDER pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**. The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
+- **Recording a bet:** "I've placed the bet" on the computer alarm asks for the stake (in units; bot plays default to the badge stake, personal plays to 1u) and, optionally, the decimal odds. You can also click **Record bet** on any match card. Then mark it **Won / Lost / Void**.
+- **Profit:** won = stake × (odds − 1), lost = −stake, void = 0. A win without odds is not counted until you add the odds.
+- **Profit page:** everything is shown in **units**, with the money amount to the right (units × the unit size). Set what 1 unit is worth (and the currency symbol) in **Settings → Units**. The page has:
+  - a Bot vs Personal comparison (profit, ROI, win rate, record, staked);
+  - a breakdown per competition;
+  - a sortable bet list (date / stake / odds / profit);
+  - period (24h / 7 / 30 days / all) and play-type filters.
+- **API:** `PUT/DELETE /api/matches/:id/bet` (`{stake, odds, result}`), and `GET /api/stats?days=30&type=BOT`.
 
 ## Notifications: what browsers and phones can and cannot do
 

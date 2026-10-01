@@ -42,6 +42,8 @@ export const settingsUpdateSchema = z
     scanSpeed: z.enum(["fastest", "fast", "careful"]),
     ringUntilAck: z.boolean(),
     repeatSeconds: z.number().int().min(15, "At least 15 seconds").max(300, "At most 5 minutes"),
+    unitSize: z.number().positive("Must be more than 0").max(1_000_000),
+    currency: z.string().trim().min(1).max(4),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -74,6 +76,10 @@ export interface SettingsDTO {
   ringUntilAck: boolean;
   /** Seconds between repeated push notifications while ringing. */
   repeatSeconds: number;
+  /** Money per betting unit. */
+  unitSize: number;
+  /** Currency symbol, e.g. "$". */
+  currency: string;
   /** Where the Gemini key comes from. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "env" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */
