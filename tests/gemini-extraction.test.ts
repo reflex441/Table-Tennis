@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { extractFromScreenshot, GeminiConfigError, GeminiRequestError } from "@/lib/gemini/extract";
+import { extractFromScreenshot, GeminiConfigError, GeminiRequestError, testGeminiKey } from "@/lib/gemini/extract";
 import { ExtractionFormatError, normalizeExtraction, parseModelJson } from "@/lib/gemini/normalize";
 import { EXTRACTION_JSON_SCHEMA } from "@/lib/gemini/schema";
 
@@ -161,5 +161,26 @@ describe("normalizeExtraction - server-side validation", () => {
   it("parses fenced JSON", () => {
     expect(parseModelJson('```json\n{"matches":[]}\n```')).toEqual({ matches: [] });
     expect(() => parseModelJson("")).toThrow(ExtractionFormatError);
+  });
+});
+
+describe("testGeminiKey", () => {
+  const client = (get: ReturnType<typeof vi.fn>) => ({ models: { get } }) as never;
+
+  it("reports a working key", async () => {
+    const get = vi.fn().mockResolvedValue({ name: "models/gemini-3.5-flash", displayName: "Gemini 3.5 Flash" });
+    expect(await testGeminiKey({ apiKey: "k", model: "gemini-3.5-flash", client: client(get) })).toEqual({ ok: true, model: "Gemini 3.5 Flash" });
+    expect(get.mock.calls[0][0].model).toBe("gemini-3.5-flash");
+  });
+
+  it("explains rejected keys and unknown models", async () => {
+    const rejected = await testGeminiKey({ apiKey: "k", model: "m", client: client(vi.fn().mockRejectedValue(Object.assign(new Error("bad"), { status: 400 }))) });
+    expect(rejected).toEqual({ ok: false, message: "Google rejected this API key." });
+    const missing = await testGeminiKey({ apiKey: "k", model: "nope", client: client(vi.fn().mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }))) });
+    expect(missing.ok).toBe(false);
+  });
+
+  it("requires a key", async () => {
+    expect((await testGeminiKey({ apiKey: "", model: "m" })).ok).toBe(false);
   });
 });

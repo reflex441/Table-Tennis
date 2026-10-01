@@ -12,6 +12,7 @@ import { createPrismaStore } from "@/lib/alarms/prisma-store";
 import { dispatchDueAlarms, type PushSender } from "@/lib/alarms/dispatcher";
 import { changeAlarmState, createMatchWithAlarm, updateMatch } from "@/lib/alarms/service";
 import { matchInputSchema } from "@/lib/validation/match";
+import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -96,6 +97,17 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(reports.reduce((n, r) => n + r.claimed, 0)).toBeLessThanOrEqual(6);
     expect(await prisma.inAppNotification.count()).toBe(6);
     expect(await prisma.notificationDelivery.count({ where: { status: "SENT" } })).toBe(6);
+  });
+
+  it("stores the Gemini key server-side and never exposes it in settings", async () => {
+    const key = "AIzaSyD-test-key-for-integration-0000";
+    const saved = await updateSettings(prisma, { geminiApiKey: key });
+    expect(saved.geminiKeySource).toBe("settings");
+    expect(saved.geminiKeyHint).toBe("…0000");
+    expect(JSON.stringify(await getSettings(prisma))).not.toContain(key);
+    expect(await getGeminiApiKey(prisma)).toBe(key);
+    const removed = await updateSettings(prisma, { geminiApiKey: null });
+    expect(removed.geminiKeySource).toBe(process.env.GEMINI_API_KEY ? "env" : "none");
   });
 
   it("reschedules on edit and ignores cancelled alarms", async () => {

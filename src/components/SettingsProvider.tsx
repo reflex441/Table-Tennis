@@ -1,19 +1,19 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import type { SettingsDTO } from "@/lib/validation/settings";
+import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
 import { api } from "@/lib/client-api";
 
 interface SettingsContextValue {
   settings: SettingsDTO;
-  update: (patch: Partial<SettingsDTO>) => Promise<SettingsDTO>;
+  update: (patch: SettingsUpdate) => Promise<SettingsDTO>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ initial, children }: { initial: SettingsDTO; children: React.ReactNode }) {
   const [settings, setSettings] = useState(initial);
-  const update = useCallback(async (patch: Partial<SettingsDTO>) => {
+  const update = useCallback(async (patch: SettingsUpdate) => {
     const res = await api<{ settings: SettingsDTO }>("/api/settings", { method: "PUT", json: patch });
     setSettings(res.settings);
     return res.settings;

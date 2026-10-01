@@ -32,6 +32,8 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   inAppEnabled: true,
   soundEnabled: true,
   includeStatsInNotification: true,
+  geminiKeySource: "none",
+  geminiKeyHint: null,
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

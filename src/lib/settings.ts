@@ -13,8 +13,24 @@ async function ensureRow(prisma: PrismaClient) {
   return prisma.settings.findUniqueOrThrow({ where: { id: 1 } });
 }
 
+/** Show only the last 4 characters of a secret. */
+export function maskKey(key: string | null | undefined): string | null {
+  if (!key) return null;
+  return `…${key.slice(-4)}`;
+}
+
+/**
+ * The Gemini API key to use: one saved in Settings wins, otherwise the
+ * GEMINI_API_KEY environment variable. Server-side only.
+ */
+export async function getGeminiApiKey(prisma: PrismaClient): Promise<string> {
+  const s = await ensureRow(prisma);
+  return s.geminiApiKey || process.env.GEMINI_API_KEY || "";
+}
+
 export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
   const s = await ensureRow(prisma);
+  const envKey = process.env.GEMINI_API_KEY;
   return {
     defaultReminderMinutes: s.defaultReminderMinutes,
     timezone: s.timezone,
@@ -24,6 +40,9 @@ export async function getSettings(prisma: PrismaClient): Promise<SettingsDTO> {
     inAppEnabled: s.inAppEnabled,
     soundEnabled: s.soundEnabled,
     includeStatsInNotification: s.includeStatsInNotification,
+    // Never include the key itself in this DTO: it is sent to the browser.
+    geminiKeySource: s.geminiApiKey ? "settings" : envKey ? "env" : "none",
+    geminiKeyHint: maskKey(s.geminiApiKey),
   };
 }
 

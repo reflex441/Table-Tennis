@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compareNames, comparePlayers, matchDedupeKey, mergeRecords, normalizeName, playersKey, suggestMerges } from "@/lib/matching/dedupe";
 import { createMatchesSchema, matchInputSchema, updateMatchSchema } from "@/lib/validation/match";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
+import { maskKey } from "@/lib/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, validateCandidate, type ScreenshotContext } from "@/lib/review/candidate";
 import type { SettingsDTO } from "@/lib/validation/settings";
 import type { ExtractedMatch } from "@/lib/gemini/types";
@@ -67,6 +68,8 @@ const settings: SettingsDTO = {
   inAppEnabled: true,
   soundEnabled: true,
   includeStatsInNotification: true,
+  geminiKeySource: "none",
+  geminiKeyHint: null,
 };
 
 const extracted = (over: Partial<ExtractedMatch>): ExtractedMatch => ({
@@ -174,6 +177,16 @@ describe("API validation schemas", () => {
     expect(r.edge).toBeNull();
     expect(r.ouStats).toBeUndefined();
     expect(r.player1).toBeUndefined();
+  });
+
+  it("validates the Gemini API key setting", () => {
+    expect(settingsUpdateSchema.safeParse({ geminiApiKey: "AIzaSyD-abcdefghijklmnopqrstuvwxyz12345" }).success).toBe(true);
+    expect(settingsUpdateSchema.parse({ geminiApiKey: "  AIzaSyD-abcdefghijklmnopqrstuvwxyz12345 \n" }).geminiApiKey).toBe("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345");
+    expect(settingsUpdateSchema.safeParse({ geminiApiKey: null }).success).toBe(true);
+    expect(settingsUpdateSchema.safeParse({ geminiApiKey: "short" }).success).toBe(false);
+    expect(settingsUpdateSchema.safeParse({ geminiApiKey: "AIza key with spaces in it 123456" }).success).toBe(false);
+    expect(maskKey("AIzaSyD-abcdefghijklmnopqrstuvwxyz12345")).toBe("…2345");
+    expect(maskKey(null)).toBeNull();
   });
 
   it("validates settings", () => {

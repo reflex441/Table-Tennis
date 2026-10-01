@@ -28,6 +28,24 @@ export interface ExtractOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Check that an API key works by fetching the configured model's metadata
+ * (no image tokens are spent).
+ */
+export async function testGeminiKey(opts: { apiKey: string; model: string; baseUrl?: string; client?: Pick<GoogleGenAI, "models"> }): Promise<{ ok: true; model: string } | { ok: false; message: string }> {
+  if (!opts.apiKey && !opts.client) return { ok: false, message: "No API key provided." };
+  const client = opts.client ?? new GoogleGenAI({ apiKey: opts.apiKey, ...(opts.baseUrl ? { httpOptions: { baseUrl: opts.baseUrl } } : {}) });
+  try {
+    const info = await client.models.get({ model: opts.model, config: { abortSignal: AbortSignal.timeout(15_000) } });
+    return { ok: true, model: info.displayName || info.name || opts.model };
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status === 400 || status === 401 || status === 403) return { ok: false, message: "Google rejected this API key." };
+    if (status === 404) return { ok: false, message: `The key works, but model "${opts.model}" was not found. Check GEMINI_MODEL.` };
+    return { ok: false, message: `Could not reach Gemini${status ? ` (${status})` : ""}: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 export interface ExtractOutput {
   raw: unknown;
   result: ExtractionResult;

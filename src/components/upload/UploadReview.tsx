@@ -297,6 +297,16 @@ export function UploadReview() {
         <p className="text-sm text-muted">Drop one or more screenshots. Gemini reads the matches, you review them, and alarms are created.</p>
       </div>
 
+      {settings.geminiKeySource === "none" && (
+        <div className="card flex flex-wrap items-center gap-2 border-under/40 bg-under/5 px-3 py-2 text-sm">
+          <TriangleAlert className="h-4 w-4 text-under" />
+          <span className="flex-1">Add your Gemini API key in Settings before scanning screenshots.</span>
+          <Link href="/settings" className="btn-primary py-1 text-xs">
+            Open Settings
+          </Link>
+        </div>
+      )}
+
       {!settings.timezoneConfirmed && browserTz && (
         <div className="card flex flex-wrap items-center gap-2 border-warn/40 bg-warn/5 px-3 py-2 text-sm">
           <TriangleAlert className="h-4 w-4 text-warn" />

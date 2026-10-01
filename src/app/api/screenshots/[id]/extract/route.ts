@@ -6,6 +6,7 @@ import { extractFromScreenshot, GeminiConfigError, GeminiRequestError } from "@/
 import { ExtractionFormatError } from "@/lib/gemini/normalize";
 import { screenshotSelect, toScreenshotDTO } from "@/lib/screenshot-dto";
 import { Prisma } from "@/generated/prisma/client";
+import { getGeminiApiKey } from "@/lib/settings";
 
 export const maxDuration = 120;
 
@@ -17,8 +18,9 @@ export const POST = handle(async (_request: Request, ctx: { params: Promise<{ id
   if (!shot) return jsonError(404, "not_found", "Screenshot not found.");
 
   const config = env();
-  if (!config.GEMINI_API_KEY) {
-    return jsonError(503, "gemini_not_configured", "GEMINI_API_KEY is not configured on the server. Add it to your environment and restart.");
+  const apiKey = await getGeminiApiKey(prisma);
+  if (!apiKey) {
+    return jsonError(503, "gemini_not_configured", "No Gemini API key configured. Add one in Settings → Gemini API.");
   }
 
   // Claim the screenshot so double-clicks don't trigger two Gemini calls.
@@ -36,7 +38,7 @@ export const POST = handle(async (_request: Request, ctx: { params: Promise<{ id
 
   try {
     const out = await extractFromScreenshot({
-      apiKey: config.GEMINI_API_KEY,
+      apiKey,
       model: config.GEMINI_MODEL,
       baseUrl: config.GEMINI_BASE_URL || undefined,
       image: Buffer.from(shot.data),

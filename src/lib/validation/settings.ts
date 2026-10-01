@@ -20,6 +20,14 @@ export const settingsUpdateSchema = z
     inAppEnabled: z.boolean(),
     soundEnabled: z.boolean(),
     includeStatsInNotification: z.boolean(),
+    /** New Gemini API key, or null to remove the stored key. */
+    geminiApiKey: z
+      .string()
+      .trim()
+      .min(20, "That doesn't look like a Gemini API key")
+      .max(200, "That doesn't look like a Gemini API key")
+      .regex(/^[A-Za-z0-9_-]+$/, "API keys contain only letters, digits, '-' and '_'")
+      .nullable(),
   })
   .partial();
 
@@ -34,4 +42,8 @@ export interface SettingsDTO {
   inAppEnabled: boolean;
   soundEnabled: boolean;
   includeStatsInNotification: boolean;
+  /** Where the Gemini key comes from. The key itself is never sent to the browser. */
+  geminiKeySource: "settings" | "env" | "none";
+  /** Masked hint such as "…x7Qk" for a key saved in Settings. */
+  geminiKeyHint: string | null;
 }

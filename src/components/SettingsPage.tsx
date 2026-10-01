@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, BellOff, CheckCircle2, Info, Loader2, Send, Smartphone, XCircle } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, XCircle } from "lucide-react";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { ReminderPicker } from "./ReminderPicker";
@@ -9,7 +9,7 @@ import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { listTimeZones } from "@/lib/format";
 import { useBrowserTimeZone } from "./useBrowserTimeZone";
-import type { SettingsDTO } from "@/lib/validation/settings";
+import type { SettingsUpdate } from "@/lib/validation/settings";
 
 interface Health {
   database: boolean;
@@ -72,7 +72,7 @@ export function SettingsPage() {
     };
   }, []);
 
-  const save = async (patch: Partial<SettingsDTO>, key: string) => {
+  const save = async (patch: SettingsUpdate, key: string) => {
     setSaving(key);
     try {
       await update(patch);
@@ -124,6 +124,8 @@ export function SettingsPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+
+      <GeminiKeySection />
 
       <Section title="Default reminder" description="Used for new matches. Every match can still have its own reminder.">
         <ReminderPicker value={settings.defaultReminderMinutes} onChange={(m) => void save({ defaultReminderMinutes: m }, "reminder")} />
@@ -325,4 +327,125 @@ function Status({ ok, label }: { ok: boolean; label: string }) {
 
 function Saving() {
   return <Loader2 className="ml-2 inline h-4 w-4 animate-spin text-muted" />;
+}
+
+/** Enter, test and remove the Gemini API key. The saved key is never sent back to the browser. */
+function GeminiKeySection() {
+  const { settings, update } = useSettings();
+  const [draft, setDraft] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const test = async (apiKey?: string) => {
+    setBusy("test");
+    setResult(null);
+    try {
+      const res = await api<{ ok: true; model: string } | { ok: false; message: string }>("/api/settings/gemini-test", {
+        method: "POST",
+        json: apiKey ? { apiKey } : {},
+      });
+      setResult(res.ok ? { ok: true, text: `Key works (${res.model}).` } : { ok: false, text: res.message });
+      return res.ok;
+    } catch (err) {
+      setResult({ ok: false, text: err instanceof Error ? err.message : String(err) });
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveKey = async () => {
+    setBusy("save");
+    setResult(null);
+    try {
+      await update({ geminiApiKey: draft.trim() });
+      setDraft("");
+      setShow(false);
+      setResult({ ok: true, text: "Key saved." });
+    } catch (err) {
+      setResult({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removeKey = async () => {
+    if (!window.confirm("Remove the saved Gemini API key?")) return;
+    setBusy("remove");
+    setResult(null);
+    try {
+      await update({ geminiApiKey: null });
+      setResult({ ok: true, text: "Key removed." });
+    } catch (err) {
+      setResult({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const source = settings.geminiKeySource;
+  return (
+    <Section title="Gemini API" description="Used to read your screenshots. Get a free key at aistudio.google.com/apikey.">
+      <p className={`mb-3 flex items-center gap-1.5 text-sm ${source === "none" ? "text-warn" : "text-over"}`}>
+        {source === "none" ? <Info className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+        {source === "settings" && <>Key saved ({settings.geminiKeyHint})</>}
+        {source === "env" && <>Using the key from the server&apos;s GEMINI_API_KEY variable</>}
+        {source === "none" && <>No key yet — scanning won&apos;t work until you add one</>}
+      </p>
+
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (draft.trim()) void saveKey();
+        }}
+      >
+        <div className="relative min-w-[16rem] flex-1">
+          <KeyRound className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            type={show ? "text" : "password"}
+            className="input pl-8 pr-9 font-mono"
+            placeholder={source === "settings" ? "Paste a new key to replace it" : "Paste your API key (starts with AIza…)"}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="Gemini API key"
+          />
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-text"
+            onClick={() => setShow((v) => !v)}
+            aria-label={show ? "Hide key" : "Show key"}
+          >
+            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+        <button type="button" className="btn-ghost" disabled={!draft.trim() || busy !== null} onClick={() => void test(draft.trim())}>
+          {busy === "test" && draft ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Test
+        </button>
+        <button type="submit" className="btn-primary" disabled={!draft.trim() || busy !== null}>
+          {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
+        </button>
+      </form>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {source !== "none" && !draft && (
+          <button type="button" className="btn-ghost py-1 text-xs" disabled={busy !== null} onClick={() => void test()}>
+            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Test current key
+          </button>
+        )}
+        {source === "settings" && (
+          <button type="button" className="btn-danger py-1 text-xs" disabled={busy !== null} onClick={() => void removeKey()}>
+            Remove saved key
+          </button>
+        )}
+        {result && <span className={`text-xs ${result.ok ? "text-over" : "text-under"}`}>{result.text}</span>}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        The key is stored on your server and is never shown again after saving. A key saved here overrides GEMINI_API_KEY. Set APP_PASSWORD so strangers can&apos;t change it.
+      </p>
+    </Section>
+  );
 }
