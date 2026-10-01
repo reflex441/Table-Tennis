@@ -186,7 +186,7 @@ export async function changeAlarmState(
   prisma: PrismaClient,
   userId: string,
   matchId: string,
-  action: "cancel" | "reactivate" | "complete",
+  action: "cancel" | "reactivate" | "complete" | "placed",
   now = new Date(),
 ): Promise<MatchWithRelations> {
   const match = await prisma.match.findFirst({ where: { id: matchId, userId }, include: matchInclude });
@@ -199,6 +199,20 @@ export async function changeAlarmState(
     data = { status: "CANCELLED", cancelledAt: now, lockedAt: null, generation: { increment: 1 }, nextRepeatAt: null };
   } else if (action === "complete") {
     data = { status: "COMPLETED", completedAt: now, lockedAt: null, nextRepeatAt: null };
+  } else if (action === "placed") {
+    // Bet placed before the reminder: record it (stake/odds from the upload),
+    // stop any notification (a new generation cancels one being sent) and
+    // complete the alarm.
+    await placeBet(prisma, userId, matchId, {}, now);
+    data = {
+      status: "COMPLETED",
+      completedAt: now,
+      lockedAt: null,
+      nextRepeatAt: null,
+      ackAt: alarm.ackAt ?? now,
+      ackAction: "placed",
+      ...(alarm.status === "SCHEDULED" || alarm.status === "SENDING" ? { generation: { increment: 1 } } : {}),
+    };
   } else {
     const check = checkSchedule(match.startsAt, alarm.reminderMinutes, now);
     if (!check.ok) throw new ServiceError(`Cannot reactivate: ${check.reason}`, 422, "invalid_time");

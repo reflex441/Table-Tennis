@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, Ban, BellRing, CheckCheck, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Ban, BellRing, CheckCheck, CheckCircle2, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { api } from "@/lib/client-api";
 import { formatDateTime, formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
@@ -30,7 +30,7 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
   const s = match.statistics;
   const alarm = match.alarm;
 
-  const act = async (action: "cancel" | "reactivate" | "complete") => {
+  const act = async (action: "cancel" | "reactivate" | "complete" | "placed") => {
     setBusy(true);
     try {
       const res = await api<{ match: MatchDTO }>(`/api/matches/${match.id}/alarm`, { method: "POST", json: { action } });
@@ -154,6 +154,11 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
           <button className="btn-ghost" onClick={() => setEditing((e) => !e)}>
             <Pencil className="h-4 w-4" /> {editing ? "Close editor" : "Edit"}
           </button>
+          {alarm && (alarm.status === "SCHEDULED" || alarm.status === "SENDING" || alarm.status === "TRIGGERED") && (
+            <button className="btn-ghost border-over/40 text-over hover:bg-over/10" disabled={busy} onClick={() => void act("placed")}>
+              <CheckCircle2 className="h-4 w-4" /> Bet placed
+            </button>
+          )}
           {alarm && (alarm.status === "SCHEDULED" || alarm.status === "SENDING") && (
             <button className="btn-ghost" disabled={busy} onClick={() => void act("cancel")}>
               <Ban className="h-4 w-4" /> Cancel alarm

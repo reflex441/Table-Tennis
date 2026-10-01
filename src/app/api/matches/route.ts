@@ -8,7 +8,7 @@ import { listMatches } from "@/lib/alarms/queries";
 import { wakeScheduler } from "@/lib/scheduler/runner";
 import type { Section } from "@/lib/alarms/schedule";
 
-const SECTIONS = new Set(["upcoming", "triggered", "completed", "cancelled", "all"]);
+const SECTIONS = new Set(["upcoming", "triggered", "pending", "completed", "all"]);
 
 export const GET = handle(async (request: Request) => {
   const url = new URL(request.url);

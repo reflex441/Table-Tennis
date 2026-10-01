@@ -97,7 +97,8 @@ export const ackSchema = z.object({
 });
 
 export const alarmActionSchema = z.object({
-  action: z.enum(["cancel", "reactivate", "complete"]),
+  /** "placed": bet already placed - record it, skip the notification, mark completed. */
+  action: z.enum(["cancel", "reactivate", "complete", "placed"]),
 });
 
 export function formatZodError(error: z.ZodError): string {

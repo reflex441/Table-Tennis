@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Upload, Plus, CalendarClock, BellRing, CheckCircle2, XCircle } from "lucide-react";
+import { Upload, Plus, CalendarClock, BellRing, CheckCircle2, Hourglass } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
-import { sectionForStatus, type Section } from "@/lib/alarms/schedule";
+import { sectionFor, type Section } from "@/lib/alarms/schedule";
 import { api } from "@/lib/client-api";
 import { MatchCard, type MatchCardActions } from "./MatchCard";
 import { useSettings } from "./SettingsProvider";
@@ -14,8 +14,8 @@ import { PushStatusBanner } from "./PushStatusBanner";
 const SECTIONS: { key: Section; label: string; icon: typeof CalendarClock; empty: string }[] = [
   { key: "upcoming", label: "Upcoming", icon: CalendarClock, empty: "No upcoming alarms. Upload a screenshot to create some." },
   { key: "triggered", label: "Triggered", icon: BellRing, empty: "Nothing has been triggered yet." },
+  { key: "pending", label: "Pending", icon: Hourglass, empty: "No pending bets. Bets you've placed wait here until you mark them Won, Lost or Void." },
   { key: "completed", label: "Completed", icon: CheckCircle2, empty: "No completed matches." },
-  { key: "cancelled", label: "Cancelled", icon: XCircle, empty: "No cancelled alarms." },
 ];
 
 export function Dashboard({ initial }: { initial: MatchDTO[] }) {
@@ -52,18 +52,18 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
   }, [reload]);
 
   const grouped = useMemo(() => {
-    const g: Record<Section, MatchDTO[]> = { upcoming: [], triggered: [], completed: [], cancelled: [] };
-    for (const m of matches) g[sectionForStatus(m.alarm?.status ?? "SCHEDULED")].push(m);
+    const g: Record<Section, MatchDTO[]> = { upcoming: [], triggered: [], pending: [], completed: [] };
+    for (const m of matches) g[sectionFor(m.alarm?.status, m.bet?.result)].push(m);
     const asc = (a: MatchDTO, b: MatchDTO) => a.startsAt.localeCompare(b.startsAt);
     g.upcoming.sort(asc);
     g.triggered.sort(asc);
     g.completed.sort((a, b) => -asc(a, b));
-    g.cancelled.sort((a, b) => -asc(a, b));
+    g.pending.sort((a, b) => -asc(a, b));
     return g;
   }, [matches]);
 
   const replace = (m: MatchDTO) => setMatches((prev) => prev.map((x) => (x.id === m.id ? m : x)));
-  const alarmAction = (action: "cancel" | "reactivate" | "complete") => async (m: MatchDTO) => {
+  const alarmAction = (action: "cancel" | "reactivate" | "complete" | "placed") => async (m: MatchDTO) => {
     try {
       const res = await api<{ match: MatchDTO }>(`/api/matches/${m.id}/alarm`, { method: "POST", json: { action } });
       replace(res.match);
@@ -75,6 +75,7 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
     onCancel: alarmAction("cancel"),
     onReactivate: alarmAction("reactivate"),
     onComplete: alarmAction("complete"),
+    onPlaced: alarmAction("placed"),
     onUpdate: replace,
     onDelete: async (m) => {
       try {

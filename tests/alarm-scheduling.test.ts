@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkSchedule, computeFireAt, sectionForStatus } from "@/lib/alarms/schedule";
+import { checkSchedule, computeFireAt, sectionFor } from "@/lib/alarms/schedule";
 import {
   dispatchDueAlarms,
   LATE_GRACE_MS,
@@ -36,12 +36,17 @@ describe("computeFireAt / checkSchedule", () => {
   });
 
   it("maps statuses to dashboard sections", () => {
-    expect(sectionForStatus("SCHEDULED")).toBe("upcoming");
-    expect(sectionForStatus("SENDING")).toBe("upcoming");
-    expect(sectionForStatus("TRIGGERED")).toBe("triggered");
-    expect(sectionForStatus("FAILED")).toBe("triggered");
-    expect(sectionForStatus("COMPLETED")).toBe("completed");
-    expect(sectionForStatus("CANCELLED")).toBe("cancelled");
+    expect(sectionFor("SCHEDULED", null)).toBe("upcoming");
+    expect(sectionFor("SENDING", undefined)).toBe("upcoming");
+    expect(sectionFor("TRIGGERED", null)).toBe("triggered");
+    expect(sectionFor("FAILED", null)).toBe("triggered");
+    expect(sectionFor("COMPLETED", null)).toBe("completed");
+    expect(sectionFor("CANCELLED", null)).toBe("completed"); // no separate Cancelled section
+    // A placed, unsettled bet is Pending until it's marked Won / Lost / Void.
+    expect(sectionFor("TRIGGERED", "PENDING")).toBe("pending");
+    expect(sectionFor("COMPLETED", "PENDING")).toBe("pending");
+    expect(sectionFor("COMPLETED", "WON")).toBe("completed");
+    expect(sectionFor("COMPLETED", "LOST")).toBe("completed");
   });
 });
 

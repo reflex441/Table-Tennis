@@ -128,16 +128,7 @@ export function SettingsPage() {
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
 
-      <AccountSection />
-
-      <LeagueLinksSection />
-
       <GeminiKeySection />
-
-      <Section title="Default reminder" description="Used for new matches. Every match can still have its own reminder.">
-        <ReminderPicker value={settings.defaultReminderMinutes} onChange={(m) => void save({ defaultReminderMinutes: m }, "reminder")} />
-        {saving === "reminder" && <Saving />}
-      </Section>
 
       <Section title="Notifications on this device" description="Background notifications use the Web Push API and a service worker.">
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -210,11 +201,12 @@ export function SettingsPage() {
         )}
       </Section>
 
+      <Section title="Default reminder" description="Used for new matches. Every match can still have its own reminder.">
+        <ReminderPicker value={settings.defaultReminderMinutes} onChange={(m) => void save({ defaultReminderMinutes: m }, "reminder")} />
+        {saving === "reminder" && <Saving />}
+      </Section>
+
       <AlarmSection />
-
-      <UnitsSection />
-
-      <AverageOddsSection />
 
       <Section title="Notification preferences">
         <Toggle label="Browser push notifications" hint="Send reminders to subscribed devices, even when the app is closed." checked={settings.pushEnabled} onChange={(v) => void save({ pushEnabled: v }, "push")} />
@@ -222,6 +214,14 @@ export function SettingsPage() {
         <Toggle label="Alarm sound" hint="Siren on computers until you confirm the bet (phones never play it)." checked={settings.soundEnabled} onChange={(v) => void save({ soundEnabled: v }, "sound")} />
         <Toggle label="Include statistics" hint="Show the pick (OVER / UNDER / SWEEP), O/U and EDGE in the notification text." checked={settings.includeStatsInNotification} onChange={(v) => void save({ includeStatsInNotification: v }, "stats")} />
       </Section>
+
+      <LeagueLinksSection />
+
+      <UnitsSection />
+
+      <AverageOddsSection />
+
+      <AccountSection />
 
       <Section title="Server status">
         {health ? (

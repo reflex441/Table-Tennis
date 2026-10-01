@@ -374,4 +374,27 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await prisma.inAppNotification.deleteMany({ where: { userId: bob } });
     expect(await prisma.inAppNotification.count({ where: { userId } })).toBe(1);
   });
+
+  it("'Bet placed' early records the bet, skips the notification and moves the match to Pending", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const res = await createMatchWithAlarm(prisma, userId, input({ stakeUnits: 1, odds: 1.87 }), now);
+    if (res.status !== "created") throw new Error("not created");
+    await prisma.pushSubscription.create({ data: { endpoint: "https://push.example/early", p256dh: "k", auth: "a", userId } });
+
+    const done = await changeAlarmState(prisma, userId, res.match.id, "placed", now);
+    expect(done.alarm).toMatchObject({ status: "COMPLETED", ackAction: "placed" });
+    expect(done.bet).toMatchObject({ stake: 1, odds: 1.87, result: "PENDING" });
+
+    const sent: string[] = [];
+    const push: PushSender = { async send(sub) { sent.push(sub.endpoint); return { ok: true }; } };
+    await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:55:00Z") });
+    expect(sent).toEqual([]);
+    expect(await prisma.inAppNotification.count()).toBe(0);
+    // Bet placed -> Pending; marking it Won moves it to Completed.
+    expect((await listMatches(prisma, userId, "pending")).map((m) => m.id)).toEqual([res.match.id]);
+    expect(await listMatches(prisma, userId, "completed")).toEqual([]);
+    await updateBet(prisma, userId, res.match.id, { result: "WON" }, now);
+    expect(await listMatches(prisma, userId, "pending")).toEqual([]);
+    expect((await listMatches(prisma, userId, "completed")).map((m) => m.id)).toEqual([res.match.id]);
+  });
 });

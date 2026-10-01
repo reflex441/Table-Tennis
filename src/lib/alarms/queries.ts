@@ -1,11 +1,15 @@
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { AlarmStatus } from "@/generated/prisma/enums";
 import { SECTION_STATUSES, type Section } from "./schedule";
 import { matchInclude, toMatchDTO } from "./service";
 import type { MatchDTO } from "@/lib/types";
 
 export async function listMatches(prisma: PrismaClient, userId: string, section: Section | null): Promise<MatchDTO[]> {
-  const where = { userId, ...(section ? { alarm: { status: { in: SECTION_STATUSES[section] as AlarmStatus[] } } } : {}) };
+  const where: Prisma.MatchWhereInput = !section
+    ? { userId }
+    : section === "pending"
+      ? { userId, bet: { is: { result: "PENDING" } } }
+      : { userId, alarm: { is: { status: { in: SECTION_STATUSES[section] as AlarmStatus[] } } }, NOT: { bet: { is: { result: "PENDING" } } } };
   const order = section === "upcoming" || section === "triggered" ? "asc" : "desc";
   const rows = await prisma.match.findMany({
     where,

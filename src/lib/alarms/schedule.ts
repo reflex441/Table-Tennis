@@ -21,27 +21,30 @@ export function checkSchedule(startsAt: Date, reminderMinutes: number, now: Date
   return { ok: true, fireAt, immediate: fireAt.getTime() <= now.getTime() };
 }
 
-/** Dashboard section for an alarm status. */
-export type Section = "upcoming" | "triggered" | "completed" | "cancelled";
+/**
+ * Dashboard sections, in order: Upcoming -> Triggered -> Pending (bet placed,
+ * not settled yet) -> Completed (settled, finished or cancelled).
+ */
+export const SECTIONS = ["upcoming", "triggered", "pending", "completed"] as const;
+export type Section = (typeof SECTIONS)[number];
 
-export function sectionForStatus(status: string): Section {
-  switch (status) {
+/** Section for a match: a placed but unsettled bet is Pending; otherwise the alarm decides. */
+export function sectionFor(alarmStatus: string | null | undefined, betResult: string | null | undefined): Section {
+  if (betResult === "PENDING") return "pending";
+  switch (alarmStatus ?? "SCHEDULED") {
     case "SCHEDULED":
     case "SENDING":
       return "upcoming";
     case "TRIGGERED":
     case "FAILED":
       return "triggered";
-    case "COMPLETED":
-      return "completed";
     default:
-      return "cancelled";
+      return "completed"; // COMPLETED or CANCELLED
   }
 }
 
-export const SECTION_STATUSES: Record<Section, string[]> = {
+export const SECTION_STATUSES: Record<Exclude<Section, "pending">, string[]> = {
   upcoming: ["SCHEDULED", "SENDING"],
   triggered: ["TRIGGERED", "FAILED"],
-  completed: ["COMPLETED"],
-  cancelled: ["CANCELLED"],
+  completed: ["COMPLETED", "CANCELLED"],
 };

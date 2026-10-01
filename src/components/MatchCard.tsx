@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Ban, Pencil, RotateCcw, Trash2, CheckCheck, BellRing, Image as ImageIcon, Info } from "lucide-react";
+import { Ban, Pencil, RotateCcw, Trash2, CheckCheck, BellRing, CheckCircle2 } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
 import { Countdown, EdgeIndicator, PercentBar, SelectionBadge, StatusBadge } from "./MatchBits";
@@ -16,6 +16,8 @@ export interface MatchCardActions {
   onCancel: (m: MatchDTO) => Promise<void>;
   onReactivate: (m: MatchDTO) => Promise<void>;
   onComplete: (m: MatchDTO) => Promise<void>;
+  /** Bet already placed: record it, no notification, move to Pending. */
+  onPlaced: (m: MatchDTO) => Promise<void>;
   onDelete: (m: MatchDTO) => Promise<void>;
   /** The match changed (e.g. its bet was recorded or settled). */
   onUpdate: (m: MatchDTO) => void;
@@ -68,7 +70,8 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
           <Countdown target={match.startsAt} status={status} />
           <div className="flex items-center gap-1">
             <AckBadge match={match} now={now} />
-            <StatusBadge status={status} />
+            {/* A finished alarm with an unsettled bet is "Pending", not "Completed". */}
+            {!(match.bet?.result === "PENDING" && status === "COMPLETED") && <StatusBadge status={status} />}
           </div>
         </div>
       </div>
@@ -116,14 +119,16 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
       )}
 
       <div className="mt-0.5 flex items-center justify-end gap-1">
-        {hasShot && (
-          <button className="btn-ghost px-2 py-1 text-xs" onClick={() => setViewing(true)} aria-label="Show screenshot">
-            <ImageIcon className="h-3.5 w-3.5" />
+        {(status === "SCHEDULED" || status === "SENDING" || status === "TRIGGERED") && (
+          <button
+            className="btn-ghost border-over/40 px-2 py-1 text-xs text-over hover:bg-over/10"
+            disabled={busy}
+            onClick={run(() => actions.onPlaced(match))}
+            title="Already placed the bet: record it, skip the notification and move this match to Pending"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" /> Bet placed
           </button>
         )}
-        <Link href={`/matches/${match.id}`} className="btn-ghost px-2 py-1 text-xs" aria-label="Match details">
-          <Info className="h-3.5 w-3.5" />
-        </Link>
         <Link href={`/matches/${match.id}?edit=1`} className="btn-ghost px-2 py-1 text-xs" aria-label="Edit">
           <Pencil className="h-3.5 w-3.5" /> Edit
         </Link>
