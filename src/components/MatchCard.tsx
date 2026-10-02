@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Ban, Pencil, RotateCcw, Trash2, CheckCheck, BellRing, CheckCircle2 } from "lucide-react";
+import { Pencil, RotateCcw, Trash2, CheckCheck, BellRing, CheckCircle2 } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
 import { formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
 import { Countdown, EdgeIndicator, PercentBar, SelectionBadge, StatusBadge } from "./MatchBits";
@@ -13,7 +13,6 @@ import { MatchNames } from "./MatchNames";
 import { ScreenshotViewer } from "./ScreenshotViewer";
 
 export interface MatchCardActions {
-  onCancel: (m: MatchDTO) => Promise<void>;
   onReactivate: (m: MatchDTO) => Promise<void>;
   onComplete: (m: MatchDTO) => Promise<void>;
   /** Bet already placed: record it, no notification, move to Pending. */
@@ -137,11 +136,6 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
         <Link href={`/matches/${match.id}?edit=1`} className="btn-ghost px-2 py-1 text-xs" aria-label="Edit">
           <Pencil className="h-3.5 w-3.5" /> Edit
         </Link>
-        {(status === "SCHEDULED" || status === "SENDING") && (
-          <button className="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={run(() => actions.onCancel(match))} aria-label="Cancel alarm">
-            <Ban className="h-3.5 w-3.5" /> Cancel
-          </button>
-        )}
         {(status === "CANCELLED" || status === "FAILED") && new Date(match.startsAt).getTime() > now && (
           <button className="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={run(() => actions.onReactivate(match))}>
             <RotateCcw className="h-3.5 w-3.5" /> Reactivate

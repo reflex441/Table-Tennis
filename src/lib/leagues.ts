@@ -74,3 +74,9 @@ export function withBookmakerLinks(current: LeagueLink[], bookmaker: Bookmaker):
   const replaced = new Set(links.map((l) => normalizeLeague(l.league)));
   return [...links, ...current.filter((l) => !replaced.has(normalizeLeague(l.league)))];
 }
+
+/**
+ * When each bookmaker publishes its Over/Under points lines, in minutes
+ * before the match: the suggested alarm time for that bookmaker.
+ */
+export const BOOKMAKER_LINES_MINUTES: Record<Bookmaker, number> = { ladbrokes: 5, sportsbet: 30 };

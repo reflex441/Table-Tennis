@@ -81,7 +81,6 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
     }
   };
   const actions: MatchCardActions = {
-    onCancel: alarmAction("cancel"),
     onReactivate: alarmAction("reactivate"),
     onComplete: alarmAction("complete"),
     onPlaced: alarmAction("placed"),

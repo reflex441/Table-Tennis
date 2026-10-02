@@ -8,13 +8,14 @@ import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, type PushState } from "@/lib/push-client";
 import { useIsDesktopApp } from "@/lib/desktop-bridge";
 import { useSettings } from "./SettingsProvider";
-import { BOOKMAKER_LINKS, withBookmakerLinks, type Bookmaker } from "@/lib/leagues";
+import { BOOKMAKER_LINES_MINUTES, BOOKMAKER_LINKS, withBookmakerLinks, type Bookmaker, type LeagueLink } from "@/lib/leagues";
+import { ReminderPicker } from "./ReminderPicker";
 
 /** Dispatch on window to open the tutorial again (Settings → Account). */
 export const TUTORIAL_EVENT = "tt:tutorial";
 
 type Source = "cage" | "tail";
-type Step = "welcome" | "source" | "gemini" | "bookmaker" | "notifications" | "units" | "how" | "done";
+type Step = "welcome" | "source" | "gemini" | "bookmaker" | "reminder" | "notifications" | "units" | "how" | "done";
 
 /**
  * First-run tutorial, shown once per account after signing up: where picks
@@ -25,17 +26,22 @@ export function Onboarding({ user }: { user: PublicUser }) {
   const [open, setOpen] = useState(!user.onboarded);
   const [step, setStep] = useState<Step>("welcome");
   const [source, setSource] = useState<Source | null>(null);
+  const [bookmaker, setBookmaker] = useState<Bookmaker | null>(null);
+  // League links from before the first choice: changing bookmaker starts again from these.
+  const [linksBefore, setLinksBefore] = useState<LeagueLink[] | null>(null);
 
   useEffect(() => {
     const show = () => {
       setStep("welcome");
+      setBookmaker(null);
+      setLinksBefore(null);
       setOpen(true);
     };
     window.addEventListener(TUTORIAL_EVENT, show);
     return () => window.removeEventListener(TUTORIAL_EVENT, show);
   }, []);
 
-  const steps: Step[] = ["welcome", "source", ...(source === "tail" ? [] : (["gemini"] as Step[])), "bookmaker", "notifications", "units", "how", "done"];
+  const steps: Step[] = ["welcome", "source", ...(source === "tail" ? [] : (["gemini"] as Step[])), "bookmaker", "reminder", "notifications", "units", "how", "done"];
   const index = steps.indexOf(step);
   const next = () => setStep(steps[Math.min(index + 1, steps.length - 1)]);
   const back = () => setStep(steps[Math.max(index - 1, 0)]);
@@ -71,7 +77,17 @@ export function Onboarding({ user }: { user: PublicUser }) {
         {step === "welcome" && <Welcome name={user.name} />}
         {step === "source" && <SourceStep source={source} onChoose={setSource} />}
         {step === "gemini" && <GeminiStep />}
-        {step === "bookmaker" && <BookmakerStep />}
+        {step === "bookmaker" && (
+          <BookmakerStep
+            chosen={bookmaker}
+            linksBefore={linksBefore}
+            onChosen={(b, before) => {
+              setBookmaker(b);
+              setLinksBefore((prev) => prev ?? before);
+            }}
+          />
+        )}
+        {step === "reminder" && <ReminderStep bookmaker={bookmaker} />}
         {step === "notifications" && <NotificationsStep />}
         {step === "units" && <UnitsStep onSaved={next} onBack={back} />}
         {step === "how" && <HowItWorks source={source ?? "cage"} />}
@@ -225,11 +241,16 @@ function GeminiStep() {
   );
 }
 
-function BookmakerStep() {
+function BookmakerStep({
+  chosen,
+  linksBefore,
+  onChosen,
+}: {
+  chosen: Bookmaker | null;
+  linksBefore: LeagueLink[] | null;
+  onChosen: (b: Bookmaker, linksBefore: LeagueLink[]) => void;
+}) {
   const { settings, update } = useSettings();
-  const [chosen, setChosen] = useState<Bookmaker | null>(null);
-  // Changing your mind starts again from the links you had before this step.
-  const [original] = useState(settings.leagueLinks);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -237,8 +258,10 @@ function BookmakerStep() {
     setBusy(true);
     setError(null);
     try {
-      await update({ leagueLinks: withBookmakerLinks(original, bookmaker) });
-      setChosen(bookmaker);
+      // Fills in the league pages and the alarm time for when its lines come out.
+      const before = linksBefore ?? settings.leagueLinks;
+      await update({ leagueLinks: withBookmakerLinks(before, bookmaker), defaultReminderMinutes: BOOKMAKER_LINES_MINUTES[bookmaker] });
+      onChosen(bookmaker, before);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -278,11 +301,18 @@ function BookmakerStep() {
           "ladbrokes",
           "Ladbrokes",
           <>
-            Better limits, and it has <span className="text-text">Czech Liga Pro</span>. Covers TT Cup, TT Elite and Czech Liga Pro.
+            You <span className="font-semibold text-over">rarely get limited</span>, and it has <span className="text-text">Czech Liga Pro</span>. Covers TT Cup, TT Elite
+            and Czech Liga Pro.
           </>,
           true,
         )}
-        {option("sportsbet", "Sportsbet", <>Covers TT Cup and TT Elite (no Czech Liga Pro).</>)}
+        {option(
+          "sportsbet",
+          "Sportsbet",
+          <>
+            You&apos;ll <span className="font-semibold text-under">get limited extremely fast</span>. Covers TT Cup and TT Elite only (no Czech Liga Pro).
+          </>,
+        )}
       </div>
       {chosen && (
         <p className="mt-3 flex items-center gap-1.5 text-sm text-over">
@@ -291,6 +321,55 @@ function BookmakerStep() {
       )}
       {error && <p className="mt-1 text-xs text-under">{error}</p>}
       <p className="mt-2 text-xs text-muted">You can change these any time in Settings → League links.</p>
+    </>
+  );
+}
+
+function ReminderStep({ bookmaker }: { bookmaker: Bookmaker | null }) {
+  const { settings, update } = useSettings();
+  const [error, setError] = useState<string | null>(null);
+  const minutes = settings.defaultReminderMinutes;
+
+  const change = async (m: number) => {
+    setError(null);
+    try {
+      await update({ defaultReminderMinutes: m });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const line = (id: Bookmaker, name: string) => (
+    <li className={`flex items-baseline gap-2 ${bookmaker === id ? "text-text" : "text-muted"}`}>
+      <span className="font-semibold">{name}:</span>
+      <span>
+        lines come out <span className="font-semibold text-text">{BOOKMAKER_LINES_MINUTES[id]} minutes</span> before the match
+        {bookmaker === id && <span className="ml-1 text-accent">(your bookmaker)</span>}
+      </span>
+    </li>
+  );
+
+  return (
+    <>
+      <Title icon={<BellRing className="h-4 w-4" />}>When should the alarm go off?</Title>
+      <p className="mt-3 text-sm text-muted">Choose how many minutes before each match starts you get the alarm.</p>
+      <div className="mt-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm">
+        <p className="font-semibold text-accent">Over/Under points lines:</p>
+        <ul className="mt-1 flex flex-col gap-0.5">
+          {line("ladbrokes", "Ladbrokes")}
+          {line("sportsbet", "Sportsbet")}
+        </ul>
+        <p className="mt-1 text-muted">Set the alarm for when your bookmaker&apos;s line comes out so you can bet straight away.</p>
+      </div>
+      <div className="mt-4">
+        <span className="label">Alarm before the match</span>
+        <ReminderPicker key={minutes} value={minutes} onChange={(m) => void change(m)} />
+        <p className="mt-1.5 text-xs text-muted">
+          {minutes === 0 ? "The alarm goes off when the match starts." : `The alarm goes off ${minutes} minute${minutes === 1 ? "" : "s"} before each match.`} You can
+          change it for a single match too, and any time in Settings.
+        </p>
+      </div>
+      {error && <p className="mt-1 text-xs text-under">{error}</p>}
     </>
   );
 }
@@ -457,8 +536,10 @@ function Done({ source, onFinish }: { source: Source; onFinish: () => void }) {
     <>
       <Title icon={<CheckCircle2 className="h-4 w-4" />}>You&apos;re all set!</Title>
       <p className="mt-3 text-sm text-muted">
-        {source === "cage" ? "Upload your first screenshot to set your alarms." : "Head to Tailing and copy the upcoming picks to your dashboard."} You can replay this
-        tutorial from Settings → Account.
+        {source === "cage" ? "Upload your first screenshot to set your alarms." : "Head to Tailing and copy the upcoming picks to your dashboard."}
+      </p>
+      <p className="mt-3 rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-muted">
+        Want to see this tutorial again? Go to <span className="font-semibold text-text">Settings → Account → Show the tutorial again</span>.
       </p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
         <button className="btn-primary flex-1" onClick={() => go(source === "cage" ? "/upload" : "/tailing")}>
