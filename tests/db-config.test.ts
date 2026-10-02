@@ -7,6 +7,7 @@ describe("database connection settings", () => {
     expect(c.ssl).toEqual({ rejectUnauthorized: false });
     expect(c.connectionString).toBe("postgresql://u:p@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres");
     expect(c.max).toBe(3);
+    expect(c.idleTimeoutMillis).toBe(5_000);
   });
 
   it("uses SSL for Supabase even without sslmode in the URL", () => {

@@ -9,7 +9,8 @@ import type { PoolConfig } from "pg";
  * instance keeps only a few connections.
  */
 export function pgConfig(connectionString: string, serverless = Boolean(process.env.VERCEL)): PoolConfig {
-  const config: PoolConfig = { connectionString, max: serverless ? 3 : 10 };
+  // Serverless: few connections per instance, released quickly when idle.
+  const config: PoolConfig = serverless ? { connectionString, max: 3, idleTimeoutMillis: 5_000 } : { connectionString, max: 10 };
   let url: URL;
   try {
     url = new URL(connectionString);

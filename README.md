@@ -147,12 +147,15 @@ All three have free plans. Together they run the app 24/7 with your PC off.
 
 1. **Database: Supabase** (supabase.com)
    - Create a project. Choose the region closest to you (e.g. Sydney) and save the database password.
-   - Click **Connect** and copy the **Session pooler** connection string (port 5432).
-   - Replace `[YOUR-PASSWORD]` with your password and add `?sslmode=require` to the end. That is your `DATABASE_URL`.
+   - Click **Connect → Direct** and copy two connection strings. In each, replace `[YOUR-PASSWORD]` with your password and add `?sslmode=require` to the end.
+     - The **Transaction pooler** string (port **6543**) is your `DATABASE_URL`, used by the app.
+     - The **Session pooler** string (port **5432**) is your `DIRECT_URL`, used only for database migrations during builds.
+   - Don't use the Session pooler for `DATABASE_URL`: it allows only ~15 connections, and Vercel's instances use them up ("max clients reached in session mode").
 2. **App: Vercel** (vercel.com)
    - Sign in with GitHub and choose **Add New → Project**. Import this repository; the Next.js settings are detected.
    - Under **Environment Variables**, add the values from your `.env`, with these changes:
-     - `DATABASE_URL` = the Supabase string
+     - `DATABASE_URL` = the Supabase Transaction pooler string (port 6543)
+     - `DIRECT_URL` = the Supabase Session pooler string (port 5432)
      - `APP_URL` = your Vercel address, e.g. `https://tt-alarms.vercel.app` (you can add it after the first deploy, then redeploy)
      - `CRON_SECRET` = a long random password (`openssl rand -hex 32`)
      - keep your `VAPID_*` keys and `SESSION_SECRET`
