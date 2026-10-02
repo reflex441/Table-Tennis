@@ -29,7 +29,7 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 
 ## Accounts and leaderboard
 
-**First-run tutorial:** after signing up, a short tutorial asks where your picks come from. **Upload** needs **Cage Capital** screenshots (plus a free Gemini key); without Cage Capital you can get the picks from **Tailing**. It then covers notifications, unit size and how alarms and profit tracking work. It shows once per account; replay it from **Settings → Account → Show the tutorial again**.
+**First-run tutorial:** after signing up, a short tutorial asks where your picks come from. **Upload** needs **Cage Capital** screenshots (plus a free Gemini key); without Cage Capital you can get the picks from **Tailing**. It then asks which bookmaker you use and fills in **League links** for you: **Ladbrokes** (recommended: better limits, and it has Czech Liga Pro) or **Sportsbet** (TT Cup and TT Elite only). After that it covers notifications, unit size (1u should be 1-2% of your bankroll) and how alarms and profit tracking work. It shows once per account; replay it from **Settings → Account → Show the tutorial again**.
 
 - **You need an account to use the app.** Sign up with a display name, email and password, or use **Continue with Google** (when the server has Google sign-in set up). A Google sign-in with the same email as an existing account signs into that account.
 - **Each account is separate:** its own uploads, alarms, bets, Profit page, devices, settings and **Gemini API key** (Settings → Gemini API). Alarm notifications go only to the devices of the account that created the match. Signing out also stops that browser getting your notifications.

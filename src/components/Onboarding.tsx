@@ -8,12 +8,13 @@ import { api } from "@/lib/client-api";
 import { detectPushState, subscribeToPush, type PushState } from "@/lib/push-client";
 import { useIsDesktopApp } from "@/lib/desktop-bridge";
 import { useSettings } from "./SettingsProvider";
+import { BOOKMAKER_LINKS, withBookmakerLinks, type Bookmaker } from "@/lib/leagues";
 
 /** Dispatch on window to open the tutorial again (Settings → Account). */
 export const TUTORIAL_EVENT = "tt:tutorial";
 
 type Source = "cage" | "tail";
-type Step = "welcome" | "source" | "gemini" | "notifications" | "units" | "how" | "done";
+type Step = "welcome" | "source" | "gemini" | "bookmaker" | "notifications" | "units" | "how" | "done";
 
 /**
  * First-run tutorial, shown once per account after signing up: where picks
@@ -34,7 +35,7 @@ export function Onboarding({ user }: { user: PublicUser }) {
     return () => window.removeEventListener(TUTORIAL_EVENT, show);
   }, []);
 
-  const steps: Step[] = ["welcome", "source", ...(source === "tail" ? [] : (["gemini"] as Step[])), "notifications", "units", "how", "done"];
+  const steps: Step[] = ["welcome", "source", ...(source === "tail" ? [] : (["gemini"] as Step[])), "bookmaker", "notifications", "units", "how", "done"];
   const index = steps.indexOf(step);
   const next = () => setStep(steps[Math.min(index + 1, steps.length - 1)]);
   const back = () => setStep(steps[Math.max(index - 1, 0)]);
@@ -70,6 +71,7 @@ export function Onboarding({ user }: { user: PublicUser }) {
         {step === "welcome" && <Welcome name={user.name} />}
         {step === "source" && <SourceStep source={source} onChoose={setSource} />}
         {step === "gemini" && <GeminiStep />}
+        {step === "bookmaker" && <BookmakerStep />}
         {step === "notifications" && <NotificationsStep />}
         {step === "units" && <UnitsStep onSaved={next} onBack={back} />}
         {step === "how" && <HowItWorks source={source ?? "cage"} />}
@@ -219,6 +221,76 @@ function GeminiStep() {
       )}
       {error && <p className="mt-1 text-xs text-under">{error}</p>}
       {!saved && <p className="mt-2 text-xs text-muted">You can also add it later in Settings → Gemini API.</p>}
+    </>
+  );
+}
+
+function BookmakerStep() {
+  const { settings, update } = useSettings();
+  const [chosen, setChosen] = useState<Bookmaker | null>(null);
+  // Changing your mind starts again from the links you had before this step.
+  const [original] = useState(settings.leagueLinks);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = async (bookmaker: Bookmaker) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await update({ leagueLinks: withBookmakerLinks(original, bookmaker) });
+      setChosen(bookmaker);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const option = (id: Bookmaker, name: string, body: React.ReactNode, recommended = false) => (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void choose(id)}
+      aria-pressed={chosen === id}
+      className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${chosen === id ? "border-accent bg-accent/10" : "border-line hover:border-muted"}`}
+    >
+      <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border ${chosen === id ? "border-accent bg-accent text-bg" : "border-muted"}`}>
+        {chosen === id && <Check className="h-3 w-3" />}
+      </span>
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-2 font-semibold">
+          {name}
+          {recommended && <span className="chip bg-over/15 text-over ring-1 ring-over/30">Recommended</span>}
+        </span>
+        <span className="block text-sm text-muted">{body}</span>
+      </span>
+    </button>
+  );
+
+  return (
+    <>
+      <Title icon={<ExternalLink className="h-4 w-4" />}>Which bookmaker do you use?</Title>
+      <p className="mt-3 text-sm text-muted">
+        Clicking the players&apos; names on a match (or the button on the alarm) opens that league on your bookmaker, so you can place the bet quickly.
+      </p>
+      <div className="mt-4 flex flex-col gap-2">
+        {option(
+          "ladbrokes",
+          "Ladbrokes",
+          <>
+            Better limits, and it has <span className="text-text">Czech Liga Pro</span>. Covers TT Cup, TT Elite and Czech Liga Pro.
+          </>,
+          true,
+        )}
+        {option("sportsbet", "Sportsbet", <>Covers TT Cup and TT Elite (no Czech Liga Pro).</>)}
+      </div>
+      {chosen && (
+        <p className="mt-3 flex items-center gap-1.5 text-sm text-over">
+          <CheckCircle2 className="h-4 w-4" /> League links set for {BOOKMAKER_LINKS[chosen].map((l) => l.league).join(", ")}.
+        </p>
+      )}
+      {error && <p className="mt-1 text-xs text-under">{error}</p>}
+      <p className="mt-2 text-xs text-muted">You can change these any time in Settings → League links.</p>
     </>
   );
 }

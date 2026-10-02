@@ -51,3 +51,26 @@ export function parseLeagueLinks(value: unknown): LeagueLink[] {
     .filter((v): v is LeagueLink => Boolean(v) && typeof v.league === "string" && typeof v.url === "string")
     .map((v) => ({ league: v.league, url: v.url }));
 }
+
+export type Bookmaker = "ladbrokes" | "sportsbet";
+
+/** League pages per bookmaker, used to fill in League links in one click. */
+export const BOOKMAKER_LINKS: Record<Bookmaker, LeagueLink[]> = {
+  ladbrokes: [
+    { league: "TT Cup", url: "https://www.ladbrokes.com.au/sports/table-tennis/tt-cup" },
+    { league: "TT Elite", url: "https://www.ladbrokes.com.au/sports/table-tennis/tt-elite-series" },
+    { league: "Czech Liga Pro", url: "https://www.ladbrokes.com.au/sports/table-tennis/czech-liga-pro" },
+  ],
+  // Sportsbet doesn't offer Czech Liga Pro.
+  sportsbet: [
+    { league: "TT Cup", url: "https://www.sportsbet.com.au/betting/table-tennis/tt-cup" },
+    { league: "TT Elite", url: "https://www.sportsbet.com.au/betting/table-tennis/tt-elite-series-men" },
+  ],
+};
+
+/** Sets the bookmaker's league pages, keeping links for any other leagues. */
+export function withBookmakerLinks(current: LeagueLink[], bookmaker: Bookmaker): LeagueLink[] {
+  const links = BOOKMAKER_LINKS[bookmaker];
+  const replaced = new Set(links.map((l) => normalizeLeague(l.league)));
+  return [...links, ...current.filter((l) => !replaced.has(normalizeLeague(l.league)))];
+}

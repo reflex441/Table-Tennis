@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findLeagueUrl, isSafeUrl, normalizeLeague, parseLeagueLinks } from "@/lib/leagues";
+import { findLeagueUrl, isSafeUrl, normalizeLeague, parseLeagueLinks, withBookmakerLinks } from "@/lib/leagues";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
 
 const links = [
@@ -42,5 +42,24 @@ describe("league links", () => {
   it("reads stored links defensively", () => {
     expect(parseLeagueLinks(null)).toEqual([]);
     expect(parseLeagueLinks([{ league: "A", url: "https://a" }, { league: 1 }, "x"])).toEqual([{ league: "A", url: "https://a" }]);
+  });
+});
+
+describe("bookmaker presets", () => {
+  it("fills in the bookmaker's league pages and keeps other leagues", () => {
+    const current = [
+      { league: "TT CUP", url: "https://example.com/old-cup" },
+      { league: "Czech Liga Pro", url: "https://www.ladbrokes.com.au/sports/table-tennis/czech-liga-pro" },
+      { league: "Setka Cup", url: "https://example.com/setka" },
+    ];
+    const lad = withBookmakerLinks(current, "ladbrokes");
+    expect(lad.map((l) => l.league)).toEqual(["TT Cup", "TT Elite", "Czech Liga Pro", "Setka Cup"]);
+    expect(findLeagueUrl("TT ELITE", lad)).toBe("https://www.ladbrokes.com.au/sports/table-tennis/tt-elite-series");
+    const sb = withBookmakerLinks(current, "sportsbet");
+    expect(findLeagueUrl("TT CUP", sb)).toBe("https://www.sportsbet.com.au/betting/table-tennis/tt-cup");
+    expect(findLeagueUrl("TT Elite", sb)).toBe("https://www.sportsbet.com.au/betting/table-tennis/tt-elite-series-men");
+    // Sportsbet has no Czech Liga Pro: an existing link for it is kept.
+    expect(findLeagueUrl("Czech Liga Pro", sb)).toBe("https://www.ladbrokes.com.au/sports/table-tennis/czech-liga-pro");
+    expect(sb.filter((l) => l.league === "Setka Cup")).toHaveLength(1);
   });
 });
