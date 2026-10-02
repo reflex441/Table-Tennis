@@ -113,6 +113,30 @@ export async function createMatchWithAlarm(
   }
 }
 
+/**
+ * Moves upcoming alarms to a new alarm time. With `from`, only those still on
+ * that time (a new default in Settings moves the alarms that were using the
+ * old default; ones given their own time keep it). With `from` null, every
+ * upcoming alarm. Returns how many alarms moved.
+ */
+export async function applyDefaultReminder(prisma: PrismaClient, userId: string, from: number | null, to: number, now = new Date()): Promise<number> {
+  if (from === to) return 0;
+  const upcoming = await prisma.match.findMany({
+    where: { userId, startsAt: { gt: now }, alarm: { is: { status: "SCHEDULED", reminderMinutes: from ?? { not: to } } } },
+    select: { id: true },
+  });
+  let moved = 0;
+  for (const { id } of upcoming) {
+    try {
+      await updateMatch(prisma, userId, id, { reminderMinutes: to }, now);
+      moved++;
+    } catch {
+      // e.g. the match started meanwhile - leave it.
+    }
+  }
+  return moved;
+}
+
 /** Edit match details and/or reminder; reschedules the alarm when timing changes. */
 export async function updateMatch(prisma: PrismaClient, userId: string, id: string, input: UpdateMatchInput, now = new Date()): Promise<MatchWithRelations> {
   const existing = await prisma.match.findFirst({ where: { id, userId }, include: matchInclude });

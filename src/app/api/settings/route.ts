@@ -5,6 +5,8 @@ import { requireUserId } from "@/lib/auth/current";
 import { handle, parseJson } from "@/lib/api";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
+import { applyDefaultReminder } from "@/lib/alarms/service";
+import { wakeScheduler } from "@/lib/scheduler/runner";
 
 export const GET = handle(async () => {
   await connection();
@@ -14,5 +16,9 @@ export const GET = handle(async () => {
 export const PUT = handle(async (request: Request) => {
   const userId = await requireUserId();
   const update = await parseJson(request, settingsUpdateSchema);
-  return NextResponse.json({ settings: await updateSettings(db(), userId, update) });
+  const before = update.defaultReminderMinutes !== undefined ? await getSettings(db(), userId) : null;
+  const settings = await updateSettings(db(), userId, update);
+  // Upcoming alarms on the old default move to the new one.
+  if (before && (await applyDefaultReminder(db(), userId, before.defaultReminderMinutes, settings.defaultReminderMinutes))) wakeScheduler();
+  return NextResponse.json({ settings });
 });

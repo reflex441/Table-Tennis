@@ -10,7 +10,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { createPrismaStore } from "@/lib/alarms/prisma-store";
 import { dispatchDueAlarms, type PushSender } from "@/lib/alarms/dispatcher";
-import { acknowledgeAlarm, changeAlarmState, createMatchWithAlarm, listRingingAlarms, updateMatch } from "@/lib/alarms/service";
+import { acknowledgeAlarm, applyDefaultReminder, changeAlarmState, createMatchWithAlarm, listRingingAlarms, updateMatch } from "@/lib/alarms/service";
 import { matchInputSchema } from "@/lib/validation/match";
 import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 import { deleteBet, updateBet } from "@/lib/bets/service";
@@ -513,6 +513,33 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     m = (await getMatch(prisma, userId, matchId))!;
     expect(m.bet).toMatchObject({ stake: 1, odds: 1.9, result: "PENDING", legs: [] });
     expect(await prisma.betLeg.count()).toBe(0);
+  });
+
+  it("a new default alarm time moves upcoming alarms", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const mk = async (player1: string, startsAt: string, reminderMinutes: number) => {
+      const r = await createMatchWithAlarm(prisma, userId, input({ player1, startsAt, reminderMinutes }), now);
+      if (r.status !== "created") throw new Error("not created");
+      return r.match.id;
+    };
+    const a = await mk("A", "2030-09-21T18:00:00Z", 5);
+    const custom = await mk("B", "2030-09-21T19:00:00Z", 10);
+    const past = await prisma.match.create({
+      data: { userId, player1: "Old", player2: "Match", startsAt: new Date("2030-09-21T10:00:00Z"), timezone: "UTC", dedupeKey: "old-default",
+        alarm: { create: { reminderMinutes: 5, fireAt: new Date("2030-09-21T09:55:00Z"), nextAttemptAt: new Date("2030-09-21T09:55:00Z") } } },
+    });
+    const reminder = async (id: string) => (await prisma.alarm.findFirstOrThrow({ where: { matchId: id } })).reminderMinutes;
+
+    // 5 -> 30: only alarms on the old default move, and are rescheduled.
+    expect(await applyDefaultReminder(prisma, userId, 5, 30, now)).toBe(1);
+    expect(await reminder(a)).toBe(30);
+    expect((await prisma.alarm.findFirstOrThrow({ where: { matchId: a } })).fireAt.toISOString()).toBe("2030-09-21T17:30:00.000Z");
+    expect(await reminder(custom)).toBe(10);
+    expect(await reminder(past.id)).toBe(5);
+    // "Use for all upcoming alarms".
+    expect(await applyDefaultReminder(prisma, userId, null, 30, now)).toBe(1);
+    expect(await reminder(custom)).toBe(30);
+    expect(await applyDefaultReminder(prisma, userId, null, 30, now)).toBe(0);
   });
 
   it("new accounts see the tutorial until it is finished", async () => {
