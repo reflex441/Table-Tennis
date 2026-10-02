@@ -158,6 +158,7 @@ All three have free plans. Together they run the app 24/7 with your PC off.
      - keep your `VAPID_*` keys and `SESSION_SECRET`
      - you don't need `SCHEDULER_MODE`: on Vercel it defaults to `external`
    - Click **Deploy**. The `vercel-build` script applies the database migrations, then builds the app.
+   - `vercel.json` runs the app in Vercel's Sydney region (`syd1`), next to a Sydney Supabase database. If your database is elsewhere, change it to the matching region (e.g. `sin1`, `iad1`, `fra1`). A server far from the database adds a noticeable delay to every click.
 3. **Alarms: cron-job.org**
    - Create a cron job that runs **every minute**.
    - URL: `https://<your-app>.vercel.app/api/cron/dispatch`.

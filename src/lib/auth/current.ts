@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -5,8 +6,8 @@ import { ServiceError } from "@/lib/alarms/service-error";
 import { SESSION_COOKIE, getSessionSecret, verifySessionToken } from "./session";
 import { publicUserSelect, toPublicUser, type PublicUser } from "./accounts";
 
-/** The signed-in user (verified against the database), or null. */
-export async function getCurrentUser(): Promise<PublicUser | null> {
+/** The signed-in user (verified against the database), or null. Looked up once per request. */
+export const getCurrentUser = cache(async (): Promise<PublicUser | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const prisma = db();
@@ -14,7 +15,7 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   if (!userId) return null;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: publicUserSelect });
   return user ? toPublicUser(user) : null;
-}
+});
 
 /** For API routes: the signed-in user's id, or a 401 error. */
 export async function requireUserId(): Promise<string> {
