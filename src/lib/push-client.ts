@@ -55,9 +55,9 @@ export async function getCurrentSubscription(): Promise<PushSubscription | null>
 
 /** Ask permission, subscribe this browser and store the subscription on the server. */
 export async function subscribeToPush(): Promise<PushSubscription> {
-  const config = await api<{ configured: boolean; publicKey: string | null }>("/api/push/config");
+  const config = await api<{ configured: boolean; publicKey: string | null; problem?: string | null }>("/api/push/config");
   if (!config.configured || !config.publicKey) {
-    throw new Error("Push notifications are not configured on the server (VAPID keys missing).");
+    throw new Error(config.problem || "Push notifications are not configured on the server (VAPID keys missing).");
   }
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
-import { env } from "@/lib/env";
+import { env, vapidKeyProblem } from "@/lib/env";
 import { getGeminiApiKey } from "@/lib/settings";
 import { getCurrentUser } from "@/lib/auth/current";
 import { googleConfigured } from "@/lib/auth/google";
@@ -19,7 +19,8 @@ export async function GET() {
     if (user) {
       details = {
         geminiConfigured: Boolean(await getGeminiApiKey(db(), user.id)),
-        pushConfigured: Boolean(e.VAPID_PUBLIC_KEY && e.VAPID_PRIVATE_KEY),
+        pushConfigured: !vapidKeyProblem(e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY),
+        pushProblem: vapidKeyProblem(e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY),
         schedulerMode: e.SCHEDULER_MODE,
         cronConfigured: Boolean(e.CRON_SECRET),
         googleSignIn: googleConfigured(),

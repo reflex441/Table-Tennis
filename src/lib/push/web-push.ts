@@ -1,13 +1,13 @@
 import webpush, { WebPushError } from "web-push";
 import type { PushResult, PushSender } from "@/lib/alarms/dispatcher";
-import { env } from "@/lib/env";
+import { env, vapidKeyProblem } from "@/lib/env";
 
 let configured = false;
 
 /** Returns a Web Push sender, or null when VAPID keys are not configured. */
 export function createWebPushSender(): PushSender | null {
   const e = env();
-  if (!e.VAPID_PUBLIC_KEY || !e.VAPID_PRIVATE_KEY) return null;
+  if (vapidKeyProblem(e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY)) return null;
   if (!configured) {
     webpush.setVapidDetails(e.VAPID_SUBJECT, e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY);
     configured = true;
