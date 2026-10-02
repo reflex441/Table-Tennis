@@ -22,15 +22,26 @@ export function checkSchedule(startsAt: Date, reminderMinutes: number, now: Date
 }
 
 /**
- * Dashboard sections, in order: Upcoming -> Triggered -> Pending (bet placed,
- * not settled yet) -> Completed (settled, finished or cancelled).
+ * Dashboard sections, in order: Upcoming -> Triggered -> Pending (match
+ * started, bet not settled yet) -> Completed (settled, finished or cancelled).
  */
 export const SECTIONS = ["upcoming", "triggered", "pending", "completed"] as const;
 export type Section = (typeof SECTIONS)[number];
 
-/** Section for a match: a placed but unsettled bet is Pending; otherwise the alarm decides. */
-export function sectionFor(alarmStatus: string | null | undefined, betResult: string | null | undefined): Section {
-  if (betResult === "PENDING") return "pending";
+export interface SectionInput {
+  alarm: { status: string; ackAction?: string | null } | null;
+  bet: { result: string } | null;
+}
+
+/**
+ * Section for a match. Only "Bet placed" (on the card or the alarm) moves a
+ * match with an unsettled bet to Pending, where it stays until it is marked
+ * won/lost. A bet that is only recorded doesn't: the alarm still rings and
+ * the alarm decides the section.
+ */
+export function sectionFor(m: SectionInput): Section {
+  const alarmStatus = m.alarm?.status;
+  if (m.bet?.result === "PENDING" && m.alarm?.ackAction === "placed") return "pending";
   switch (alarmStatus ?? "SCHEDULED") {
     case "SCHEDULED":
     case "SENDING":
@@ -43,8 +54,3 @@ export function sectionFor(alarmStatus: string | null | undefined, betResult: st
   }
 }
 
-export const SECTION_STATUSES: Record<Exclude<Section, "pending">, string[]> = {
-  upcoming: ["SCHEDULED", "SENDING"],
-  triggered: ["TRIGGERED", "FAILED"],
-  completed: ["COMPLETED", "CANCELLED"],
-};

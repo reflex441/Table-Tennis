@@ -35,18 +35,23 @@ describe("computeFireAt / checkSchedule", () => {
     expect(r).toMatchObject({ ok: true, immediate: true });
   });
 
-  it("maps statuses to dashboard sections", () => {
-    expect(sectionFor("SCHEDULED", null)).toBe("upcoming");
-    expect(sectionFor("SENDING", undefined)).toBe("upcoming");
-    expect(sectionFor("TRIGGERED", null)).toBe("triggered");
-    expect(sectionFor("FAILED", null)).toBe("triggered");
-    expect(sectionFor("COMPLETED", null)).toBe("completed");
-    expect(sectionFor("CANCELLED", null)).toBe("completed"); // no separate Cancelled section
-    // A placed, unsettled bet is Pending until it's marked Won / Lost / Void.
-    expect(sectionFor("TRIGGERED", "PENDING")).toBe("pending");
-    expect(sectionFor("COMPLETED", "PENDING")).toBe("pending");
-    expect(sectionFor("COMPLETED", "WON")).toBe("completed");
-    expect(sectionFor("COMPLETED", "LOST")).toBe("completed");
+  it("maps matches to dashboard sections", () => {
+    const m = (status: string, bet: string | null, ackAction: string | null = null) => ({ alarm: { status, ackAction }, bet: bet ? { result: bet } : null });
+    expect(sectionFor(m("SCHEDULED", null))).toBe("upcoming");
+    expect(sectionFor(m("SENDING", null))).toBe("upcoming");
+    expect(sectionFor(m("TRIGGERED", null))).toBe("triggered");
+    expect(sectionFor(m("FAILED", null))).toBe("triggered");
+    expect(sectionFor(m("COMPLETED", null))).toBe("completed");
+    expect(sectionFor(m("CANCELLED", null))).toBe("completed"); // no separate Cancelled section
+    // Recording a bet doesn't move the match: the alarm still rings.
+    expect(sectionFor(m("SCHEDULED", "PENDING"))).toBe("upcoming");
+    expect(sectionFor(m("TRIGGERED", "PENDING"))).toBe("triggered");
+    // Only "Bet placed" (card or alarm) moves it to Pending, until it's marked Won / Lost / Void.
+    expect(sectionFor(m("COMPLETED", "PENDING", "placed"))).toBe("pending");
+    expect(sectionFor(m("TRIGGERED", "PENDING", "placed"))).toBe("pending");
+    expect(sectionFor(m("COMPLETED", "WON", "placed"))).toBe("completed");
+    expect(sectionFor(m("COMPLETED", "LOST", "placed"))).toBe("completed");
+    expect(sectionFor(m("COMPLETED", "PENDING", "skipped"))).toBe("completed");
   });
 });
 

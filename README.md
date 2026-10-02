@@ -44,7 +44,7 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 
 ## Dashboard sections
 
-**Upcoming → Triggered → Pending → Completed.** A match moves to **Pending** as soon as a bet is recorded for it (via "I've placed the bet", the **Bet placed** button, or **Record bet**) and moves to **Completed** when you mark the bet **Won / Lost / Void**. Finished or cancelled matches without a pending bet are in **Completed**.
+**Upcoming → Triggered → Pending → Completed.** A match moves to **Pending** only when you confirm the bet is placed (**I've placed the bet** on the alarm, or the **Bet placed** button on the card), and moves to **Completed** when you mark the bet **Won / Lost / Void**. **Record bet** just notes the stake/odds early: the match stays where it is and its alarm still rings. Finished or cancelled matches without a pending bet are in **Completed**.
 
 Placed the bet before the reminder? Click **Bet placed** on the card: the bet is recorded with the stake and odds from the upload, the alarm won't go off, and the match moves to Pending.
 

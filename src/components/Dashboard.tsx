@@ -62,7 +62,7 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
 
   const grouped = useMemo(() => {
     const g: Record<Section, MatchDTO[]> = { upcoming: [], triggered: [], pending: [], completed: [] };
-    for (const m of matches) g[sectionFor(m.alarm?.status, m.bet?.result)].push(m);
+    for (const m of matches) g[sectionFor(m)].push(m);
     const asc = (a: MatchDTO, b: MatchDTO) => a.startsAt.localeCompare(b.startsAt);
     g.upcoming.sort(asc);
     g.triggered.sort(asc);
