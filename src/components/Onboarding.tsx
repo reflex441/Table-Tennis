@@ -312,6 +312,10 @@ function UnitsStep({ onSaved, onBack }: { onSaved: () => void; onBack: () => voi
         Bets and profit are counted in <span className="font-semibold text-text">units</span> (1u = your normal stake). Set what 1 unit is worth to also see the money
         amount.
       </p>
+      <p className="mt-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm">
+        <span className="font-semibold text-accent">Tip:</span> 1 unit should be <span className="font-semibold">1-2% of your bankroll</span> (the total you&apos;ve set
+        aside for betting). For example, with a {currency.trim() || "$"}1,000 bankroll, 1u = {currency.trim() || "$"}10-{currency.trim() || "$"}20.
+      </p>
       <div className="mt-4 flex gap-3">
         <label className="w-24">
           <span className="label">Currency</span>
