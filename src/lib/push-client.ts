@@ -80,6 +80,14 @@ export async function subscribeToPush(): Promise<PushSubscription> {
   return sub;
 }
 
+/** Same id as the server's endpointId for this browser's subscription (to mark "This device"). */
+export async function currentEndpointId(): Promise<string | null> {
+  const sub = await getCurrentSubscription().catch(() => null);
+  if (!sub || !crypto?.subtle) return null;
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sub.endpoint));
+  return Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
+
 export async function unsubscribeFromPush(): Promise<void> {
   const sub = await getCurrentSubscription();
   if (!sub) return;

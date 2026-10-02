@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -47,9 +48,14 @@ export const GET = handle(async () => {
     select: { id: true, createdAt: true, userAgent: true, deviceType: true, active: true, failureCount: true, lastSuccessAt: true, lastError: true, endpoint: true },
   });
   return NextResponse.json({
-    subscriptions: rows.map((r) => ({ ...r, endpoint: undefined, endpointHost: safeHost(r.endpoint) })),
+    // endpointId lets a browser recognise its own entry without exposing the endpoint.
+    subscriptions: rows.map((r) => ({ ...r, endpoint: undefined, endpointHost: safeHost(r.endpoint), endpointId: endpointId(r.endpoint) })),
   });
 });
+
+function endpointId(endpoint: string): string {
+  return createHash("sha256").update(endpoint).digest("hex").slice(0, 16);
+}
 
 function safeHost(endpoint: string): string {
   try {

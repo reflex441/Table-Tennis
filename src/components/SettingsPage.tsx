@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle, Trash2 } from "lucide-react";
 import { startSiren, unlockAudio } from "@/lib/siren";
 import { ALARM_SOUNDS, ALARM_SOUND_LABEL } from "@/lib/alarm-sounds";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { ReminderPicker } from "./ReminderPicker";
 import { api } from "@/lib/client-api";
-import { detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
+import { currentEndpointId, detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "@/lib/leagues";
 import { signOut } from "@/lib/sign-out";
@@ -37,6 +37,7 @@ interface Device {
   lastSuccessAt: string | null;
   lastError: string | null;
   endpointHost: string;
+  endpointId: string;
 }
 
 export function SettingsPage() {
@@ -48,12 +49,23 @@ export function SettingsPage() {
   const [permission, setPermission] = useState<string>("unknown");
   const [health, setHealth] = useState<Health | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [thisDevice, setThisDevice] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
   const refreshDevices = useCallback(async () => {
     const res = await api<{ subscriptions: Device[] }>("/api/push/subscriptions").catch(() => ({ subscriptions: [] }));
     setDevices(res.subscriptions);
+    setThisDevice(await currentEndpointId());
   }, []);
+
+  const removeDevice = async (d: Device) => {
+    const mine = d.endpointId === thisDevice;
+    if (!window.confirm(mine ? "Remove this device? It will stop getting notifications." : `Remove ${describeAgent(d.userAgent)}? It will stop getting notifications.`)) return;
+    if (mine) await unsubscribeFromPush(); // also unsubscribes this browser, so it doesn't sign up again
+    else await api(`/api/push/subscriptions/${d.id}`, { method: "DELETE" }).catch(() => {});
+    await refreshPush();
+    await refreshDevices();
+  };
 
   const refreshPush = useCallback(async () => {
     setPushState(await detectPushState());
@@ -73,6 +85,7 @@ export function SettingsPage() {
       setPermission(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
       setHealth(h);
       setDevices(d.subscriptions);
+      setThisDevice(await currentEndpointId());
     })();
     return () => {
       cancelled = true;
@@ -185,7 +198,10 @@ export function SettingsPage() {
                 <li key={d.id} className="flex items-start gap-2 px-2.5 py-2 text-xs">
                   <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate">{describeAgent(d.userAgent)} · {d.endpointHost}</p>
+                    <p className="truncate">
+                      {d.endpointId === thisDevice && <span className="chip mr-1.5 bg-accent/15 text-accent">This device</span>}
+                      {describeAgent(d.userAgent)} · {d.endpointHost}
+                    </p>
                     <p className="text-muted">
                       {d.active ? "active" : "inactive (expired)"}
                       {d.lastSuccessAt ? ` · last delivered ${new Date(d.lastSuccessAt).toLocaleString()}` : ""}
@@ -203,6 +219,9 @@ export function SettingsPage() {
                     }}
                   >
                     {d.deviceType === "mobile" ? "📱 Phone" : "💻 Computer"}
+                  </button>
+                  <button className="btn-ghost shrink-0 px-1.5 py-1 text-under hover:bg-under/10" onClick={() => void removeDevice(d)} aria-label={`Remove ${describeAgent(d.userAgent)}`} title="Remove this device">
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </li>
               ))}
