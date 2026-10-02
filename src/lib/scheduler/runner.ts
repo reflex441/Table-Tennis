@@ -11,6 +11,27 @@ export async function runDispatchOnce(log?: (msg: string) => void): Promise<Disp
   return dispatchDueAlarms({ store: createPrismaStore(db()), push: createWebPushSender(), log });
 }
 
+const fallback = globalThis as unknown as { __ttLastFallbackDispatch?: number };
+
+/**
+ * Backup for serverless hosting (SCHEDULER_MODE=external): while anyone has
+ * the app open, its regular polling also delivers due alarms, so they still
+ * fire if the cron service is missing or late. At most every 20 s per server
+ * instance; alarms are claimed in the database, so nothing is sent twice.
+ */
+export async function dispatchIfDue(): Promise<void> {
+  const mode = process.env.SCHEDULER_MODE || (process.env.VERCEL ? "external" : "inprocess");
+  if (mode !== "external") return;
+  const now = Date.now();
+  if (now - (fallback.__ttLastFallbackDispatch ?? 0) < 20_000) return;
+  fallback.__ttLastFallbackDispatch = now;
+  try {
+    await runDispatchOnce();
+  } catch (err) {
+    console.error("[fallback dispatch]", err);
+  }
+}
+
 interface SchedulerState {
   timer: ReturnType<typeof setTimeout> | null;
   busy: boolean;

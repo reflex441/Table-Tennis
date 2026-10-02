@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after as afterResponse } from "next/server";
+import { dispatchIfDue } from "@/lib/scheduler/runner";
 import { db } from "@/lib/db";
 import { requireUserId } from "@/lib/auth/current";
 import { handle } from "@/lib/api";
@@ -11,6 +12,8 @@ export const GET = handle(async (request: Request) => {
   const after = afterRaw ? new Date(afterRaw) : null;
   const prisma = db();
   const userId = await requireUserId();
+  // Open apps poll here: deliver due alarms too, in case the cron service isn't running.
+  afterResponse(dispatchIfDue);
   const rows = await prisma.inAppNotification.findMany({
     where: { userId, ...(after && !Number.isNaN(after.getTime()) ? { createdAt: { gt: after } } : {}) },
     orderBy: { createdAt: "desc" },

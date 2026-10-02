@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DateTime } from "luxon";
 import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle, Trash2 } from "lucide-react";
 import { startSiren, unlockAudio } from "@/lib/siren";
 import { ALARM_SOUNDS, ALARM_SOUND_LABEL } from "@/lib/alarm-sounds";
@@ -25,6 +26,9 @@ interface Health {
   pushConfigured: boolean;
   schedulerMode: string;
   cronConfigured: boolean;
+  /** Only with SCHEDULER_MODE=external (Vercel): when cron-job.org last called. */
+  cronLastRunAt?: string | null;
+  cronHealthy?: boolean;
 }
 
 interface Device {
@@ -257,12 +261,31 @@ export function SettingsPage() {
 
       <Section title="Server status">
         {health ? (
+          <>
           <ul className="grid gap-1 text-sm sm:grid-cols-2">
             <Status ok={health.database} label="Database" />
             <Status ok={health.geminiConfigured} label="Gemini API key" />
             <Status ok={health.pushConfigured} label="Web Push (VAPID keys)" />
             <Status ok={health.schedulerMode !== "external" || health.cronConfigured} label={`Scheduler: ${health.schedulerMode}${health.schedulerMode === "external" ? (health.cronConfigured ? " (cron secret set)" : " (CRON_SECRET missing)") : ""}`} />
+            {health.schedulerMode === "external" && (
+              <Status
+                ok={Boolean(health.cronHealthy)}
+                label={
+                  health.cronLastRunAt
+                    ? `Alarm checker (cron-job.org): last ran ${DateTime.fromISO(health.cronLastRunAt).toRelative() ?? "recently"}`
+                    : "Alarm checker (cron-job.org): has never run"
+                }
+              />
+            )}
           </ul>
+          {health.schedulerMode === "external" && !health.cronHealthy && (
+            <p className="mt-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
+              cron-job.org isn&apos;t calling the app, so alarms only fire while someone has the app open, and phones with the app closed get nothing. In cron-job.org,
+              check the job runs every minute on <span className="font-mono">/api/cron/dispatch</span> with the header{" "}
+              <span className="font-mono">Authorization: Bearer &lt;your CRON_SECRET&gt;</span>, and that its history shows status 200.
+            </p>
+          )}
+          </>
         ) : (
           <p className="text-sm text-muted">Loading…</p>
         )}
