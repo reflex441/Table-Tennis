@@ -37,9 +37,8 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 ## Tailing and profile pictures
 
 - **Profile picture:** Settings → Account → **Add profile picture**. The browser crops and shrinks it to a small square before uploading. It shows in the account menu, on the Leaderboard and on the Tailing pages. Only signed-in users can load it.
-- **Tailing** (menu item between Leaderboard and Settings): tail other accounts to see their **profit page** (read-only, with all the filters and charts) and their **upcoming bets**. Find people under **Find accounts**, or click a name on the Leaderboard.
-- **Copy bets:** on someone's page, **Copy** adds one upcoming bet to your dashboard and **Copy bets** adds all of them. Copies get your default reminder, a 1u stake and your average odds (if ticked, otherwise their odds). Bets already on your dashboard are skipped. Copied matches show a "from <name>" tag.
-- **Privacy:** turn off **Settings → Account → Let others tail me** to hide your profit and bets. Emails and screenshots are never shared.
+- **Tailing** (menu item between Leaderboard and Settings): every account automatically tails **one account** - the app owner's (the first account created, or the one whose email is in `TAILING_ACCOUNT_EMAIL` in `.env`). The page shows that account's **upcoming bets** and a read-only **profit page** (all the filters and charts). The owner sees a preview of what everyone else sees.
+- **Copy bets:** **Copy** adds one upcoming bet to your dashboard and **Copy bets** adds all of them. Copies get your default reminder, a 1u stake and your average odds (if ticked, otherwise the owner's odds). Bets already on your dashboard are skipped. Copied matches show a "from <name>" tag. Emails and screenshots are never shared.
 
 ## Dashboard sections
 

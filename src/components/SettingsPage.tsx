@@ -855,12 +855,6 @@ function AccountSection() {
         checked={settings.showOnLeaderboard}
         onChange={(v) => void update({ showOnLeaderboard: v })}
       />
-      <Toggle
-        label="Let others tail me"
-        hint="Other accounts can see your profit page and bets on the Tailing page and copy your upcoming bets. Your email and screenshots are never shared."
-        checked={settings.allowTailing}
-        onChange={(v) => void update({ allowTailing: v })}
-      />
       <button className="btn-ghost mt-2" onClick={() => void signOut()}>
         Sign out
       </button>

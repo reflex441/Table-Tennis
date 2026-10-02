@@ -23,6 +23,8 @@ const schema = z.object({
   APP_URL: z.string().optional().default(""),
   /** Comma-separated emails ranked on the leaderboard even below the 100-bet minimum. */
   LEADERBOARD_ALWAYS_SHOW: z.string().optional().default(""),
+  /** The account everyone tails (default: the first account created). */
+  TAILING_ACCOUNT_EMAIL: z.string().optional().default(""),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

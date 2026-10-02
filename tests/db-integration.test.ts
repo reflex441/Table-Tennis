@@ -21,7 +21,7 @@ import { getMatch, listMatches } from "@/lib/alarms/queries";
 import { deleteMatch } from "@/lib/alarms/service";
 import { getLeaderboard } from "@/lib/leaderboard";
 import { getSessionSecret } from "@/lib/auth/session";
-import { copyBets, getTailProfile, listTailing, tail, untail } from "@/lib/tailing";
+import { copyBets, getTailProfile, getTailedAccount } from "@/lib/tailing";
 import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -43,7 +43,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "Follow", "User", "AppSecret" CASCADE`,
+      `TRUNCATE "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "User", "AppSecret" CASCADE`,
     );
     userId = (await prisma.user.create({ data: { email: "owner@example.com", name: "Owner" } })).id;
   });
@@ -400,56 +400,55 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await listMatches(prisma, userId, "completed")).map((m) => m.id)).toEqual([res.match.id]);
   });
 
-  it("tailing: follow open accounts, see their bets, copy upcoming bets; private accounts stay hidden", async () => {
+  it("tailing: everyone tails the owner's account and can copy its upcoming bets", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
+    // `userId` (created first) is the owner everyone tails.
     const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
-    const kim = (await prisma.user.create({ data: { email: "kim@example.com", name: "Kim" } })).id;
-    await updateSettings(prisma, kim, { allowTailing: false });
+    expect((await getTailedAccount(prisma))?.id).toBe(userId);
 
-    // Sam: two upcoming bets (one already started is not copyable) and one settled bet.
-    const a = await createMatchWithAlarm(prisma, sam, input({ odds: 2.1, selection: "UNDER" }), now);
-    const b = await createMatchWithAlarm(prisma, sam, input({ player1: "Kosmal D.", player2: "Minda M.", startsAt: "2030-09-21T19:00:00Z", selection: "SWEEP" }), now);
+    const a = await createMatchWithAlarm(prisma, userId, input({ odds: 2.1, selection: "UNDER" }), now);
+    const b = await createMatchWithAlarm(prisma, userId, input({ player1: "Kosmal D.", player2: "Minda M.", startsAt: "2030-09-21T19:00:00Z", selection: "SWEEP" }), now);
     const old = await prisma.match.create({
-      data: { userId: sam, player1: "Old", player2: "Match", startsAt: new Date("2030-09-20T10:00:00Z"), timezone: "UTC", dedupeKey: "old",
+      data: { userId, player1: "Old", player2: "Match", startsAt: new Date("2030-09-20T10:00:00Z"), timezone: "UTC", dedupeKey: "old",
         bet: { create: { stake: 1, odds: 2, result: "WON", profit: 1 } } },
     });
     if (a.status !== "created" || b.status !== "created") throw new Error("not created");
 
-    const lists = await listTailing(prisma, userId, now);
-    expect(lists.tailing).toEqual([]);
-    expect(lists.others.map((x) => x.name)).toEqual(["Sam"]); // Kim turned tailing off
-    expect(JSON.stringify(lists)).not.toContain("@example.com");
-    await expect(tail(prisma, userId, kim)).rejects.toMatchObject({ status: 404 });
-    await expect(getTailProfile(prisma, userId, kim, now)).rejects.toMatchObject({ status: 404 });
-    await expect(tail(prisma, userId, userId)).rejects.toMatchObject({ status: 400 });
-
-    await tail(prisma, userId, sam);
-    await tail(prisma, userId, sam); // idempotent
-    const after = await listTailing(prisma, userId, now);
-    expect(after.tailing).toMatchObject([{ name: "Sam", tailed: true, upcoming: 2, summary: { profit: 1, won: 1 } }]);
-
-    const profile = await getTailProfile(prisma, userId, sam, now);
+    // Sam (anyone else) sees the owner's page automatically.
+    const profile = (await getTailProfile(prisma, sam, now))!;
+    expect(profile).toMatchObject({ isSelf: false, account: { id: userId, name: "Owner", upcoming: 2, summary: { profit: 1, won: 1 } } });
     expect(profile.upcoming.map((m) => m.player1)).toEqual(["Varcl J", "Kosmal D."]);
     expect(profile.bets.map((r) => r.matchId)).toEqual([old.id]);
     expect(JSON.stringify(profile)).not.toMatch(/@example\.com|screenshot/i);
 
+    // The owner sees a preview and can't copy their own bets.
+    expect((await getTailProfile(prisma, userId, now))!.isSelf).toBe(true);
+    await expect(copyBets(prisma, userId, null, now)).rejects.toMatchObject({ status: 400 });
+
     // Copy one, then all: the second run skips the one already copied.
-    await updateSettings(prisma, userId, { defaultReminderMinutes: 10, useAverageOdds: true, averageOdds: 1.85 });
-    expect(await copyBets(prisma, userId, sam, [a.match.id], now)).toEqual({ copied: 1, skipped: [] });
-    const all = await copyBets(prisma, userId, sam, null, now);
+    await updateSettings(prisma, sam, { defaultReminderMinutes: 10, useAverageOdds: true, averageOdds: 1.85 });
+    expect(await copyBets(prisma, sam, [a.match.id], now)).toEqual({ copied: 1, skipped: [] });
+    const all = await copyBets(prisma, sam, null, now);
     expect(all.copied).toBe(1);
     expect(all.skipped).toHaveLength(1);
-    const mine = await listMatches(prisma, userId, "upcoming");
-    expect(mine).toHaveLength(2);
-    expect(mine[0]).toMatchObject({ player1: "Varcl J", copiedFrom: { id: sam, name: "Sam" }, stakeUnits: 1, odds: 1.85, playType: "BOT" });
-    expect(mine[0].alarm?.reminderMinutes).toBe(10);
-    expect(mine[1].statistics.selection).toBe("SWEEP");
-    expect((await getTailProfile(prisma, userId, sam, now)).upcoming.every((m) => m.copied)).toBe(true);
-    // Their matches are untouched and still theirs.
-    expect((await listMatches(prisma, sam, null)).length).toBe(3);
+    const copies = await listMatches(prisma, sam, "upcoming");
+    expect(copies).toHaveLength(2);
+    expect(copies[0]).toMatchObject({ player1: "Varcl J", copiedFrom: { id: userId, name: "Owner" }, stakeUnits: 1, odds: 1.85, playType: "BOT" });
+    expect(copies[0].alarm?.reminderMinutes).toBe(10);
+    expect(copies[1].statistics.selection).toBe("SWEEP");
+    expect((await getTailProfile(prisma, sam, now))!.upcoming.every((m) => m.copied)).toBe(true);
+    expect((await listMatches(prisma, userId, null)).length).toBe(3); // the owner's matches are untouched
 
-    await untail(prisma, userId, sam);
-    expect((await listTailing(prisma, userId, now)).tailing).toEqual([]);
+    // TAILING_ACCOUNT_EMAIL picks a different account.
+    process.env.TAILING_ACCOUNT_EMAIL = "SAM@example.com";
+    try {
+      expect((await getTailedAccount(prisma))?.id).toBe(sam);
+      const board = await getLeaderboard(prisma, { currentUserId: userId, minBets: 1 });
+      expect(board.byProfit.find((r) => r.userId === userId)?.tailable).toBe(false);
+    } finally {
+      delete process.env.TAILING_ACCOUNT_EMAIL;
+    }
+    expect((await getLeaderboard(prisma, { currentUserId: sam, minBets: 1 })).byProfit.find((r) => r.userId === userId)?.tailable).toBe(true);
   });
 
   it("stores a profile picture and exposes only a versioned URL", async () => {

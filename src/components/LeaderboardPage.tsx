@@ -24,7 +24,7 @@ export function LeaderboardPage({ boards, currentUserId }: { boards: Record<Type
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Leaderboard</h1>
           <p className="text-sm text-muted">
-            Units ranking: everyone with a settled bet. ROI ranking: at least {board.minBets} settled bets. Results in units, so different unit sizes compare fairly. Click a name to tail them.
+            Units ranking: everyone with a settled bet. ROI ranking: at least {board.minBets} settled bets. Results in units, so different unit sizes compare fairly.
           </p>
         </div>
         <div className="flex rounded-lg border border-line bg-panel p-0.5 text-xs" role="radiogroup" aria-label="Play type">
@@ -147,7 +147,7 @@ function Board({
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
                   {r.userId !== currentUserId && r.tailable ? (
-                    <Link href={`/tailing/${r.userId}`} className="hover:underline" title={`See ${r.name}'s profit and bets`}>
+                    <Link href="/tailing" className="hover:underline" title={`See ${r.name}'s profit and bets on the Tailing page`}>
                       {r.name}
                     </Link>
                   ) : (

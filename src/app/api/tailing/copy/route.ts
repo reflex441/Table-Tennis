@@ -7,15 +7,14 @@ import { copyBets } from "@/lib/tailing";
 import { wakeScheduler } from "@/lib/scheduler/runner";
 
 const schema = z.object({
-  /** Bets to copy; omit to copy all their upcoming bets. */
+  /** Bets to copy; omit to copy all upcoming bets. */
   matchIds: z.array(z.string().min(1).max(40)).max(100).optional(),
 });
 
-/** Copy a tailed account's upcoming bets to your dashboard. */
-export const POST = handle(async (request: Request, ctx: { params: Promise<{ id: string }> }) => {
-  const { id } = await ctx.params;
+/** Copy the tailed account's upcoming bets to your dashboard. */
+export const POST = handle(async (request: Request) => {
   const { matchIds } = await parseJson(request, schema);
-  const result = await copyBets(db(), await requireUserId(), id, matchIds ?? null);
+  const result = await copyBets(db(), await requireUserId(), matchIds ?? null);
   if (result.copied) wakeScheduler();
   return NextResponse.json(result);
 });

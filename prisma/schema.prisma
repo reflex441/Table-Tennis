@@ -88,23 +88,9 @@ model User {
   settings      Settings?
   matches       Match[]             @relation("owner")
   copiedMatches Match[]             @relation("copiedFrom")
-  following     Follow[]            @relation("follower")
-  followers     Follow[]            @relation("followee")
   screenshots   Screenshot[]
   subscriptions PushSubscription[]
   notifications InAppNotification[]
-}
-
-/// "Tailing": follower follows (tails) followee to see their profit and bets.
-model Follow {
-  followerId String
-  followeeId String
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
-  follower   User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
-  followee   User     @relation("followee", fields: [followeeId], references: [id], onDelete: Cascade)
-
-  @@id([followerId, followeeId])
-  @@index([followeeId])
 }
 
 /// Server-generated secrets (e.g. the session signing key when SESSION_SECRET is not set).
@@ -340,8 +326,6 @@ model Settings {
   user                       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Appear on the public leaderboard (display name only).
   showOnLeaderboard          Boolean  @default(true)
-  /// Let other accounts tail you (see your profit page and bets, copy your bets).
-  allowTailing               Boolean  @default(true)
   /// Bookmaker links per league: [{ "league": "TT Cup", "url": "https://..." }]
   leagueLinks                Json     @default("[]")
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
