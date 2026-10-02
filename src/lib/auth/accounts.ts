@@ -11,12 +11,14 @@ export interface PublicUser {
   hasGoogle: boolean;
   /** Profile picture URL (versioned), or null for initials. */
   avatarUrl: string | null;
+  /** Finished (or skipped) the first-run tutorial. */
+  onboarded: boolean;
 }
 
 /** Fields needed for PublicUser (never loads the picture bytes). */
-export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, googleId: true, avatarUpdatedAt: true } as const;
+export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, googleId: true, avatarUpdatedAt: true, onboardedAt: true } as const;
 
-type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "googleId" | "avatarUpdatedAt">;
+type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "googleId" | "avatarUpdatedAt" | "onboardedAt">;
 
 export function avatarUrl(u: { id: string; avatarUpdatedAt: Date | null }): string | null {
   return u.avatarUpdatedAt ? `/api/users/${u.id}/avatar?v=${u.avatarUpdatedAt.getTime()}` : null;
@@ -30,6 +32,7 @@ export function toPublicUser(u: PublicUserSource): PublicUser {
     hasPassword: Boolean(u.passwordHash),
     hasGoogle: Boolean(u.googleId),
     avatarUrl: avatarUrl(u),
+    onboarded: Boolean(u.onboardedAt),
   };
 }
 

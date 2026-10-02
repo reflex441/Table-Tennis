@@ -7,6 +7,7 @@ import { Bell, LayoutDashboard, LogOut, Settings, Trophy, Upload, AlertTriangle,
 import type { PublicUser } from "@/lib/auth/accounts";
 import { signOut } from "@/lib/sign-out";
 import { Avatar } from "./Avatar";
+import { Onboarding } from "./Onboarding";
 import { useNotifications } from "./NotificationProvider";
 import { DateTime } from "luxon";
 
@@ -60,6 +61,8 @@ export function AppShell({ children, dbError, user }: { children: React.ReactNod
       )}
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 pb-24 pt-4 sm:px-4 sm:pb-10">{children}</main>
+
+      <Onboarding user={user} />
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
         <div className="grid grid-cols-6">

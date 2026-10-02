@@ -15,6 +15,7 @@ import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "
 import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
 import { Avatar } from "./Avatar";
+import { TUTORIAL_EVENT } from "./Onboarding";
 import type { SettingsUpdate } from "@/lib/validation/settings";
 import { useIsDesktopApp } from "@/lib/desktop-bridge";
 
@@ -863,9 +864,14 @@ function AccountSection() {
         checked={settings.showOnLeaderboard}
         onChange={(v) => void update({ showOnLeaderboard: v })}
       />
-      <button className="btn-ghost mt-2" onClick={() => void signOut()}>
-        Sign out
-      </button>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className="btn-ghost" onClick={() => window.dispatchEvent(new Event(TUTORIAL_EVENT))}>
+          Show the tutorial again
+        </button>
+        <button className="btn-ghost" onClick={() => void signOut()}>
+          Sign out
+        </button>
+      </div>
       <p className="mt-1 text-xs text-muted">Signing out also stops this browser getting your alarm notifications.</p>
     </Section>
   );

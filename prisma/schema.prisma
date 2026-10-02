@@ -84,6 +84,8 @@ model User {
   avatar          Bytes?
   avatarMime      String?
   avatarUpdatedAt DateTime? @db.Timestamptz(3)
+  /// When the first-run tutorial was finished or skipped (null = show it).
+  onboardedAt     DateTime? @db.Timestamptz(3)
 
   settings      Settings?
   matches       Match[]             @relation("owner")

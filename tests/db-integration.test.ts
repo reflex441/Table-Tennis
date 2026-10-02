@@ -515,6 +515,13 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await prisma.betLeg.count()).toBe(0);
   });
 
+  it("new accounts see the tutorial until it is finished", async () => {
+    const fresh = await prisma.user.create({ data: { email: "new@example.com", name: "New" } });
+    expect(toPublicUser(fresh).onboarded).toBe(false);
+    const done = await prisma.user.update({ where: { id: fresh.id }, data: { onboardedAt: new Date() } });
+    expect(toPublicUser(done).onboarded).toBe(true);
+  });
+
   it("stores a profile picture and exposes only a versioned URL", async () => {
     const png = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
     const user = await setAvatar(prisma, userId, { data: png, mime: "image/png" }, new Date("2030-01-01T00:00:00Z"));
