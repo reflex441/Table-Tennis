@@ -3,7 +3,7 @@ import { isCaptureCorroborated, resolveMatchTime, type CaptureSource, type Resol
 import { mergeRecords } from "@/lib/matching/dedupe";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import type { SettingsDTO } from "@/lib/validation/settings";
-import type { Selection } from "@/lib/selection";
+import { personalPick, type Selection } from "@/lib/selection";
 
 /**
  * A match detected in one or more screenshots, as edited in the review UI.
@@ -105,7 +105,8 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     timeIssues: [],
     timeNotes: [],
     timeConfirmed: false,
-    selection: m.selection ?? "",
+    // Bot plays keep the badge's pick; personal plays pick from the O/U %.
+    selection: m.selection ?? personalPick(m.ouHitRate, m.ouStats) ?? "",
     pointsLine: numStr(m.pointsLine),
     ouStats: m.ouStats ?? "",
     ouHitRate: numStr(m.ouHitRate),
@@ -200,7 +201,11 @@ export function mergeCandidates(primary: Candidate, secondary: Candidate): Candi
   ) {
     sec = { ...secondary, player1: secondary.player2, player2: secondary.player1 };
   }
-  const { merged, conflicts } = mergeRecords(pick(primary), pick(sec), [...MERGE_FIELDS]);
+  const { merged, conflicts: allConflicts } = mergeRecords(pick(primary), pick(sec), [...MERGE_FIELDS]);
+  // A bot play's badge pick beats a pick worked out from a personal play's O/U %.
+  const botPickFromSecondary = primary.playType === "PERSONAL" && sec.playType === "BOT" && Boolean(sec.selection);
+  if (botPickFromSecondary) merged.selection = sec.selection;
+  const conflicts = botPickFromSecondary ? allConflicts.filter((c) => c.field !== "selection") : allConflicts;
   const takeTimeFromSecondary = !primary.timeText && !primary.dateText && Boolean(sec.timeText || sec.dateText);
   const timeFromPrimary = primary.timeStatus === "manual" || !takeTimeFromSecondary;
   return {

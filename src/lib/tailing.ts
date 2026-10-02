@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { ServiceError } from "@/lib/alarms/service-error";
-import { createMatchWithAlarm } from "@/lib/alarms/service";
+import { createMatchWithAlarm, SIMILAR_WINDOW_MS } from "@/lib/alarms/service";
+import { playersKey } from "@/lib/matching/dedupe";
 import { avatarUrl } from "@/lib/auth/accounts";
 import { listBetRows, type BetRowWithMatch } from "@/lib/bets/queries";
 import { summarize, type ProfitSummary } from "@/lib/bets/profit";
@@ -64,19 +65,33 @@ async function upcomingMatches(prisma: PrismaClient, targetId: string, now: Date
   });
 }
 
+/**
+ * Which of `matches` the viewer already has: same players (either order)
+ * within 3 hours - the same rule that stops a copy from being a duplicate.
+ */
+async function viewerHas(prisma: PrismaClient, viewerId: string, matches: { player1: string; player2: string; startsAt: Date }[]) {
+  if (!matches.length) return () => false;
+  const times = matches.map((m) => m.startsAt.getTime());
+  const mine = await prisma.match.findMany({
+    where: {
+      userId: viewerId,
+      startsAt: { gte: new Date(Math.min(...times) - SIMILAR_WINDOW_MS), lte: new Date(Math.max(...times) + SIMILAR_WINDOW_MS) },
+    },
+    select: { player1: true, player2: true, startsAt: true },
+  });
+  return (m: { player1: string; player2: string; startsAt: Date }) => {
+    const key = playersKey(m.player1, m.player2);
+    return mine.some((o) => playersKey(o.player1, o.player2) === key && Math.abs(o.startsAt.getTime() - m.startsAt.getTime()) <= SIMILAR_WINDOW_MS);
+  };
+}
+
 /** The tailed account's profit page and upcoming bets, as seen by `viewerId`. */
 export async function getTailProfile(prisma: PrismaClient, viewerId: string, now = new Date()): Promise<TailProfile | null> {
   const target = await getTailedAccount(prisma);
   if (!target) return null;
   const [bets, upcoming] = await Promise.all([listBetRows(prisma, target.id), upcomingMatches(prisma, target.id, now)]);
   const isSelf = target.id === viewerId;
-  const have = new Set(
-    isSelf
-      ? upcoming.map((m) => m.dedupeKey)
-      : (await prisma.match.findMany({ where: { userId: viewerId, dedupeKey: { in: upcoming.map((m) => m.dedupeKey) } }, select: { dedupeKey: true } })).map(
-          (m) => m.dedupeKey,
-        ),
-  );
+  const onDashboard = isSelf ? () => true : await viewerHas(prisma, viewerId, upcoming);
   return {
     isSelf,
     account: { id: target.id, name: target.name, avatarUrl: avatarUrl(target), summary: summarize(bets), upcoming: upcoming.length },
@@ -95,7 +110,7 @@ export async function getTailProfile(prisma: PrismaClient, viewerId: string, now
         ouHitRate: m.statistics?.ouHitRate ?? null,
         edge: m.statistics?.edge ?? null,
       },
-      copied: have.has(m.dedupeKey),
+      copied: onDashboard(m),
     })),
   };
 }

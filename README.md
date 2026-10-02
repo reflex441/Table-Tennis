@@ -38,7 +38,7 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 
 - **Profile picture:** Settings → Account → **Add profile picture**. The browser crops and shrinks it to a small square before uploading. It shows in the account menu, on the Leaderboard and on the Tailing pages. Only signed-in users can load it.
 - **Tailing** (menu item between Leaderboard and Settings): every account automatically tails **one account** - the app owner's (the first account created, or the one whose email is in `TAILING_ACCOUNT_EMAIL` in `.env`). The page shows that account's **upcoming bets** and a read-only **profit page** (all the filters and charts). The owner sees a preview of what everyone else sees.
-- **Copy bets:** **Copy** adds one upcoming bet to your dashboard and **Copy bets** adds all of them. Copies get your default reminder, a 1u stake and your average odds (if ticked, otherwise the owner's odds). Bets already on your dashboard are skipped. Copied matches show a "from <name>" tag. Emails and screenshots are never shared.
+- **Copy bets:** **Copy** adds one upcoming bet to your dashboard and **Copy bets** adds all of them. Copies get your default reminder, a 1u stake and your average odds (if ticked, otherwise the owner's odds). Bets already on your dashboard (same players, either order, within 3 hours) are never copied again and show as "On your dashboard". Copied matches show a "from <name>" tag. Emails and screenshots are never shared.
 
 ## Dashboard sections
 
@@ -175,7 +175,7 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 
 ## Profit tracking
 
-- **Bot play vs personal play:** a match whose screenshot shows an OVER / UNDER / SWEEP pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**. The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
+- **Bot play vs personal play:** a match whose screenshot shows an OVER / UNDER / SWEEP pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**; its pick comes from the O/U %: over 50% is **OVER**, under 50% is **UNDER** (exactly 50% is left for you to choose). The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
 - **Recording a bet:** "I've placed the bet" on the computer alarm asks for the stake (in units) and the decimal odds, pre-filled with what was set when the match was uploaded. You can also click **Record bet** on any match card. Then mark it **Won / Lost / Void**.
 - **Profit:** won = stake × (odds − 1), lost = −stake, void = 0. A win without odds is not counted until you add the odds.
 - **Defaults when you upload:** every new match starts with a **1u** stake. Tick **Settings → Average odds** and new uploads also get your average odds (e.g. 1.85). Both can be changed on the review screen before you create the alarms, and they are used when you click "I've placed the bet". Changing the setting later never changes matches or bets you already have.

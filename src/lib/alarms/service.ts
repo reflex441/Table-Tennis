@@ -25,7 +25,8 @@ export type CreateOutcome =
   | { status: "similar"; existingId: string; message: string }
   | { status: "invalid"; message: string };
 
-const SIMILAR_WINDOW_MS = 3 * 60 * 60_000;
+/** Same players within this window counts as the same match. */
+export const SIMILAR_WINDOW_MS = 3 * 60 * 60_000;
 
 /** Create one match with its statistics and alarm, refusing duplicates. */
 export async function createMatchWithAlarm(

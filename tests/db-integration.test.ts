@@ -439,6 +439,14 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await getTailProfile(prisma, sam, now))!.upcoming.every((m) => m.copied)).toBe(true);
     expect((await listMatches(prisma, userId, null)).length).toBe(3); // the owner's matches are untouched
 
+    // A bet you already have (scanned yourself: players swapped, a few minutes off) isn't copied again.
+    const c = await createMatchWithAlarm(prisma, userId, input({ player1: "Lamparski M.", player2: "Kolek M.", startsAt: "2030-09-21T20:00:00Z" }), now);
+    if (c.status !== "created") throw new Error("not created");
+    await createMatchWithAlarm(prisma, sam, input({ player1: "kolek m", player2: "Lamparski M.", startsAt: "2030-09-21T20:05:00Z" }), now);
+    expect((await getTailProfile(prisma, sam, now))!.upcoming.find((m) => m.id === c.match.id)?.copied).toBe(true);
+    expect(await copyBets(prisma, sam, null, now)).toMatchObject({ copied: 0 });
+    expect(await listMatches(prisma, sam, "upcoming")).toHaveLength(3);
+
     // TAILING_ACCOUNT_EMAIL picks a different account.
     process.env.TAILING_ACCOUNT_EMAIL = "SAM@example.com";
     try {

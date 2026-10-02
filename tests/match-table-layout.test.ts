@@ -172,7 +172,7 @@ describe("today's-list edge cases", () => {
     const { candidates, startsAt, warnings } = scan({ matches: [row] }, "2026-10-01T09:00:00Z"); // 7:00 PM Thu 1 Oct
     expect(warnings).toEqual([]);
     expect(startsAt(0)).toBe("2026-10-01T16:00:00.000Z"); // 2:00 AM Fri 2/10/2026
-    expect(candidates[0]).toMatchObject({ edge: "8", ouStats: "11/12", ouHitRate: "48", playType: "PERSONAL", selection: "" });
+    expect(candidates[0]).toMatchObject({ edge: "8", ouStats: "11/12", ouHitRate: "48", playType: "PERSONAL", selection: "UNDER" }); // 48% -> UNDER
 
     // Taking the SPLIT/O-U 48% as EDGE is flagged for review.
     const misread = scan({ matches: [{ ...row, edge: 48 }] }, "2026-10-01T09:00:00Z");
