@@ -15,7 +15,7 @@ import { ReminderPicker } from "./ReminderPicker";
 export const TUTORIAL_EVENT = "tt:tutorial";
 
 type Source = "cage" | "tail";
-type Step = "welcome" | "source" | "gemini" | "bookmaker" | "reminder" | "notifications" | "units" | "how" | "done";
+type Step = "welcome" | "source" | "gemini" | "bookmaker" | "reminder" | "placing" | "notifications" | "units" | "how" | "done";
 
 /**
  * First-run tutorial, shown once per account after signing up: where picks
@@ -24,6 +24,8 @@ type Step = "welcome" | "source" | "gemini" | "bookmaker" | "reminder" | "notifi
  */
 export function Onboarding({ user }: { user: PublicUser }) {
   const [open, setOpen] = useState(!user.onboarded);
+  // The first time it can't be skipped; replaying it from Settings can be closed.
+  const [replay, setReplay] = useState(false);
   const [step, setStep] = useState<Step>("welcome");
   const [source, setSource] = useState<Source | null>(null);
   const [bookmaker, setBookmaker] = useState<Bookmaker | null>(null);
@@ -35,13 +37,14 @@ export function Onboarding({ user }: { user: PublicUser }) {
       setStep("welcome");
       setBookmaker(null);
       setLinksBefore(null);
+      setReplay(true);
       setOpen(true);
     };
     window.addEventListener(TUTORIAL_EVENT, show);
     return () => window.removeEventListener(TUTORIAL_EVENT, show);
   }, []);
 
-  const steps: Step[] = ["welcome", "source", ...(source === "tail" ? [] : (["gemini"] as Step[])), "bookmaker", "reminder", "notifications", "units", "how", "done"];
+  const steps: Step[] = ["welcome", "source", ...(source === "tail" ? [] : (["gemini"] as Step[])), "bookmaker", "reminder", "placing", "notifications", "units", "how", "done"];
   const index = steps.indexOf(step);
   const next = () => setStep(steps[Math.min(index + 1, steps.length - 1)]);
   const back = () => setStep(steps[Math.max(index - 1, 0)]);
@@ -52,7 +55,7 @@ export function Onboarding({ user }: { user: PublicUser }) {
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !replay) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") finish();
     };
@@ -65,10 +68,12 @@ export function Onboarding({ user }: { user: PublicUser }) {
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
       <div className="card relative my-auto w-full max-w-lg bg-panel-2 p-5 shadow-2xl shadow-black/50 sm:p-6">
-        <button className="absolute right-3 top-3 rounded-md p-1 text-muted hover:text-text" onClick={finish} aria-label="Skip the tutorial">
-          <X className="h-4 w-4" />
-        </button>
-        <div className="mb-4 mr-7 flex gap-1.5" aria-label={`Step ${index + 1} of ${steps.length}`}>
+        {replay && (
+          <button className="absolute right-3 top-3 rounded-md p-1 text-muted hover:text-text" onClick={finish} aria-label="Close the tutorial">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+        <div className={`mb-4 flex gap-1.5 ${replay ? "mr-7" : ""}`} aria-label={`Step ${index + 1} of ${steps.length}`}>
           {steps.map((s, i) => (
             <span key={s} className={`h-1 flex-1 rounded-full ${i <= index ? "bg-accent" : "bg-line"}`} />
           ))}
@@ -88,6 +93,7 @@ export function Onboarding({ user }: { user: PublicUser }) {
           />
         )}
         {step === "reminder" && <ReminderStep bookmaker={bookmaker} />}
+        {step === "placing" && <PlacingStep bookmaker={bookmaker} />}
         {step === "notifications" && <NotificationsStep />}
         {step === "units" && <UnitsStep onSaved={next} onBack={back} />}
         {step === "how" && <HowItWorks source={source ?? "cage"} />}
@@ -95,13 +101,9 @@ export function Onboarding({ user }: { user: PublicUser }) {
 
         {step !== "units" && step !== "done" && (
           <div className="mt-6 flex items-center gap-2">
-            {index > 0 ? (
+            {index > 0 && (
               <button className="btn-ghost" onClick={back}>
                 <ArrowLeft className="h-4 w-4" /> Back
-              </button>
-            ) : (
-              <button className="text-sm text-muted hover:text-text" onClick={finish}>
-                Skip tutorial
               </button>
             )}
             <button className="btn-primary ml-auto" onClick={next} disabled={step === "source" && !source}>
@@ -370,6 +372,56 @@ function ReminderStep({ bookmaker }: { bookmaker: Bookmaker | null }) {
         </p>
       </div>
       {error && <p className="mt-1 text-xs text-under">{error}</p>}
+    </>
+  );
+}
+
+function PlacingStep({ bookmaker }: { bookmaker: Bookmaker | null }) {
+  const name = bookmaker === "sportsbet" ? "Sportsbet" : bookmaker === "ladbrokes" ? "Ladbrokes" : "your bookmaker";
+  return (
+    <>
+      <Title icon={<BellRing className="h-4 w-4" />}>When the alarm goes off</Title>
+      <ol className="mt-4 flex flex-col gap-3 text-sm">
+        <li className="flex gap-3">
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/15 text-xs font-semibold text-accent">1</span>
+          <span>
+            <span className="font-semibold">Click the players&apos; names</span> on the alarm{" "}
+            <span className="whitespace-nowrap rounded bg-panel px-1.5 py-0.5 font-semibold">
+              Warpas B. <span className="font-normal text-muted">vs</span> Krcil F. <ExternalLink className="inline h-3 w-3 text-muted" />
+            </span>{" "}
+            to open the league on {name}, then open that match.
+          </span>
+        </li>
+        <li className="flex gap-3">
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/15 text-xs font-semibold text-accent">2</span>
+          <span>
+            Find the <span className="font-semibold">Total</span> market (e.g. &quot;Total 73.5&quot;). That&apos;s where the <span className="font-semibold">Over</span> and{" "}
+            <span className="font-semibold">Under</span> are:
+          </span>
+        </li>
+      </ol>
+      {/* Illustration of the bookmaker's Total market. */}
+      <div className="ml-9 mt-2 overflow-hidden rounded-lg border-2 border-warn bg-white text-[13px] text-slate-900" aria-label="Example: the Total market with Over and Under">
+        <div className="border-b border-slate-200 px-3 py-1.5 font-medium text-blue-700">Total 73.5</div>
+        {[
+          ["Over 73.5", "1.80"],
+          ["Under 73.5", "1.87"],
+        ].map(([label, odds]) => (
+          <div key={label} className="flex items-center justify-between border-b border-slate-200 px-3 py-1.5 last:border-b-0">
+            <span>{label}</span>
+            <span className="rounded border border-slate-300 bg-slate-100 px-3 py-0.5 font-semibold tabular">{odds}</span>
+          </div>
+        ))}
+      </div>
+      <ol start={3} className="mt-3 flex flex-col gap-3 text-sm">
+        <li className="flex gap-3">
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/15 text-xs font-semibold text-accent">3</span>
+          <span>
+            Bet on the pick shown on the alarm (Over or Under), then click <span className="font-semibold text-over">I&apos;ve placed the bet</span> to stop the alarm. Enter
+            the odds to track your profit.
+          </span>
+        </li>
+      </ol>
     </>
   );
 }
