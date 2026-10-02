@@ -9,6 +9,11 @@ describe("database connection settings", () => {
     expect(c.max).toBe(3);
   });
 
+  it("uses SSL for Supabase even without sslmode in the URL", () => {
+    const c = pgConfig("postgresql://u:p@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres", true);
+    expect(c.ssl).toEqual({ rejectUnauthorized: false });
+  });
+
   it("leaves local and verify-full URLs alone", () => {
     expect(pgConfig("postgresql://tt:tt@db:5432/table_tennis?schema=public", false)).toEqual({
       connectionString: "postgresql://tt:tt@db:5432/table_tennis?schema=public",
