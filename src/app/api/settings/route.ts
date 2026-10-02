@@ -18,7 +18,9 @@ export const PUT = handle(async (request: Request) => {
   const update = await parseJson(request, settingsUpdateSchema);
   const before = update.defaultReminderMinutes !== undefined ? await getSettings(db(), userId) : null;
   const settings = await updateSettings(db(), userId, update);
-  // Upcoming alarms on the old default move to the new one.
-  if (before && (await applyDefaultReminder(db(), userId, before.defaultReminderMinutes, settings.defaultReminderMinutes))) wakeScheduler();
+  // A new alarm time moves every scheduled alarm to it.
+  if (before && before.defaultReminderMinutes !== settings.defaultReminderMinutes && (await applyDefaultReminder(db(), userId, null, settings.defaultReminderMinutes))) {
+    wakeScheduler();
+  }
   return NextResponse.json({ settings });
 });

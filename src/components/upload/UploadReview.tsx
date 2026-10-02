@@ -94,6 +94,14 @@ export function UploadReview() {
   const [submitting, setSubmitting] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [bulkReminder, setBulkReminder] = useState(settings.defaultReminderMinutes);
+  // A new default in Settings becomes the reminder for matches not created yet.
+  const [seenDefault, setSeenDefault] = useState(settings.defaultReminderMinutes);
+  if (seenDefault !== settings.defaultReminderMinutes) {
+    const m = settings.defaultReminderMinutes;
+    setSeenDefault(m);
+    setBulkReminder(m);
+    setCandidates((prev) => prev.map((c) => (c.result?.status === "created" ? c : { ...c, reminderMinutes: m })));
+  }
   const browserTz = useBrowserTimeZone();
   const inputRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef(items);

@@ -213,26 +213,10 @@ export function SettingsPage() {
 
       <Section
         title="Default reminder"
-        description="How long before a match the alarm goes off. Changing it also moves upcoming alarms that were on the old default; every match can still have its own reminder."
+        description="How long before a match the alarm goes off. Used for every new match, and changing it moves all your scheduled alarms to the new time. You can still change a single match afterwards."
       >
         <ReminderPicker value={settings.defaultReminderMinutes} onChange={(m) => void save({ defaultReminderMinutes: m }, "reminder")} />
         {saving === "reminder" && <Saving />}
-        <button
-          className="btn-ghost mt-2 text-xs"
-          onClick={async () => {
-            try {
-              const res = await api<{ moved: number }>("/api/alarms/apply-default", { method: "POST" });
-              notify(
-                res.moved ? `Moved ${res.moved} alarm${res.moved === 1 ? "" : "s"}` : "Nothing to change",
-                res.moved ? `Upcoming alarms now go off ${settings.defaultReminderMinutes} min before the match.` : "All upcoming alarms already use this time.",
-              );
-            } catch (err) {
-              notify("Couldn't update alarms", err instanceof Error ? err.message : String(err));
-            }
-          }}
-        >
-          Use {settings.defaultReminderMinutes} min for all upcoming alarms
-        </button>
       </Section>
 
       <AlarmSection />
