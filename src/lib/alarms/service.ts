@@ -159,7 +159,9 @@ export async function updateMatch(prisma: PrismaClient, userId: string, id: stri
 
   let alarmUpdate: Prisma.AlarmUpdateWithoutMatchInput | undefined;
   const alarm = existing.alarm;
-  const alarmActive = alarm && (alarm.status === "SCHEDULED" || alarm.status === "SENDING" || alarm.status === "FAILED" || alarm.status === "TRIGGERED");
+  // A placed bet's alarm never rings again (the match is in Pending).
+  const alarmActive =
+    alarm && alarm.ackAction !== "placed" && (alarm.status === "SCHEDULED" || alarm.status === "SENDING" || alarm.status === "FAILED" || alarm.status === "TRIGGERED");
   if (alarm && timingChanged) {
     const fireAt = computeFireAt(startsAt, reminderMinutes);
     if (alarmActive) {
@@ -247,6 +249,7 @@ export async function changeAlarmState(
       ...(alarm.status === "SCHEDULED" || alarm.status === "SENDING" ? { generation: { increment: 1 } } : {}),
     };
   } else {
+    if (alarm.ackAction === "placed") throw new ServiceError("The bet is already placed, so there's no alarm to reactivate.", 409, "bet_placed");
     const check = checkSchedule(match.startsAt, alarm.reminderMinutes, now);
     if (!check.ok) throw new ServiceError(`Cannot reactivate: ${check.reason}`, 422, "invalid_time");
     data = {

@@ -154,9 +154,12 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:56:30Z") });
     expect(sent).toHaveLength(3);
 
-    // Rescheduling clears the confirmation so the alarm rings again.
+    // The bet is placed (Pending): rescheduling doesn't make it ring again.
     const updated = await updateMatch(prisma, userId, res.match.id, { reminderMinutes: 4 }, new Date("2030-09-21T17:55:50Z"));
-    expect(updated.alarm?.ackAt).toBeNull();
+    expect(updated.alarm).toMatchObject({ ackAction: "placed", reminderMinutes: 4 });
+    expect(updated.alarm?.ackAt).not.toBeNull();
+    await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:57:30Z") });
+    expect(sent).toHaveLength(3);
   });
 
   it("classifies bot/personal plays and tracks bet profit in units", async () => {
@@ -397,6 +400,13 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T17:55:00Z") });
     expect(sent).toEqual([]);
     expect(await prisma.inAppNotification.count()).toBe(0);
+    // Pending never rings: not after editing the match's time or reminder, nor via Reactivate.
+    await updateMatch(prisma, userId, res.match.id, { startsAt: "2030-09-21T18:30:00Z", reminderMinutes: 10 }, now);
+    expect((await prisma.alarm.findFirstOrThrow({ where: { matchId: res.match.id } })).status).toBe("COMPLETED");
+    await expect(changeAlarmState(prisma, userId, res.match.id, "reactivate", now)).rejects.toMatchObject({ status: 409 });
+    await dispatchDueAlarms({ store: createPrismaStore(prisma), push, now: () => new Date("2030-09-21T18:20:00Z") });
+    expect(sent).toEqual([]);
+
     // "Bet placed" -> Pending; marking it Won moves it to Completed.
     expect((await listMatches(prisma, userId, "pending")).map((m) => m.id)).toEqual([res.match.id]);
     expect(await listMatches(prisma, userId, "completed")).toEqual([]);
