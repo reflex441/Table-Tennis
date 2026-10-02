@@ -6,7 +6,8 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const mode = process.env.SCHEDULER_MODE || "inprocess";
+  // On Vercel (serverless) a cron service calls /api/cron/dispatch instead.
+  const mode = process.env.SCHEDULER_MODE || (process.env.VERCEL ? "external" : "inprocess");
   if (mode !== "inprocess") return;
   if (!process.env.DATABASE_URL) {
     console.warn("[scheduler] DATABASE_URL not set - scheduler not started.");

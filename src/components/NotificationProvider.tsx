@@ -8,6 +8,7 @@ import { api } from "@/lib/client-api";
 import { detectDeviceType, getCurrentSubscription, registerServiceWorker } from "@/lib/push-client";
 import { useSettings } from "./SettingsProvider";
 import { installAudioUnlock, playOnce } from "@/lib/siren";
+import { desktopApp } from "@/lib/desktop-bridge";
 
 interface Toast {
   id: string;
@@ -43,6 +44,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const cursor = useRef<string | null>(null);
   const seen = useRef<Set<string>>(new Set());
   const soundRef = useRef(settings.soundEnabled);
+  // Desktop app: alarms that ring until confirmed get their own notification from AlarmRinger.
+  const alarmsRingRef = useRef(settings.ringUntilAck);
+  useEffect(() => {
+    alarmsRingRef.current = settings.ringUntilAck;
+  }, [settings.ringUntilAck]);
   const volumeRef = useRef(settings.alarmVolume);
   const alarmSoundRef = useRef(settings.alarmSound);
   useEffect(() => {
@@ -72,6 +78,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
       if (fresh.length) {
         fresh.forEach((n) => pushToast({ id: n.id, title: n.title, body: n.body, url: n.url }));
+        const bridge = desktopApp();
+        fresh.filter((n) => !(n.matchId && alarmsRingRef.current)).forEach((n) => bridge?.notify({ title: n.title, body: n.body, url: n.url }));
         if (soundRef.current) playOnce(volumeRef.current, alarmSoundRef.current);
         window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT));
       }
@@ -82,7 +90,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const first = setTimeout(() => void refresh(), 0);
-    const timer = setInterval(() => void refresh(), POLL_MS);
+    // Every POLL_MS while visible, every other tick in the background.
+    let tick = 0;
+    const timer = setInterval(() => {
+      tick += 1;
+      if (document.visibilityState === "visible" || tick % 2 === 0) void refresh();
+    }, POLL_MS);
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };

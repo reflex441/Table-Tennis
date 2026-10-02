@@ -1,0 +1,36 @@
+{
+  "name": "tt-alarms-desktop",
+  "productName": "TT Alarms",
+  "version": "1.0.0",
+  "description": "TT Alarms for Windows - table tennis match reminders",
+  "author": "TT Alarms",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.ttalarms.desktop",
+    "productName": "TT Alarms",
+    "files": ["main.js", "preload.js", "offline.html", "config.json", "build/icon.png"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TT Alarms",
+      "artifactName": "TT-Alarms-Setup-${version}.${ext}"
+    }
+  }
+}

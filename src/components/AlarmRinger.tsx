@@ -16,8 +16,13 @@ import { PlayTypeChip } from "./BetBits";
 import { MatchNames } from "./MatchNames";
 import { findLeagueUrl } from "@/lib/leagues";
 import { defaultStake, formatMoney } from "@/lib/bets/profit";
+import { desktopApp } from "@/lib/desktop-bridge";
 
-const POLL_MS = 5_000;
+/**
+ * Backstop poll. New alarms are picked up straight away through the
+ * notifications poll (NOTIFICATION_EVENT), so this can be slow.
+ */
+const POLL_MS = 30_000;
 const noopSubscribe = () => () => {};
 
 /**
@@ -54,7 +59,14 @@ export function AlarmRinger() {
     installAudioUnlock();
     const first = setTimeout(() => void refresh(), 0);
     const timer = setInterval(() => void refresh(), POLL_MS);
-    const onEvent = () => void refresh();
+    // The in-app notification is written just before the alarm is marked
+    // triggered, so check again shortly after.
+    let followUp: ReturnType<typeof setTimeout> | undefined;
+    const onEvent = () => {
+      void refresh();
+      clearTimeout(followUp);
+      followUp = setTimeout(() => void refresh(), 4000);
+    };
     const onMessage = (e: MessageEvent) => {
       if (e.data?.type === "push-received" || e.data?.type === "alarm-acknowledged") void refresh();
     };
@@ -63,6 +75,7 @@ export function AlarmRinger() {
     document.addEventListener("visibilitychange", onEvent);
     return () => {
       clearTimeout(first);
+      clearTimeout(followUp);
       clearInterval(timer);
       window.removeEventListener(NOTIFICATION_EVENT, onEvent);
       navigator.serviceWorker?.removeEventListener("message", onMessage);
@@ -81,7 +94,26 @@ export function AlarmRinger() {
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
+    const alarmText = (m: MatchDTO) => {
+      const mins = Math.max(0, Math.round((new Date(m.startsAt).getTime() - Date.now()) / 60_000));
+      const lines = [[m.competition, `${formatClock(new Date(m.startsAt), settings.timezone)} (starts in ${mins} min)`].filter(Boolean).join(" - ")];
+      const stats = settings.includeStatsInNotification ? statsLine(m.statistics) : null;
+      if (stats) lines.push(stats);
+      lines.push("Place your bet, then click \"Bet placed\"");
+      return { title: `⏰ ${m.player1} vs ${m.player2}`, body: lines.join("\n") };
+    };
     const show = async () => {
+      // Desktop app: one native notification per alarm and the window comes to the front.
+      const bridge = desktopApp();
+      if (bridge) {
+        if (!cancelled) setCanNotify(true);
+        for (const m of ringing) {
+          if (!m.alarm || shownRef.current.has(m.alarm.id)) continue;
+          shownRef.current.set(m.alarm.id, Date.now());
+          bridge.alarm({ ...alarmText(m), url: `/matches/${m.id}` });
+        }
+        return;
+      }
       const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator;
       const granted = supported && Notification.permission === "granted";
       if (!cancelled) setCanNotify(granted);
@@ -94,14 +126,10 @@ export function AlarmRinger() {
         const last = shownRef.current.get(m.alarm.id);
         if (last && (hasPush || Date.now() - last < settings.repeatSeconds * 1000)) continue;
         shownRef.current.set(m.alarm.id, Date.now());
-        const mins = Math.max(0, Math.round((new Date(m.startsAt).getTime() - Date.now()) / 60_000));
-        const lines = [[m.competition, `${formatClock(new Date(m.startsAt), settings.timezone)} (starts in ${mins} min)`].filter(Boolean).join(" - ")];
-        const stats = settings.includeStatsInNotification ? statsLine(m.statistics) : null;
-        if (stats) lines.push(stats);
-        lines.push("Place your bet, then click \"Bet placed\"");
+        const { title, body } = alarmText(m);
         await reg
-          .showNotification(`⏰ ${m.player1} vs ${m.player2}`, {
-            body: lines.join("\n"),
+          .showNotification(title, {
+            body,
             tag: `alarm-${m.alarm.id}`,
             icon: "/icons/icon-192.png",
             badge: "/icons/badge-72.png",

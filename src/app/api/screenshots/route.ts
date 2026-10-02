@@ -31,8 +31,11 @@ export const POST = handle(async (request: Request) => {
 
   const settings = await getSettings(prisma, userId);
   const lastModifiedRaw = Number(form.get("lastModified"));
+  // Re-encoded uploads (see shrink-image.ts) send the original's first bytes for EXIF.
+  const head = form.get("exifHead");
+  const exifBuf = head instanceof File && head.size > 0 && head.size <= 256 * 1024 ? Buffer.from(await head.arrayBuffer()) : null;
   const { capturedAt, source } = await determineCaptureTime({
-    buf,
+    buf: exifBuf ?? buf,
     timezone: settings.timezone,
     lastModified: Number.isFinite(lastModifiedRaw) && lastModifiedRaw > 0 ? lastModifiedRaw : null,
   });

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "prisma migrate deploy && next build",
     "start": "next start",
     "worker": "tsx --tsconfig tsconfig.json src/worker/index.ts",
     "lint": "eslint",

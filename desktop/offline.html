@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>TT Alarms</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: #0a0e14; color: #e6ebf2; font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+      main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; }
+      h1 { margin: 0; font-size: 20px; }
+      p { margin: 0; color: #8391a7; max-width: 420px; }
+      button { margin-top: 8px; padding: 8px 18px; border: 0; border-radius: 8px; background: #38bdf8; color: #0a0e14; font-weight: 600; font: inherit; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Can't reach TT Alarms</h1>
+      <p id="msg">Check your internet connection. Trying again automatically…</p>
+      <button id="retry" type="button">Try again</button>
+    </main>
+    <script>
+      const url = new URLSearchParams(location.search).get("url");
+      if (!url) {
+        document.getElementById("msg").textContent = "This copy of the app has no server address set (desktop/config.json → appUrl).";
+        document.getElementById("retry").hidden = true;
+      } else {
+        const go = () => (location.href = url);
+        document.getElementById("retry").addEventListener("click", go);
+        setTimeout(go, 15000);
+      }
+    </script>
+  </body>
+</html>

@@ -25,6 +25,7 @@ import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { useBrowserTimeZone } from "@/components/useBrowserTimeZone";
 import { useNow } from "@/components/useNow";
 import type { SettingsDTO } from "@/lib/validation/settings";
+import { prepareUpload } from "@/lib/shrink-image";
 
 type Phase = "queued" | "uploading" | "uploaded" | "scanning" | "scanned" | "error";
 
@@ -110,10 +111,12 @@ export function UploadReview() {
   const uploadOne = useCallback(
     async (item: UploadItem) => {
       patchItem(item.key, { phase: "uploading", progress: 0, error: null });
-      const form = new FormData();
-      form.append("file", item.file);
-      form.append("lastModified", String(item.file.lastModified || ""));
       try {
+        const { file, exifHead } = await prepareUpload(item.file);
+        const form = new FormData();
+        form.append("file", file);
+        form.append("lastModified", String(item.file.lastModified || ""));
+        if (exifHead) form.append("exifHead", exifHead, "exif");
         const res = await uploadWithProgress<{ screenshot: ScreenshotDTO }>("/api/screenshots", form, (p) => patchItem(item.key, { progress: p }));
         patchItem(item.key, { phase: "uploaded", progress: 1, screenshot: res.screenshot });
         return res.screenshot;

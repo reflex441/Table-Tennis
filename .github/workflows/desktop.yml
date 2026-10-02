@@ -1,0 +1,62 @@
+# Builds the Windows installer (TT-Alarms-Setup-<version>.exe) on a Windows runner.
+# Run it from GitHub → Actions → "Windows app" → Run workflow, then download
+# the installer from the run's Artifacts. Pushing a tag like desktop-v1.0.0
+# also attaches it to a GitHub Release.
+# The app opens your hosted server: enter its address when running the
+# workflow, or set the APP_URL repository variable once
+# (Settings → Secrets and variables → Actions → Variables).
+name: Windows app
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "Your app's web address, e.g. https://tt-alarms.vercel.app (blank = APP_URL variable)"
+        required: false
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Set the server address
+        shell: bash
+        env:
+          APP_URL: ${{ inputs.app_url || vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::error::No server address. Enter it when running the workflow, or set the APP_URL repository variable."
+            exit 1
+          fi
+          node -e "const u = new URL(process.env.APP_URL); require('fs').writeFileSync('config.json', JSON.stringify({ appUrl: u.origin }, null, 2) + '\n'); console.log('App URL:', u.origin)"
+
+      - run: npm ci
+
+      - run: npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TT-Alarms-Setup
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: Attach to a GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/*.exe

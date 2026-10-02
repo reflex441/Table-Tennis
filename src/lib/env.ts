@@ -12,7 +12,7 @@ const schema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional().default(""),
   VAPID_SUBJECT: z.string().optional().default("mailto:admin@example.com"),
   CRON_SECRET: z.string().optional().default(""),
-  SCHEDULER_MODE: z.enum(["inprocess", "worker", "external"]).optional().default("inprocess"),
+  SCHEDULER_MODE: z.enum(["inprocess", "worker", "external"]).optional().default(process.env.VERCEL ? "external" : "inprocess"),
   SCHEDULER_INTERVAL_MS: z.coerce.number().int().min(1000).max(60_000).optional().default(10_000),
   /** Signs session cookies. Optional: a random secret is generated and stored in the database if unset. */
   SESSION_SECRET: z.string().optional().default(""),

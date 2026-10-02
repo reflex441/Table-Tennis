@@ -141,6 +141,65 @@ Running more than one mode at the same time is safe because claims are atomic.
 
 ## Deployment
 
+### Free hosting: Vercel + Supabase + cron-job.org
+
+All three have free plans. Together they run the app 24/7 with your PC off.
+
+1. **Database: Supabase** (supabase.com)
+   - Create a project. Choose the region closest to you (e.g. Sydney) and save the database password.
+   - Click **Connect** and copy the **Session pooler** connection string (port 5432).
+   - Replace `[YOUR-PASSWORD]` with your password and add `?sslmode=require` to the end. That is your `DATABASE_URL`.
+2. **App: Vercel** (vercel.com)
+   - Sign in with GitHub and choose **Add New → Project**. Import this repository; the Next.js settings are detected.
+   - Under **Environment Variables**, add the values from your `.env`, with these changes:
+     - `DATABASE_URL` = the Supabase string
+     - `APP_URL` = your Vercel address, e.g. `https://tt-alarms.vercel.app` (you can add it after the first deploy, then redeploy)
+     - `CRON_SECRET` = a long random password (`openssl rand -hex 32`)
+     - keep your `VAPID_*` keys and `SESSION_SECRET`
+     - you don't need `SCHEDULER_MODE`: on Vercel it defaults to `external`
+   - Click **Deploy**. The `vercel-build` script applies the database migrations, then builds the app.
+3. **Alarms: cron-job.org**
+   - Create a cron job that runs **every minute**.
+   - URL: `https://<your-app>.vercel.app/api/cron/dispatch`.
+   - Under **Advanced → Headers**, add `Authorization` = `Bearer <your CRON_SECRET>`.
+4. **Google sign-in (optional):** add `https://<your-app>.vercel.app/api/auth/google/callback` to the OAuth client's redirect URIs.
+
+**Free plan limits:**
+- Alarms are checked once a minute, so one can be up to about a minute late.
+- Uploads over ~3.8 MB are re-encoded as JPEG in the browser (Vercel's request limit is 4.5 MB).
+- Supabase's free database holds 500 MB; screenshots use most of that space.
+- Vercel's free plan is for non-commercial use.
+- Apps poll less often in the background to stay well within the free request allowance.
+
+**Updating:** push to GitHub. Vercel rebuilds and redeploys automatically (about 1–2 minutes) and runs new database migrations. Browsers and the desktop app pick up the new version on their next reload. The desktop app also reloads by itself when it is reopened after being in the tray for 30+ minutes.
+
+### Windows desktop app (.exe)
+
+`desktop/` is a small Electron app: an installable Windows program that opens your hosted app in its own window.
+- It sits in the tray when closed, so alarms still ring and Windows notifications still show.
+- It starts with Windows (untick **Start with Windows** in the tray menu to stop that).
+- Bookmaker links open in your normal browser. Google sign-in works inside the app.
+
+App changes reach it automatically (it loads your server). You only need a new installer when `desktop/` itself changes.
+
+**Build the installer on GitHub (no setup):**
+1. Go to **Actions → Windows app → Run workflow** and enter your app's address, e.g. `https://tt-alarms.vercel.app`. Or set it once as the `APP_URL` repository variable under Settings → Secrets and variables → Actions → Variables.
+2. When the run finishes (about 5 minutes), download **TT-Alarms-Setup** under **Artifacts**. It is a zip containing `TT-Alarms-Setup-1.0.0.exe`.
+3. Share the `.exe` (Google Drive, Discord...). Pushing a tag such as `desktop-v1.0.0` also attaches it to a GitHub Release.
+
+**Or build on a Windows PC:**
+```powershell
+cd desktop
+# put your address in config.json: { "appUrl": "https://tt-alarms.vercel.app" }
+npm install
+npm run dist        # -> desktop\dist\TT-Alarms-Setup-1.0.0.exe
+```
+Use `npm start` to try it without installing. `TT_APP_URL=http://localhost:3000 npm start` points it at a local server.
+
+The installer isn't code-signed, so Windows SmartScreen shows "Windows protected your PC" the first time. Click **More info → Run anyway**. Removing the warning needs a paid code-signing certificate.
+
+Web Push isn't available inside Electron. The desktop app shows its own Windows notifications while it's running (including from the tray); phones keep using Web Push.
+
 ### Docker Compose (Postgres + web + worker)
 
 ```bash

@@ -16,6 +16,7 @@ import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
 import { Avatar } from "./Avatar";
 import type { SettingsUpdate } from "@/lib/validation/settings";
+import { useIsDesktopApp } from "@/lib/desktop-bridge";
 
 interface Health {
   database: boolean;
@@ -42,6 +43,7 @@ export function SettingsPage() {
   const { notify } = useNotifications();
   const [saving, setSaving] = useState<string | null>(null);
   const [pushState, setPushState] = useState<PushState | "unknown">("unknown");
+  const isDesktopApp = useIsDesktopApp();
   const [permission, setPermission] = useState<string>("unknown");
   const [health, setHealth] = useState<Health | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -132,35 +134,41 @@ export function SettingsPage() {
       <GeminiKeySection />
 
       <Section title="Notifications on this device" description="Background notifications use the Web Push API and a service worker.">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {pushState === "subscribed" ? (
-            <>
-              <span className="flex items-center gap-1 text-over">
-                <Bell className="h-4 w-4" /> Subscribed
-              </span>
-              <button className="btn-ghost ml-auto" onClick={() => void disablePush()}>
-                <BellOff className="h-4 w-4" /> Disable on this device
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-1 text-muted">
-                <BellOff className="h-4 w-4" />
-                {pushState === "denied" && "Blocked in browser settings"}
-                {pushState === "unsupported" && "Not supported by this browser"}
-                {pushState === "ios-install" && "Add to Home Screen first (iOS)"}
-                {pushState === "prompt" && "Not enabled"}
-                {pushState === "unknown" && "Checking…"}
-              </span>
-              {pushState === "prompt" && (
-                <button className="btn-primary ml-auto" onClick={() => void enablePush()}>
-                  <Bell className="h-4 w-4" /> Enable notifications
+        {isDesktopApp ? (
+          <p className="flex items-center gap-1 text-sm text-over">
+            <Bell className="h-4 w-4" /> Built in: the desktop app shows Windows notifications and rings alarms while it&apos;s running (also from the tray).
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {pushState === "subscribed" ? (
+              <>
+                <span className="flex items-center gap-1 text-over">
+                  <Bell className="h-4 w-4" /> Subscribed
+                </span>
+                <button className="btn-ghost ml-auto" onClick={() => void disablePush()}>
+                  <BellOff className="h-4 w-4" /> Disable on this device
                 </button>
-              )}
-            </>
-          )}
-        </div>
-        <p className="mt-1 text-xs text-muted">Browser permission: {permission}</p>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-1 text-muted">
+                  <BellOff className="h-4 w-4" />
+                  {pushState === "denied" && "Blocked in browser settings"}
+                  {pushState === "unsupported" && "Not supported by this browser"}
+                  {pushState === "ios-install" && "Add to Home Screen first (iOS)"}
+                  {pushState === "prompt" && "Not enabled"}
+                  {pushState === "unknown" && "Checking…"}
+                </span>
+                {pushState === "prompt" && (
+                  <button className="btn-primary ml-auto" onClick={() => void enablePush()}>
+                    <Bell className="h-4 w-4" /> Enable notifications
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        {!isDesktopApp && <p className="mt-1 text-xs text-muted">Browser permission: {permission}</p>}
 
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="btn-ghost" disabled={testing} onClick={() => void sendTest()}>

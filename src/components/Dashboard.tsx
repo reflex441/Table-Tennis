@@ -34,7 +34,15 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => void reload(), 20_000);
+    // Hidden tabs/windows skip the background reload (fewer server calls on
+    // free hosting); notifications and becoming visible still refresh.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void reload();
+    }, 20_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     // The in-app notification is written just before the alarm is marked
     // triggered, so refresh again shortly after.
     let followUp: ReturnType<typeof setTimeout> | undefined;
@@ -47,6 +55,7 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
     return () => {
       clearInterval(timer);
       clearTimeout(followUp);
+      document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener(NOTIFICATION_EVENT, onEvent);
     };
   }, [reload]);
