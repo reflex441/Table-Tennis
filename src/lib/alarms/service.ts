@@ -2,7 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
 import { checkSchedule, computeFireAt } from "./schedule";
 import { matchDedupeKey, playersKey } from "@/lib/matching/dedupe";
-import type { MatchInput, UpdateMatchInput } from "@/lib/validation/match";
+import type { BetLegInput, MatchInput, UpdateMatchInput } from "@/lib/validation/match";
 import type { MatchDTO } from "@/lib/types";
 import { placeBet } from "@/lib/bets/service";
 
@@ -12,7 +12,7 @@ import { ServiceError } from "./service-error";
 export const matchInclude = {
   statistics: true,
   alarm: true,
-  bet: true,
+  bet: { include: { legs: { orderBy: { position: "asc" } } } },
   sources: { select: { screenshotId: true } },
   copiedFrom: { select: { id: true, name: true } },
 } satisfies Prisma.MatchInclude;
@@ -256,7 +256,7 @@ export async function acknowledgeAlarm(
   alarmId: string,
   action: "placed" | "skipped",
   now = new Date(),
-  bet?: { stake?: number; odds?: number | null },
+  bet?: { stake?: number; odds?: number | null; legs?: BetLegInput[] },
 ): Promise<MatchWithRelations> {
   const alarm = await prisma.alarm.findFirst({ where: { id: alarmId, match: { userId } }, select: { matchId: true, ackAt: true } });
   if (!alarm) throw new ServiceError("Alarm not found.", 404, "not_found");
@@ -310,6 +310,7 @@ export function toMatchDTO(m: MatchWithRelations): MatchDTO {
           profit: m.bet.profit,
           placedAt: m.bet.placedAt.toISOString(),
           settledAt: m.bet.settledAt?.toISOString() ?? null,
+          legs: m.bet.legs.map((l) => ({ selection: l.selection, stake: l.stake, odds: l.odds, result: l.result, profit: l.profit })),
         }
       : null,
     statistics: {

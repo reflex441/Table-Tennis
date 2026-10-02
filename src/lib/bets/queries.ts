@@ -8,9 +8,15 @@ export interface BetRowWithMatch extends BetRow {
   startsAt: string;
   selection: Selection | null;
   pointsLine: number | null;
+  /** Set on the rows of a split bet: this is pick `index + 1` of `of`. */
+  split: { index: number; of: number } | null;
 }
 
-/** Every recorded bet with the match details needed for the profit page. */
+/**
+ * Every recorded bet with the match details needed for the profit page.
+ * A split bet becomes one row per pick (its own pick, stake, odds and
+ * result), so per-pick stats count each part; the rows add up to the bet.
+ */
 export async function listBetRows(prisma: PrismaClient, userId: string, opts: { since?: Date; playType?: PlayType } = {}): Promise<BetRowWithMatch[]> {
   const rows = await prisma.bet.findMany({
     where: {
@@ -20,24 +26,40 @@ export async function listBetRows(prisma: PrismaClient, userId: string, opts: { 
         ...(opts.playType ? { playType: opts.playType } : {}),
       },
     },
-    include: { match: { include: { statistics: true } } },
+    include: { match: { include: { statistics: true } }, legs: { orderBy: { position: "asc" } } },
     orderBy: { match: { startsAt: "desc" } },
     take: 5000,
   });
-  return rows.map((b) => ({
-    id: b.id,
-    matchId: b.matchId,
-    playType: b.match.playType as PlayType,
-    competition: b.match.competition,
-    stake: b.stake,
-    odds: b.odds,
-    result: b.result as BetResult,
-    profit: b.profit,
-    placedAt: b.placedAt.toISOString(),
-    player1: b.match.player1,
-    player2: b.match.player2,
-    startsAt: b.match.startsAt.toISOString(),
-    selection: (b.match.statistics?.selection as Selection | null) ?? null,
-    pointsLine: b.match.statistics?.pointsLine ?? null,
-  }));
+  return rows.flatMap((b): BetRowWithMatch[] => {
+    const base: BetRowWithMatch = {
+      id: b.id,
+      matchId: b.matchId,
+      playType: b.match.playType as PlayType,
+      competition: b.match.competition,
+      stake: b.stake,
+      odds: b.odds,
+      result: b.result as BetResult,
+      profit: b.profit,
+      placedAt: b.placedAt.toISOString(),
+      player1: b.match.player1,
+      player2: b.match.player2,
+      startsAt: b.match.startsAt.toISOString(),
+      selection: (b.match.statistics?.selection as Selection | null) ?? null,
+      pointsLine: b.match.statistics?.pointsLine ?? null,
+      split: null,
+    };
+    if (!b.legs.length) return [base];
+    return b.legs.map((l, i) => ({
+      ...base,
+      id: `${b.id}:${i}`,
+      stake: l.stake,
+      odds: l.odds,
+      result: l.result as BetResult,
+      profit: l.profit,
+      selection: l.selection as Selection,
+      // The points line belongs to the match's own pick.
+      pointsLine: l.selection === base.selection ? base.pointsLine : null,
+      split: { index: i, of: b.legs.length },
+    }));
+  });
 }

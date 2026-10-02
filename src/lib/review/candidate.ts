@@ -106,12 +106,15 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     timeNotes: [],
     timeConfirmed: false,
     // Bot plays keep the badge's pick; personal plays pick from the O/U %.
-    selection: m.selection ?? personalPick(m.ouHitRate, m.ouStats) ?? "",
+    // SWEEP is never picked by a scan (it's easily misread from the SWEEP
+    // statistic): the O/U % decides instead, so under 50% is UNDER.
+    selection: (m.selection === "SWEEP" ? null : m.selection) ?? personalPick(m.ouHitRate, m.ouStats) ?? "",
     pointsLine: numStr(m.pointsLine),
     ouStats: m.ouStats ?? "",
     ouHitRate: numStr(m.ouHitRate),
     edge: numStr(m.edge),
-    playType: m.selection ? "BOT" : "PERSONAL",
+    // A SWEEP read with a badge stake ("1U SWEEP") is still a bot play.
+    playType: m.selection && (m.selection !== "SWEEP" || m.stakeUnits !== null) ? "BOT" : "PERSONAL",
     ...defaultBet(settings),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: m.confidence,

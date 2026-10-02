@@ -12,10 +12,10 @@ import { formatDayLabel, formatPct, formatTime } from "@/lib/format";
 import { useSettings } from "./SettingsProvider";
 import { NOTIFICATION_EVENT } from "./NotificationProvider";
 import { Countdown, SelectionBadge } from "./MatchBits";
-import { PlayTypeChip } from "./BetBits";
+import { LegsEditor, PlayTypeChip, parseLegs, splitLegs, type LegDraft } from "./BetBits";
 import { MatchNames } from "./MatchNames";
 import { findLeagueUrl } from "@/lib/leagues";
-import { defaultStake, formatMoney } from "@/lib/bets/profit";
+import { defaultStake, formatMoney, round2 } from "@/lib/bets/profit";
 import { desktopApp } from "@/lib/desktop-bridge";
 
 /**
@@ -39,7 +39,7 @@ export function AlarmRinger() {
   const [soundBlocked, setSoundBlocked] = useState(false);
   const stopRef = useRef<(() => void) | null>(null);
   // Stake (units) / odds typed for the alarm on screen, keyed by match.
-  const [betInput, setBetInput] = useState<{ matchId: string; stake: string; odds: string } | null>(null);
+  const [betInput, setBetInput] = useState<{ matchId: string; stake: string; odds: string; legs: LegDraft[] | null } | null>(null);
   const [betError, setBetError] = useState<string | null>(null);
   const enabled = isDesktop && settings.ringUntilAck && pathname !== "/login";
 
@@ -199,13 +199,19 @@ export function AlarmRinger() {
   const leagueUrl = findLeagueUrl(match.competition, settings.leagueLinks);
 
   const input =
-    betInput?.matchId === match.id ? betInput : { matchId: match.id, stake: String(defaultStake(match.stakeUnits)), odds: match.odds ? String(match.odds) : "" };
+    betInput?.matchId === match.id
+      ? betInput
+      : { matchId: match.id, stake: String(defaultStake(match.stakeUnits)), odds: match.odds ? String(match.odds) : "", legs: null };
   const stakeNum = Number(input.stake);
 
   const ack = async (action: "placed" | "skipped") => {
     if (!match.alarm) return;
-    let bet: { stake?: number; odds?: number | null } = {};
-    if (action === "placed") {
+    let bet: { stake?: number; odds?: number | null; legs?: ReturnType<typeof parseLegs> } = {};
+    if (action === "placed" && input.legs) {
+      const legs = parseLegs(input.legs);
+      if (typeof legs === "string") return setBetError(legs);
+      bet = { legs };
+    } else if (action === "placed") {
       const odds = input.odds.trim() ? Number(input.odds) : null;
       if (!Number.isFinite(stakeNum) || stakeNum <= 0) return setBetError("Stake must be a number of units above 0.");
       if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return setBetError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
@@ -282,32 +288,55 @@ export function AlarmRinger() {
           </button>
         )}
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <label>
-            <span className="label">Stake (units)</span>
-            <input
-              className="input tabular"
-              inputMode="decimal"
-              value={input.stake}
-              onChange={(e) => setBetInput({ ...input, stake: e.target.value })}
-              aria-label="Stake in units"
-            />
-            {Number.isFinite(stakeNum) && stakeNum > 0 && (
-              <span className="mt-0.5 block text-[11px] text-muted">= {formatMoney(stakeNum, settings.unitSize, settings.currency, false)}</span>
-            )}
-          </label>
-          <label>
-            <span className="label">Odds (optional)</span>
-            <input
-              className="input tabular"
-              inputMode="decimal"
-              placeholder="1.85"
-              value={input.odds}
-              onChange={(e) => setBetInput({ ...input, odds: e.target.value })}
-              aria-label="Decimal odds"
-            />
-          </label>
-        </div>
+        {input.legs ? (
+          <div className="mt-4 rounded-xl bg-bg/60 p-3">
+            <LegsEditor legs={input.legs} onChange={(legs) => setBetInput({ ...input, legs })} />
+            <button
+              className="mt-1 text-xs text-muted underline hover:text-text"
+              onClick={() => {
+                const total = input.legs!.reduce((sum, l) => sum + (Number(l.stake) || 0), 0);
+                setBetInput({ ...input, stake: total > 0 ? String(round2(total)) : input.stake, legs: null });
+              }}
+            >
+              Don&apos;t split - one pick
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <label>
+              <span className="label">Stake (units)</span>
+              <input
+                className="input tabular"
+                inputMode="decimal"
+                value={input.stake}
+                onChange={(e) => setBetInput({ ...input, stake: e.target.value })}
+                aria-label="Stake in units"
+              />
+              {Number.isFinite(stakeNum) && stakeNum > 0 && (
+                <span className="mt-0.5 block text-[11px] text-muted">= {formatMoney(stakeNum, settings.unitSize, settings.currency, false)}</span>
+              )}
+            </label>
+            <label>
+              <span className="label">Odds (optional)</span>
+              <input
+                className="input tabular"
+                inputMode="decimal"
+                placeholder="1.85"
+                value={input.odds}
+                onChange={(e) => setBetInput({ ...input, odds: e.target.value })}
+                aria-label="Decimal odds"
+              />
+            </label>
+            <button
+              className="col-span-2 justify-self-start text-xs text-accent hover:underline"
+              onClick={() =>
+                setBetInput({ ...input, legs: splitLegs(stakeNum > 0 ? stakeNum : defaultStake(match.stakeUnits), match.statistics.selection ?? "UNDER", input.odds) })
+              }
+            >
+              Split between picks (e.g. half Under, half Sweep)
+            </button>
+          </div>
+        )}
         {betError && <p className="mt-1 text-xs text-under">{betError}</p>}
 
         {leagueUrl && (

@@ -43,7 +43,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "User", "AppSecret" CASCADE`,
+      `TRUNCATE "BetLeg", "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "User", "AppSecret" CASCADE`,
     );
     userId = (await prisma.user.create({ data: { email: "owner@example.com", name: "Owner" } })).id;
   });
@@ -457,6 +457,62 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
       delete process.env.TAILING_ACCOUNT_EMAIL;
     }
     expect((await getLeaderboard(prisma, { currentUserId: sam, minBets: 1 })).byProfit.find((r) => r.userId === userId)?.tailable).toBe(true);
+  });
+
+  it("split bets: half on UNDER and half on SWEEP, each pick settled on its own", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const res = await createMatchWithAlarm(prisma, userId, input({ selection: "UNDER", pointsLine: 74.5 }), now);
+    if (res.status !== "created") throw new Error("not created");
+    const matchId = res.match.id;
+
+    // Placed from the alarm screen as a split bet.
+    const acked = await acknowledgeAlarm(prisma, userId, res.match.alarm!.id, "placed", now, {
+      legs: [
+        { selection: "UNDER", stake: 0.5, odds: 1.85 },
+        { selection: "SWEEP", stake: 0.5, odds: 3.2 },
+      ],
+    });
+    expect(acked.bet).toMatchObject({ stake: 1, odds: null, result: "PENDING", profit: null });
+    expect(acked.bet!.legs.map((l) => [l.selection, l.stake, l.result])).toEqual([["UNDER", 0.5, "PENDING"], ["SWEEP", 0.5, "PENDING"]]);
+    expect((await listMatches(prisma, userId, "pending")).map((m) => m.id)).toEqual([matchId]);
+
+    // One pick settled: still pending.
+    await updateBet(prisma, userId, matchId, { leg: { index: 1, result: "WON" } }, now);
+    let m = (await getMatch(prisma, userId, matchId))!;
+    expect(m.bet).toMatchObject({ result: "PENDING", profit: null });
+    expect(m.bet!.legs[1]).toMatchObject({ result: "WON", profit: 1.1 });
+
+    // Both settled: the totals move it to Completed.
+    await updateBet(prisma, userId, matchId, { leg: { index: 0, result: "LOST" } }, now);
+    m = (await getMatch(prisma, userId, matchId))!;
+    expect(m.bet).toMatchObject({ stake: 1, result: "WON", profit: 0.6 });
+    expect((await listMatches(prisma, userId, "pending")).length).toBe(0);
+    await expect(updateBet(prisma, userId, matchId, { leg: { index: 2, result: "WON" } }, now)).rejects.toMatchObject({ status: 400 });
+
+    // Profit page: one row per pick, adding up to the bet.
+    const rows = await listBetRows(prisma, userId);
+    expect(rows.map((r) => [r.selection, r.stake, r.result, r.profit, r.split, r.pointsLine])).toEqual([
+      ["UNDER", 0.5, "LOST", -0.5, { index: 0, of: 2 }, 74.5],
+      ["SWEEP", 0.5, "WON", 1.1, { index: 1, of: 2 }, null],
+    ]);
+    expect(summarize(rows)).toMatchObject({ bets: 2, won: 1, lost: 1, staked: 1, profit: 0.6 });
+    // Leaderboard uses the bet's totals.
+    expect((await getLeaderboard(prisma, { currentUserId: userId, minBets: 1 })).byProfit[0]).toMatchObject({ profit: 0.6, bets: 1 });
+
+    // Settling "all" resets every pick; editing keeps results of unchanged picks.
+    await updateBet(prisma, userId, matchId, { result: "PENDING" }, now);
+    expect((await getMatch(prisma, userId, matchId))!.bet!.legs.every((l) => l.result === "PENDING")).toBe(true);
+    await updateBet(prisma, userId, matchId, { leg: { index: 0, result: "WON" } }, now);
+    await updateBet(prisma, userId, matchId, { legs: [{ selection: "UNDER", stake: 0.6, odds: 1.85 }, { selection: "OVER", stake: 0.4 }] }, now);
+    m = (await getMatch(prisma, userId, matchId))!;
+    expect(m.bet!.legs.map((l) => [l.selection, l.stake, l.result])).toEqual([["UNDER", 0.6, "WON"], ["OVER", 0.4, "PENDING"]]);
+    expect(m.bet).toMatchObject({ stake: 1, result: "PENDING" });
+
+    // Back to one pick.
+    await updateBet(prisma, userId, matchId, { stake: 1, odds: 1.9, legs: null }, now);
+    m = (await getMatch(prisma, userId, matchId))!;
+    expect(m.bet).toMatchObject({ stake: 1, odds: 1.9, result: "PENDING", legs: [] });
+    expect(await prisma.betLeg.count()).toBe(0);
   });
 
   it("stores a profile picture and exposes only a versioned URL", async () => {

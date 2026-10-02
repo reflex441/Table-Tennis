@@ -27,6 +27,26 @@ export function computeProfit(stake: number, odds: number | null | undefined, re
   }
 }
 
+export interface LegLike {
+  stake: number;
+  odds: number | null;
+  result: BetResult;
+}
+
+/**
+ * Totals of a split bet: stake and profit are the sums of its picks. It is
+ * pending until every pick is settled; then WON / LOST by the net profit
+ * (0 = VOID). A won pick without odds leaves the profit unknown (WON, null).
+ */
+export function combineLegs(legs: LegLike[]): { stake: number; result: BetResult; profit: number | null } {
+  const stake = round2(legs.reduce((sum, l) => sum + l.stake, 0));
+  if (legs.some((l) => l.result === "PENDING")) return { stake, result: "PENDING", profit: null };
+  const profits = legs.map((l) => computeProfit(l.stake, l.odds, l.result));
+  if (profits.some((p) => p === null)) return { stake, result: "WON", profit: null };
+  const net = round2(profits.reduce<number>((sum, p) => sum + (p ?? 0), 0));
+  return { stake, result: net > 0 ? "WON" : net < 0 ? "LOST" : "VOID", profit: net };
+}
+
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

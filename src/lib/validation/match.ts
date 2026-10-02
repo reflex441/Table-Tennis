@@ -39,11 +39,30 @@ const isoDate = z.iso.datetime({ offset: true, error: "Start time must be an ISO
 export const playTypeSchema = z.enum(["BOT", "PERSONAL"]);
 
 /** Record / edit a placed bet. Stake in units; decimal odds. */
+const betResultSchema = z.enum(["PENDING", "WON", "LOST", "VOID"]);
+
+/** One pick of a split bet. */
+export const betLegSchema = z.object({
+  selection: z.enum(SELECTIONS),
+  stake: z.number().positive("Stake must be more than 0").max(1000, "At most 1000 units"),
+  odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish(),
+  result: betResultSchema.optional(),
+});
+
+/** 2-3 picks on one play, e.g. 0.5u UNDER + 0.5u SWEEP; null turns a split bet back into one bet. */
+export const betLegsSchema = z.array(betLegSchema).min(2, "A split bet needs at least 2 picks").max(3, "At most 3 picks");
+
 export const betInputSchema = z.object({
   stake: z.number().positive("Stake must be more than 0").max(1000, "At most 1000 units").optional(),
   odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish(),
-  result: z.enum(["PENDING", "WON", "LOST", "VOID"]).optional(),
+  /** Settles the whole bet (every pick of a split bet). */
+  result: betResultSchema.optional(),
+  legs: betLegsSchema.nullish(),
+  /** Settles one pick of a split bet. */
+  leg: z.object({ index: z.number().int().min(0).max(2), result: betResultSchema }).optional(),
 });
+
+export type BetLegInput = z.infer<typeof betLegSchema>;
 
 export type BetInput = z.infer<typeof betInputSchema>;
 
@@ -94,6 +113,7 @@ export const ackSchema = z.object({
   action: z.enum(["placed", "skipped"]).default("placed"),
   stake: z.number().positive().max(1000).optional(),
   odds: z.number().gt(1).max(1000).nullish(),
+  legs: betLegsSchema.optional(),
 });
 
 export const alarmActionSchema = z.object({

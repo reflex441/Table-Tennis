@@ -255,8 +255,26 @@ model Bet {
   profit    Float?
   placedAt  DateTime  @default(now()) @db.Timestamptz(3)
   settledAt DateTime? @db.Timestamptz(3)
+  /// A split bet (e.g. 0.5u UNDER + 0.5u SWEEP): one leg per pick. The Bet row
+  /// then holds the totals: stake = sum, profit = sum, result from the net.
+  legs      BetLeg[]
 
   @@index([result])
+}
+
+/// One pick of a split bet, settled on its own.
+model BetLeg {
+  id        String    @id @default(cuid())
+  betId     String
+  bet       Bet       @relation(fields: [betId], references: [id], onDelete: Cascade)
+  position  Int
+  selection Selection
+  stake     Float
+  odds      Float?
+  result    BetResult @default(PENDING)
+  profit    Float?
+
+  @@unique([betId, position])
 }
 
 model PushSubscription {

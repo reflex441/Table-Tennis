@@ -11,7 +11,7 @@ import { ackSchema } from "@/lib/validation/match";
  */
 export const POST = handle(async (request: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  const { action, stake, odds } = await parseJson(request, ackSchema);
-  const match = await acknowledgeAlarm(db(), await requireUserId(), id, action, new Date(), { stake, odds });
+  const { action, stake, odds, legs } = await parseJson(request, ackSchema);
+  const match = await acknowledgeAlarm(db(), await requireUserId(), id, action, new Date(), { stake, odds, legs });
   return NextResponse.json({ match: toMatchDTO(match) });
 });

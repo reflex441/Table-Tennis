@@ -28,6 +28,15 @@ export interface AlarmDTO {
   ackAction: "placed" | "skipped" | null;
 }
 
+/** One pick of a split bet (e.g. 0.5u UNDER of 0.5u UNDER + 0.5u SWEEP). */
+export interface BetLegDTO {
+  selection: "OVER" | "UNDER" | "SWEEP";
+  stake: number;
+  odds: number | null;
+  result: "PENDING" | "WON" | "LOST" | "VOID";
+  profit: number | null;
+}
+
 export interface BetDTO {
   id: string;
   stake: number;
@@ -36,6 +45,8 @@ export interface BetDTO {
   profit: number | null;
   placedAt: string;
   settledAt: string | null;
+  /** Picks of a split bet; empty for a normal bet. Stake/profit/result above are the totals. */
+  legs: BetLegDTO[];
 }
 
 export interface MatchDTO {

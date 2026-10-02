@@ -325,6 +325,7 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
                       )}
                       <span className="block truncate text-[11px] text-muted">
                         {r.selection ? `${r.selection}${r.pointsLine !== null ? ` ${r.pointsLine}` : ""} · ` : ""}
+                        {r.split ? `split ${r.split.index + 1}/${r.split.of} · ` : ""}
                         {r.competition ?? "Unknown competition"}
                       </span>
                     </td>

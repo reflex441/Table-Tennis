@@ -238,7 +238,7 @@ Each device that enables notifications is marked as a **computer** or a **phone*
 
 ## Profit tracking
 
-- **Bot play vs personal play:** a match whose screenshot shows an OVER / UNDER / SWEEP pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**; its pick comes from the O/U %: over 50% is **OVER**, under 50% is **UNDER** (exactly 50% is left for you to choose). The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
+- **Bot play vs personal play:** a match whose screenshot shows an OVER / UNDER / SWEEP pick badge (e.g. `1U OVER (12/17, 71%)`) is a **bot play**. A match without one is a **personal play**; its pick comes from the O/U %: over 50% is **OVER**, under 50% is **UNDER** (exactly 50% is left for you to choose). Scans never pick **SWEEP** (it is easily misread from the SWEEP statistic): a SWEEP read from a screenshot is replaced by the O/U rule (a `1U SWEEP` badge still makes it a bot play). Choose SWEEP yourself when you want it. The badge stake (`1U`, `2U`) is read too. You can switch the type on the review screen or on the match page.
 - **Recording a bet:** "I've placed the bet" on the computer alarm asks for the stake (in units) and the decimal odds, pre-filled with what was set when the match was uploaded. You can also click **Record bet** on any match card. Then mark it **Won / Lost / Void**.
 - **Profit:** won = stake × (odds − 1), lost = −stake, void = 0. A win without odds is not counted until you add the odds.
 - **Defaults when you upload:** every new match starts with a **1u** stake. Tick **Settings → Average odds** and new uploads also get your average odds (e.g. 1.85). Both can be changed on the review screen before you create the alarms, and they are used when you click "I've placed the bet". Changing the setting later never changes matches or bets you already have.
@@ -248,7 +248,8 @@ Each device that enables notifications is marked as a **computer** or a **phone*
   - **Running profit → By pick** draws one line each for OVER, UNDER and SWEEP so you can compare them over time;
   - a **running profit graph** for the chosen period (7D / 30D / 90D / All) - hover or use the arrow keys to read any day;
   - a **daily P/L calendar** (green/red by the day's result). Click a day to list that day's bets;
-  - clicking **Bot** or **Personal** (the filter or the comparison cards) limits the graph, the calendar and the list to those plays;
+  - **split bets:** one play can be split over 2-3 picks, e.g. 0.5u UNDER + 0.5u SWEEP (**Split between picks** on the alarm screen or in a match's bet editor). Each pick has its own stake, odds and Won/Lost/Void. The play stays Pending until every pick is settled, then counts as won or lost by its net profit. On the Profit page each pick is its own row ("split 1/2"), so the Over/Under/Sweep stats count each part. The leaderboard counts the play once, with its net profit;
+- clicking **Bot** or **Personal** (the filter or the comparison cards) limits the graph, the calendar and the list to those plays;
   - a breakdown per competition;
   - a sortable bet list (date / stake / odds / profit);
   - period and play-type filters at the top that apply to the whole page.
