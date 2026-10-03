@@ -9,8 +9,8 @@ import { wakeScheduler } from "@/lib/scheduler/runner";
 /** Cancel, reactivate or complete a match's alarm. */
 export const POST = handle(async (request: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  const { action } = await parseJson(request, alarmActionSchema);
-  const match = await changeAlarmState(db(), await requireUserId(), id, action);
+  const { action, stake, odds } = await parseJson(request, alarmActionSchema);
+  const match = await changeAlarmState(db(), await requireUserId(), id, action, new Date(), { stake, odds });
   if (action === "reactivate") wakeScheduler();
   return NextResponse.json({ match: toMatchDTO(match) });
 });

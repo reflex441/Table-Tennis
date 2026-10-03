@@ -12,7 +12,7 @@ import { MatchEditor, type MatchFormValues } from "./MatchEditor";
 import { useSettings } from "./SettingsProvider";
 import { useNow } from "./useNow";
 import { useNotifications } from "./NotificationProvider";
-import { BetPanel, PlayTypeChip } from "./BetBits";
+import { BetPanel, PlacedForm, PlayTypeChip } from "./BetBits";
 import { MatchNames } from "./MatchNames";
 import { ScreenshotViewer } from "./ScreenshotViewer";
 
@@ -30,11 +30,13 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
   const s = match.statistics;
   const alarm = match.alarm;
 
-  const act = async (action: "cancel" | "reactivate" | "complete" | "placed") => {
+  const [placing, setPlacing] = useState(false);
+  const act = async (action: "cancel" | "reactivate" | "complete" | "placed", bet?: { stake: number; odds: number }) => {
     setBusy(true);
     try {
-      const res = await api<{ match: MatchDTO }>(`/api/matches/${match.id}/alarm`, { method: "POST", json: { action } });
+      const res = await api<{ match: MatchDTO }>(`/api/matches/${match.id}/alarm`, { method: "POST", json: { action, ...bet } });
       setMatch(res.match);
+      setPlacing(false);
     } catch (err) {
       notify("Action failed", err instanceof Error ? err.message : String(err));
     } finally {
@@ -150,12 +152,18 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
         {alarm?.lastError && <p className="mt-3 rounded-lg bg-under/10 p-2 text-xs text-under">{alarm.lastError}</p>}
         {alarm?.triggeredAt && <p className="mt-2 text-xs text-muted">Notification sent {formatDateTime(alarm.triggeredAt, tz)}</p>}
 
+        {placing && (
+          <div className="mt-4">
+            <PlacedForm match={match} busy={busy} onCancel={() => setPlacing(false)} onConfirm={(bet) => void act("placed", bet)} />
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button className="btn-ghost" onClick={() => setEditing((e) => !e)}>
             <Pencil className="h-4 w-4" /> {editing ? "Close editor" : "Edit"}
           </button>
-          {alarm && (alarm.status === "SCHEDULED" || alarm.status === "SENDING" || alarm.status === "TRIGGERED") && (
-            <button className="btn-ghost border-over/40 text-over hover:bg-over/10" disabled={busy} onClick={() => void act("placed")}>
+          {alarm && (alarm.status === "SCHEDULED" || alarm.status === "SENDING" || alarm.status === "TRIGGERED") && !placing && (
+            <button className="btn-ghost border-over/40 text-over hover:bg-over/10" disabled={busy} onClick={() => setPlacing(true)}>
               <CheckCircle2 className="h-4 w-4" /> Bet placed
             </button>
           )}

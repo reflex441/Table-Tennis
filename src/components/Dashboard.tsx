@@ -83,7 +83,14 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
   const actions: MatchCardActions = {
     onReactivate: alarmAction("reactivate"),
     onComplete: alarmAction("complete"),
-    onPlaced: alarmAction("placed"),
+    onPlaced: async (m, bet) => {
+      try {
+        const res = await api<{ match: MatchDTO }>(`/api/matches/${m.id}/alarm`, { method: "POST", json: { action: "placed", ...bet } });
+        replace(res.match);
+      } catch (err) {
+        notify("Action failed", err instanceof Error ? err.message : String(err));
+      }
+    },
     onUpdate: replace,
     onDelete: async (m) => {
       try {

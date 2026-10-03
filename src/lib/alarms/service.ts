@@ -223,6 +223,7 @@ export async function changeAlarmState(
   matchId: string,
   action: "cancel" | "reactivate" | "complete" | "placed",
   now = new Date(),
+  bet: { stake?: number; odds?: number } = {},
 ): Promise<MatchWithRelations> {
   const match = await prisma.match.findFirst({ where: { id: matchId, userId }, include: matchInclude });
   if (!match || !match.alarm) throw new ServiceError("Alarm not found.", 404, "not_found");
@@ -238,7 +239,7 @@ export async function changeAlarmState(
     // Bet placed before the reminder: record it (stake/odds from the upload),
     // stop any notification (a new generation cancels one being sent) and
     // complete the alarm.
-    await placeBet(prisma, userId, matchId, {}, now);
+    await placeBet(prisma, userId, matchId, bet, now);
     data = {
       status: "COMPLETED",
       completedAt: now,

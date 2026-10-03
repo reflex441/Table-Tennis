@@ -391,9 +391,10 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await listMatches(prisma, userId, "upcoming")).map((m) => m.id)).toEqual([res.match.id]);
     expect(await listMatches(prisma, userId, "pending")).toEqual([]);
 
-    const done = await changeAlarmState(prisma, userId, res.match.id, "placed", now);
+    // "Bet placed" with the units and the odds you actually got.
+    const done = await changeAlarmState(prisma, userId, res.match.id, "placed", now, { stake: 1.5, odds: 1.92 });
     expect(done.alarm).toMatchObject({ status: "COMPLETED", ackAction: "placed" });
-    expect(done.bet).toMatchObject({ stake: 1, odds: 1.87, result: "PENDING" });
+    expect(done.bet).toMatchObject({ stake: 1.5, odds: 1.92, result: "PENDING" });
 
     const sent: string[] = [];
     const push: PushSender = { async send(sub) { sent.push(sub.endpoint); return { ok: true }; } };

@@ -8,7 +8,7 @@ import type { MatchDTO } from "@/lib/types";
 import { formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
 import { Countdown, EdgeIndicator, PercentBar, SelectionBadge, StatusBadge } from "./MatchBits";
 import { useNow } from "./useNow";
-import { BetPanel, PlayTypeChip } from "./BetBits";
+import { BetPanel, PlacedForm, PlayTypeChip, playUnits } from "./BetBits";
 import { MatchNames } from "./MatchNames";
 import { ScreenshotViewer } from "./ScreenshotViewer";
 
@@ -16,7 +16,7 @@ export interface MatchCardActions {
   onReactivate: (m: MatchDTO) => Promise<void>;
   onComplete: (m: MatchDTO) => Promise<void>;
   /** Bet already placed: record it, no notification, move to Pending. */
-  onPlaced: (m: MatchDTO) => Promise<void>;
+  onPlaced: (m: MatchDTO, bet: { stake: number; odds: number }) => Promise<void>;
   onDelete: (m: MatchDTO) => Promise<void>;
   /** The match changed (e.g. its bet was recorded or settled). */
   onUpdate: (m: MatchDTO) => void;
@@ -25,6 +25,7 @@ export interface MatchCardActions {
 export function MatchCard({ match, timezone, actions, highlight }: { match: MatchDTO; timezone: string; actions: MatchCardActions; highlight?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const router = useRouter();
   const now = useNow();
   const s = match.statistics;
@@ -93,6 +94,9 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
       </p>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <span className="chip bg-panel-2 font-semibold tabular text-text" title="Units for this play">
+          {playUnits(match)}U
+        </span>
         <SelectionBadge selection={s.selection} pointsLine={s.pointsLine} />
         <span className="text-line">|</span>
         <span className="text-muted">
@@ -122,12 +126,26 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
         <p className="rounded-md bg-under/10 px-2 py-1 text-[11px] text-under">{alarm.lastError}</p>
       )}
 
+      {placing && (
+        <PlacedForm
+          match={match}
+          busy={busy}
+          onCancel={() => setPlacing(false)}
+          onConfirm={(bet) =>
+            void run(async () => {
+              await actions.onPlaced(match, bet);
+              setPlacing(false);
+            })()
+          }
+        />
+      )}
+
       <div className="mt-0.5 flex items-center justify-end gap-1">
-        {(status === "SCHEDULED" || status === "SENDING" || status === "TRIGGERED") && (
+        {(status === "SCHEDULED" || status === "SENDING" || status === "TRIGGERED") && !placing && (
           <button
             className="btn-ghost border-over/40 px-2 py-1 text-xs text-over hover:bg-over/10"
             disabled={busy}
-            onClick={run(() => actions.onPlaced(match))}
+            onClick={() => setPlacing(true)}
             title="Already placed the bet: record it, skip the notification and move this match to Pending"
           >
             <CheckCircle2 className="h-3.5 w-3.5" /> Bet placed

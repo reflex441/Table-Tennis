@@ -678,14 +678,14 @@ function AverageOddsSection() {
   return (
     <Section
       title="Average odds"
-      description="Every new match you upload starts with a 1u stake. When this is ticked it also gets these odds, which you can change on the review screen before creating the alarms. Changing this setting never changes matches or bets you already have."
+      description="New uploads take their units from the pick badge (e.g. 1.5U OVER = 1.5u; 1u when there's no badge). When this is ticked they also get these odds, which you can change on the review screen. When you confirm a bet is placed you always enter the odds you actually got. Changing this setting never changes matches or bets you already have."
     >
       <Toggle
         label="Use average odds for bets without odds"
         hint={
           settings.useAverageOdds
-            ? `New uploads get odds ${settings.averageOdds.toFixed(2)} and 1u.`
-            : "New uploads get 1u and no odds - add the odds yourself."
+            ? `New uploads get odds ${settings.averageOdds.toFixed(2)} (and the badge's units).`
+            : "New uploads get no odds - add them yourself (units come from the badge)."
         }
         checked={settings.useAverageOdds}
         onChange={(v) => void save({ useAverageOdds: v })}

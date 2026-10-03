@@ -12,7 +12,7 @@ import { formatDayLabel, formatPct, formatTime } from "@/lib/format";
 import { useSettings } from "./SettingsProvider";
 import { NOTIFICATION_EVENT } from "./NotificationProvider";
 import { Countdown, SelectionBadge } from "./MatchBits";
-import { LegsEditor, PlayTypeChip, parseLegs, splitLegs, type LegDraft } from "./BetBits";
+import { LegsEditor, PlayTypeChip, parseLegs, playUnits, splitLegs, type LegDraft } from "./BetBits";
 import { MatchNames } from "./MatchNames";
 import { findLeagueUrl } from "@/lib/leagues";
 import { defaultStake, formatMoney, round2 } from "@/lib/bets/profit";
@@ -201,20 +201,22 @@ export function AlarmRinger() {
   const input =
     betInput?.matchId === match.id
       ? betInput
-      : { matchId: match.id, stake: String(defaultStake(match.stakeUnits)), odds: match.odds ? String(match.odds) : "", legs: null };
+      : // Units from the play (badge / recorded bet); the odds you got must be entered.
+        { matchId: match.id, stake: String(playUnits(match)), odds: match.bet?.odds ? String(match.bet.odds) : "", legs: null };
   const stakeNum = Number(input.stake);
 
   const ack = async (action: "placed" | "skipped") => {
     if (!match.alarm) return;
     let bet: { stake?: number; odds?: number | null; legs?: ReturnType<typeof parseLegs> } = {};
     if (action === "placed" && input.legs) {
-      const legs = parseLegs(input.legs);
+      const legs = parseLegs(input.legs, { requireOdds: true });
       if (typeof legs === "string") return setBetError(legs);
       bet = { legs };
     } else if (action === "placed") {
       const odds = input.odds.trim() ? Number(input.odds) : null;
       if (!Number.isFinite(stakeNum) || stakeNum <= 0) return setBetError("Stake must be a number of units above 0.");
-      if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return setBetError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
+      if (odds === null) return setBetError("Enter the odds you got.");
+      if (!Number.isFinite(odds) || odds <= 1) return setBetError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
       bet = { stake: stakeNum, odds };
     }
     setBetError(null);
@@ -317,11 +319,11 @@ export function AlarmRinger() {
               )}
             </label>
             <label>
-              <span className="label">Odds (optional)</span>
+              <span className="label">Odds *</span>
               <input
                 className="input tabular"
                 inputMode="decimal"
-                placeholder="1.85"
+                placeholder={match.odds ? match.odds.toFixed(2) : "1.85"}
                 value={input.odds}
                 onChange={(e) => setBetInput({ ...input, odds: e.target.value })}
                 aria-label="Decimal odds"

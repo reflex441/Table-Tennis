@@ -31,6 +31,8 @@ describe("split bets", () => {
     ]);
     expect(parseLegs([{ selection: "UNDER", stake: "0", odds: "" }, { selection: "SWEEP", stake: "0.5", odds: "" }])).toMatch(/Pick 1: stake/);
     expect(parseLegs([{ selection: "UNDER", stake: "0.5", odds: "" }, { selection: "SWEEP", stake: "0.5", odds: "0.9" }])).toMatch(/Pick 2: odds/);
+    // Confirming a placed bet needs the odds you got.
+    expect(parseLegs([{ selection: "UNDER", stake: "0.5", odds: "1.85" }, { selection: "SWEEP", stake: "0.5", odds: "" }], { requireOdds: true })).toMatch(/Pick 2: enter the odds/);
   });
 
   it("validation: 2-3 picks", () => {

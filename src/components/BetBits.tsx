@@ -49,6 +49,71 @@ export function ResultChip({ result }: { result: Result }) {
   return <span className={`chip ${RESULT_STYLE[result]}`}>{result === "PENDING" ? "Pending" : result === "WON" ? "Won" : result === "LOST" ? "Lost" : "Void"}</span>;
 }
 
+/** Units of the play: the recorded bet's stake, else what was set at upload (badge units), else 1u. */
+export function playUnits(match: Pick<MatchDTO, "bet" | "stakeUnits">): number {
+  return match.bet?.stake ?? defaultStake(match.stakeUnits);
+}
+
+/**
+ * "Bet placed" confirmation: the units are filled in from the play, and the
+ * odds you actually got must be entered (they start empty on purpose).
+ */
+export function PlacedForm({
+  match,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  match: MatchDTO;
+  busy: boolean;
+  onConfirm: (bet: { stake: number; odds: number }) => void;
+  onCancel: () => void;
+}) {
+  const [stake, setStake] = useState(String(playUnits(match)));
+  const [odds, setOdds] = useState(match.bet?.odds ? String(match.bet.odds) : "");
+  const [error, setError] = useState<string | null>(null);
+  const hint = match.odds ? match.odds.toFixed(2) : "1.85";
+
+  const confirm = () => {
+    const s = Number(stake);
+    const o = Number(odds);
+    if (!Number.isFinite(s) || s <= 0) return setError("Units must be a number above 0.");
+    if (!odds.trim() || !Number.isFinite(o) || o <= 1) return setError("Enter the odds you got (decimal, above 1.00).");
+    onConfirm({ stake: round2(s), odds: o });
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-over/40 bg-over/5 p-2" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="w-20">
+          <span className="label">Units</span>
+          <input className="input py-1 tabular" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} aria-label="Units" />
+        </label>
+        <label className="w-24">
+          <span className="label">Odds *</span>
+          <input
+            className="input py-1 tabular"
+            inputMode="decimal"
+            placeholder={hint}
+            value={odds}
+            autoFocus
+            onChange={(e) => setOdds(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && confirm()}
+            aria-label="Odds you got"
+          />
+        </label>
+        <button className="btn-ghost border-over/40 px-2 py-1 text-xs text-over hover:bg-over/10" disabled={busy} onClick={confirm}>
+          <Check className="h-3.5 w-3.5" /> Confirm
+        </button>
+        <button className="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+      {error && <p className="text-[11px] text-under">{error}</p>}
+    </div>
+  );
+}
+
 /** Rows of pick / stake / odds inputs for a split bet. */
 export function LegsEditor({ legs, onChange }: { legs: LegDraft[]; onChange: (legs: LegDraft[]) => void }) {
   const set = (i: number, patch: Partial<LegDraft>) => onChange(legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));

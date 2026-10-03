@@ -22,12 +22,13 @@ export function splitLegs(total: number, first: Selection, firstOdds: string, co
 }
 
 /** Validates picks typed in a split-bet editor; returns an error message or the picks. */
-export function parseLegs(legs: LegDraft[]): string | { selection: Selection; stake: number; odds: number | null }[] {
+export function parseLegs(legs: LegDraft[], opts: { requireOdds?: boolean } = {}): string | { selection: Selection; stake: number; odds: number | null }[] {
   const out = [];
   for (const [i, l] of legs.entries()) {
     const stake = Number(l.stake);
     const odds = l.odds.trim() ? Number(l.odds) : null;
     if (!Number.isFinite(stake) || stake <= 0) return `Pick ${i + 1}: stake must be a number of units above 0.`;
+    if (odds === null && opts.requireOdds) return `Pick ${i + 1}: enter the odds you got.`;
     if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return `Pick ${i + 1}: odds must be decimal odds above 1.00 (e.g. 1.85).`;
     out.push({ selection: l.selection, stake: round2(stake), odds });
   }

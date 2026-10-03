@@ -47,7 +47,7 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 
 **Upcoming → Triggered → Pending → Completed.** A match moves to **Pending** only when you confirm the bet is placed (**I've placed the bet** on the alarm, or the **Bet placed** button on the card), and moves to **Completed** when you mark the bet **Won / Lost / Void**. **Record bet** just notes the stake/odds early: the match stays where it is and its alarm still rings. Finished or cancelled matches without a pending bet are in **Completed**.
 
-Placed the bet before the reminder? Click **Bet placed** on the card: the bet is recorded with the stake and odds from the upload, the alarm won't go off, and the match moves to Pending.
+Placed the bet before the reminder? Click **Bet placed** on the card: the units are filled in from the play (e.g. 1.5U), you enter the odds you actually got (required), the alarm won't go off, and the match moves to Pending. Confirming on the alarm screen also requires the odds. Each card shows the play's units next to the pick.
 
 ## Match cards: screenshot and bookmaker links
 

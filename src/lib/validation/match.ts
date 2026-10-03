@@ -119,6 +119,9 @@ export const ackSchema = z.object({
 export const alarmActionSchema = z.object({
   /** "placed": bet already placed - record it, skip the notification, mark completed. */
   action: z.enum(["cancel", "reactivate", "complete", "placed"]),
+  /** With "placed": the units and odds you got. */
+  stake: z.number().positive().max(1000).optional(),
+  odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).optional(),
 });
 
 export function formatZodError(error: z.ZodError): string {
