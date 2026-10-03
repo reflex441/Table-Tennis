@@ -198,10 +198,8 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
           <select
             className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : c.selection === "SWEEP" ? "text-violet-300" : ""}`}
             value={c.selection}
-            onChange={(e) => {
-              const selection = e.target.value as Candidate["selection"];
-              onChange({ selection, playType: selection ? "BOT" : "PERSONAL" });
-            }}
+            // Changing the pick never changes Bot / Personal (that has its own switch).
+            onChange={(e) => onChange({ selection: e.target.value as Candidate["selection"] })}
           >
             <option value="">—</option>
             <option value="OVER">OVER</option>

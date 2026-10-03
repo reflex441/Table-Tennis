@@ -346,6 +346,8 @@ model Settings {
   user                       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Appear on the public leaderboard (display name only).
   showOnLeaderboard          Boolean  @default(true)
+  /// Tailing page: only show / copy these plays (null = all).
+  tailPlayType               PlayType?
   /// Bookmaker links per league: [{ "league": "TT Cup", "url": "https://..." }]
   leagueLinks                Json     @default("[]")
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)

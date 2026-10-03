@@ -69,6 +69,7 @@ export const settingsUpdateSchema = z
     geminiModel: geminiModelSchema,
     geminiFallbackModel: geminiFallbackSchema,
     showOnLeaderboard: z.boolean(),
+    tailPlayType: z.enum(["BOT", "PERSONAL"]).nullable(),
     leagueLinks: z
       .array(
         z.object({
@@ -121,6 +122,8 @@ export interface SettingsDTO {
   geminiFallbackModel: string;
   /** Appear on the leaderboard (display name only). */
   showOnLeaderboard: boolean;
+  /** Tailing page: only show / copy bot or personal plays (null = all). */
+  tailPlayType: "BOT" | "PERSONAL" | null;
   /** Bookmaker link per league, opened from the player names. */
   leagueLinks: LeagueLink[];
   /** Whether this account has saved a Gemini key. The key itself is never sent to the browser. */
