@@ -117,6 +117,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Send one screenshot to Gemini and return validated structured data. */
 export async function extractFromScreenshot(opts: ExtractOptions): Promise<ExtractOutput> {
+  const out = await generateJsonFromImage({ ...opts, prompt: EXTRACTION_PROMPT, schema: EXTRACTION_JSON_SCHEMA });
+  const { result, warnings } = normalizeExtraction(out.raw);
+  return { ...out, result, warnings };
+}
+
+/**
+ * Send one image and a prompt to Gemini and return the parsed JSON reply,
+ * with the backup model and retries. Shared by the match scanner and the
+ * bet-slip reader.
+ */
+export async function generateJsonFromImage(
+  opts: ExtractOptions & { prompt: string; schema: unknown },
+): Promise<{ raw: unknown; model: string; durationMs: number }> {
   if (!opts.apiKey && !opts.client) throw new GeminiConfigError();
   const client = opts.client ?? new GoogleGenAI({ apiKey: opts.apiKey, ...(opts.baseUrl ? { httpOptions: { baseUrl: opts.baseUrl } } : {}) });
   const started = Date.now();
@@ -165,13 +178,13 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
             role: "user",
             parts: [
               { inlineData: { data: opts.image.toString("base64"), mimeType: opts.mimeType } },
-              { text: EXTRACTION_PROMPT },
+              { text: opts.prompt },
             ],
           },
         ],
         config: {
           responseMimeType: "application/json",
-          responseJsonSchema: EXTRACTION_JSON_SCHEMA,
+          responseJsonSchema: opts.schema,
           // Gemini 3.x is tuned for its default temperature (1.0); Google warns
           // that lower values can cause looping, so it is deliberately not set.
           abortSignal: AbortSignal.timeout(Math.min(opts.timeoutMs ?? 45_000, remaining)),
@@ -205,7 +218,5 @@ export async function extractFromScreenshot(opts: ExtractOptions): Promise<Extra
     throw new GeminiRequestError(friendlyMessage(lastStatus, lastMessage, attempts, modelsTried), true);
   }
 
-  const raw = parseModelJson(text);
-  const { result, warnings } = normalizeExtraction(raw);
-  return { raw, result, warnings, model: usedModel, durationMs: Date.now() - started };
+  return { raw: parseModelJson(text), model: usedModel, durationMs: Date.now() - started };
 }

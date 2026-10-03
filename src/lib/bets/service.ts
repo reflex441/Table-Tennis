@@ -1,7 +1,8 @@
 import type { Bet, PrismaClient } from "@/generated/prisma/client";
 import { ServiceError } from "@/lib/alarms/service-error";
 import { combineLegs, computeProfit, defaultStake, round2, type BetResult } from "./profit";
-import type { BetInput, BetLegInput } from "@/lib/validation/match";
+import type { BetInput, BetLegInput, PastBetInput } from "@/lib/validation/match";
+import { matchDedupeKey } from "@/lib/matching/dedupe";
 import type { Selection } from "@/lib/selection";
 
 interface Leg {
@@ -128,4 +129,51 @@ function toLegs(input: BetLegInput[], current: Leg[]): Leg[] {
 
 export async function deleteBet(prisma: PrismaClient, userId: string, matchId: string) {
   await prisma.bet.deleteMany({ where: { matchId, match: { userId } } });
+}
+
+/**
+ * Record a bet on a match that has already been played (for the Profit
+ * page). It gets no alarm: the match is stored as finished with the bet
+ * placed, so it shows in Pending (result not known yet) or Completed.
+ */
+export async function createPastBet(prisma: PrismaClient, userId: string, input: PastBetInput, now = new Date()): Promise<{ matchId: string }> {
+  const startsAt = new Date(input.startsAt);
+  if (startsAt.getTime() > now.getTime()) {
+    throw new ServiceError("That match hasn't started yet - add upcoming matches with Upload or Manual so you get the alarm.", 422, "not_past");
+  }
+  const dedupeKey = matchDedupeKey(input.player1, input.player2, startsAt);
+  const existing = await prisma.match.findUnique({ where: { userId_dedupeKey: { userId, dedupeKey } }, select: { id: true } });
+  if (existing) throw new ServiceError("You already have this match at this time.", 409, "duplicate", { existingId: existing.id });
+  const result = input.result as BetResult;
+  const match = await prisma.match.create({
+    data: {
+      userId,
+      player1: input.player1,
+      player2: input.player2,
+      competition: input.competition,
+      startsAt,
+      timezone: input.timezone,
+      dedupeKey,
+      playType: input.playType,
+      stakeUnits: input.stake,
+      odds: input.odds,
+      statistics: { create: { selection: input.selection, pointsLine: input.pointsLine } },
+      // A finished alarm, already confirmed as placed: never rings.
+      alarm: {
+        create: { reminderMinutes: 0, fireAt: startsAt, nextAttemptAt: startsAt, status: "COMPLETED", completedAt: now, ackAt: now, ackAction: "placed" },
+      },
+      bet: {
+        create: {
+          stake: input.stake,
+          odds: input.odds,
+          result,
+          profit: computeProfit(input.stake, input.odds, result),
+          placedAt: startsAt,
+          settledAt: result === "PENDING" ? null : now,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return { matchId: match.id };
 }

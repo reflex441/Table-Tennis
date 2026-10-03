@@ -127,3 +127,20 @@ export const alarmActionSchema = z.object({
 export function formatZodError(error: z.ZodError): string {
   return error.issues.map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message)).join("; ");
 }
+
+/** A bet on a match that has already been played (Profit page -> Add past bet). */
+export const pastBetSchema = z.object({
+  player1: nameSchema,
+  player2: nameSchema,
+  competition: optionalText(120),
+  startsAt: isoDate,
+  timezone: z.string().trim().min(1).max(64),
+  playType: playTypeSchema,
+  selection: z.enum(SELECTIONS).nullish().transform((v) => v ?? null),
+  pointsLine: z.number().min(0).max(500).nullish().transform((v) => v ?? null),
+  stake: z.number().positive("Units must be more than 0").max(1000, "At most 1000 units"),
+  odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish().transform((v) => v ?? null),
+  result: z.enum(["PENDING", "WON", "LOST", "VOID"]),
+});
+
+export type PastBetInput = z.infer<typeof pastBetSchema>;

@@ -16,6 +16,7 @@ import { X } from "lucide-react";
 import { DateTime } from "luxon";
 import { SELECTIONS, SELECTION_LABEL, type Selection } from "@/lib/selection";
 import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
+import { AddPastBet } from "./AddPastBet";
 
 type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
@@ -158,6 +159,12 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
           />
         </div>
       </div>
+
+      {!readOnly && (
+        <div className="flex justify-end">
+          <AddPastBet />
+        </div>
+      )}
 
       <section className="card grid grid-cols-2 gap-4 p-4 sm:grid-cols-5">
         <div className="col-span-2">

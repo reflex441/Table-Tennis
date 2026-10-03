@@ -13,7 +13,7 @@ import { dispatchDueAlarms, type PushSender } from "@/lib/alarms/dispatcher";
 import { acknowledgeAlarm, applyDefaultReminder, changeAlarmState, createMatchWithAlarm, listRingingAlarms, updateMatch } from "@/lib/alarms/service";
 import { matchInputSchema } from "@/lib/validation/match";
 import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
-import { deleteBet, updateBet } from "@/lib/bets/service";
+import { createPastBet, deleteBet, updateBet } from "@/lib/bets/service";
 import { listBetRows } from "@/lib/bets/queries";
 import { summarize } from "@/lib/bets/profit";
 import { authenticate, registerUser, signInWithGoogle, updateDisplayName } from "@/lib/auth/accounts";
@@ -564,6 +564,24 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await applyDefaultReminder(prisma, userId, null, 30, now)).toBe(1);
     expect(await reminder(custom)).toBe(30);
     expect(await applyDefaultReminder(prisma, userId, null, 30, now)).toBe(0);
+  });
+
+  it("past bets: added without an alarm, straight to the profit page", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { player2: "Krcil F.", competition: "TT Elite", timezone: "Australia/Sydney", playType: "BOT" as const, selection: "OVER" as const, pointsLine: 73.5 };
+    const won = await createPastBet(prisma, userId, { ...base, player1: "Warpas B.", startsAt: "2030-09-20T06:55:00Z", stake: 1.5, odds: 1.8, result: "WON" }, now);
+    await createPastBet(prisma, userId, { ...base, player1: "Kolek M.", startsAt: "2030-09-20T08:00:00Z", stake: 1, odds: 1.87, result: "LOST" }, now);
+    const open = await createPastBet(prisma, userId, { ...base, player1: "Open O.", startsAt: "2030-09-21T11:00:00Z", stake: 1, odds: null, result: "PENDING" }, now);
+    // Settled ones are Completed, the unsettled one Pending; no alarm ever rings.
+    expect((await listMatches(prisma, userId, "completed")).map((m) => m.player1).sort()).toEqual(["Kolek M.", "Warpas B."]);
+    expect((await listMatches(prisma, userId, "pending")).map((m) => m.id)).toEqual([open.matchId]);
+    expect(await listMatches(prisma, userId, "upcoming")).toEqual([]);
+    const rows = await listBetRows(prisma, userId);
+    expect(summarize(rows)).toMatchObject({ bets: 3, won: 1, lost: 1, pending: 1, profit: 0.2 });
+    expect(rows.find((r) => r.matchId === won.matchId)).toMatchObject({ stake: 1.5, odds: 1.8, profit: 1.2, selection: "OVER", playType: "BOT" });
+    // Same match twice, or a match that hasn't happened yet, is refused.
+    await expect(createPastBet(prisma, userId, { ...base, player1: "Warpas B.", startsAt: "2030-09-20T06:55:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
+    await expect(createPastBet(prisma, userId, { ...base, player1: "Later L.", startsAt: "2030-09-21T13:00:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 422 });
   });
 
   it("new accounts see the tutorial until it is finished", async () => {

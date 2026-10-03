@@ -15,7 +15,7 @@ export type ScheduleCheck =
 export function checkSchedule(startsAt: Date, reminderMinutes: number, now: Date = new Date()): ScheduleCheck {
   if (Number.isNaN(startsAt.getTime())) return { ok: false, reason: "Invalid start time." };
   if (startsAt.getTime() <= now.getTime()) {
-    return { ok: false, reason: "The match start time is in the past." };
+    return { ok: false, reason: "The match start time is in the past. To record a bet on a match that has already been played, use Profit → Add past bet." };
   }
   const fireAt = computeFireAt(startsAt, reminderMinutes);
   return { ok: true, fireAt, immediate: fireAt.getTime() <= now.getTime() };
