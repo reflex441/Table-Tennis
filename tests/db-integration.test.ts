@@ -454,13 +454,21 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await getTailProfile(prisma, sam, now))!.upcoming.every((m) => m.copied)).toBe(true);
     expect((await listMatches(prisma, userId, null)).length).toBe(3); // the owner's matches are untouched
 
+    // The play's units carry over: a 1.5U bot play shows and copies as 1.5u.
+    const big = await createMatchWithAlarm(prisma, userId, input({ player1: "Pawlik C.", player2: "Oracz J.", startsAt: "2030-09-21T21:00:00Z", stakeUnits: 1.5 }), now);
+    if (big.status !== "created") throw new Error("not created");
+    expect((await getTailProfile(prisma, sam, now))!.upcoming.find((m) => m.id === big.match.id)?.stakeUnits).toBe(1.5);
+    expect((await getTailProfile(prisma, sam, now))!.upcoming.find((m) => m.id === a.match.id)?.stakeUnits).toBe(1);
+    await copyBets(prisma, sam, [big.match.id], now);
+    expect((await listMatches(prisma, sam, "upcoming")).find((m) => m.player1 === "Pawlik C.")?.stakeUnits).toBe(1.5);
+
     // A bet you already have (scanned yourself: players swapped, a few minutes off) isn't copied again.
     const c = await createMatchWithAlarm(prisma, userId, input({ player1: "Lamparski M.", player2: "Kolek M.", startsAt: "2030-09-21T20:00:00Z" }), now);
     if (c.status !== "created") throw new Error("not created");
     await createMatchWithAlarm(prisma, sam, input({ player1: "kolek m", player2: "Lamparski M.", startsAt: "2030-09-21T20:05:00Z" }), now);
     expect((await getTailProfile(prisma, sam, now))!.upcoming.find((m) => m.id === c.match.id)?.copied).toBe(true);
     expect(await copyBets(prisma, sam, null, now)).toMatchObject({ copied: 0 });
-    expect(await listMatches(prisma, sam, "upcoming")).toHaveLength(3);
+    expect(await listMatches(prisma, sam, "upcoming")).toHaveLength(4);
 
     // TAILING_ACCOUNT_EMAIL picks a different account.
     process.env.TAILING_ACCOUNT_EMAIL = "SAM@example.com";

@@ -31,6 +31,8 @@ export interface TailMatch {
   competition: string | null;
   startsAt: string;
   playType: "BOT" | "PERSONAL";
+  /** Units of the play (e.g. 1.5 from a "1.5U OVER" badge). */
+  stakeUnits: number;
   statistics: MatchStatisticsDTO;
   /** Already on your dashboard (same players and time). */
   copied: boolean;
@@ -103,6 +105,7 @@ export async function getTailProfile(prisma: PrismaClient, viewerId: string, now
       competition: m.competition,
       startsAt: m.startsAt.toISOString(),
       playType: m.playType as "BOT" | "PERSONAL",
+      stakeUnits: m.stakeUnits && m.stakeUnits > 0 ? m.stakeUnits : 1,
       statistics: {
         selection: m.statistics?.selection ?? null,
         pointsLine: m.statistics?.pointsLine ?? null,
@@ -123,7 +126,7 @@ export interface CopyResult {
 /**
  * Copy upcoming bets (all, or the given ids) from the tailed account to your
  * dashboard: same match, pick and stats, with your own default reminder,
- * a 1u stake and your average odds (if ticked, else their odds).
+ * the play's units (e.g. 1.5u) and your average odds (if ticked, else their odds).
  */
 export async function copyBets(prisma: PrismaClient, viewerId: string, matchIds: string[] | null, now = new Date()): Promise<CopyResult> {
   const target = await getTailedAccount(prisma);
@@ -148,7 +151,8 @@ export async function copyBets(prisma: PrismaClient, viewerId: string, matchIds:
       ouHitRate: m.statistics?.ouHitRate ?? null,
       edge: m.statistics?.edge ?? null,
       playType: m.playType,
-      stakeUnits: 1,
+      // Same units as the play (e.g. 1.5u), 1u if none were set.
+      stakeUnits: m.stakeUnits && m.stakeUnits > 0 ? m.stakeUnits : 1,
       odds: settings.useAverageOdds ? settings.averageOdds : m.odds,
     });
     const out = await createMatchWithAlarm(prisma, viewerId, input, now, { copiedFromUserId: targetId });

@@ -119,7 +119,7 @@ export function TailProfilePage({ initial }: { initial: TailProfile }) {
         )}
         {!isSelf && (
         <p className="border-t border-line px-3 py-2 text-[11px] text-muted">
-          Copied bets go on your dashboard with your own reminder ({settings.defaultReminderMinutes} min), a 1u stake and{" "}
+          Copied bets go on your dashboard with your own reminder ({settings.defaultReminderMinutes} min), the same units as the play and{" "}
           {settings.useAverageOdds ? `your average odds (${settings.averageOdds.toFixed(2)})` : "their odds"}. You can edit them afterwards.
         </p>
         )}
@@ -148,6 +148,9 @@ function TailMatchRow({ match, tz, busy, disabled, onCopy }: { match: TailMatch;
         </span>
       </span>
       <span className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="chip bg-panel-2 font-semibold tabular text-text" title="Units for this play">
+          {match.stakeUnits}U
+        </span>
         <SelectionBadge selection={s.selection} pointsLine={s.pointsLine} />
         <span className="text-muted">
           O/U <span className="tabular text-text">{s.ouStats ?? "–"}</span>

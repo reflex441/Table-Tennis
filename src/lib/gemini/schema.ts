@@ -43,7 +43,7 @@ export const EXTRACTION_JSON_SCHEMA = {
           ),
           ouStats: nullableString("The O/U statistic exactly as shown, two integers separated by '/', e.g. 'O/U 24/9 · 73%' -> '24/9'."),
           ouHitRate: nullableNumber("The O/U hit-rate percentage as a number without the % sign, e.g. 69."),
-          stakeUnits: nullableNumber("Stake in units shown on the pick badge, e.g. '1U OVER (23/33, 70%)' -> 1, '2U UNDER' -> 2. Null if no units are shown."),
+          stakeUnits: nullableNumber("Stake in units shown on the pick badge, e.g. '1U OVER (23/33, 70%)' -> 1, '1.5U OVER (42/65, 65%)' -> 1.5, '1.0U OVER' -> 1, '2U UNDER' -> 2. Null if no units are shown."),
           edge: nullableNumber(
             "The EDGE percentage without the % sign. In match tables it is the RIGHT-MOST number of the row, the percentage under/next to the small horizontal bar at the far right (e.g. '8%' -> 8). Never SPLIT, 5-SET, SWEEP, O18.5, OT or the O/U percentage.",
           ),
@@ -83,7 +83,7 @@ Rules:
 - For these tables the match is today: timeText is only the clock time from the TIME column (e.g. "9:35 PM") and dateText is null.
 - Tables: read each row as one match. The time column header may carry the timezone, e.g. "TIME (GMT+10)" -> timezoneText "GMT+10".
 - selection is OVER, UNDER or SWEEP only when the screenshot shows that pick (labels like "OVER", "UNDER", "O 74.5", "U 74.5", or a pick badge such as "1U SWEEP"). Otherwise null.
-- A pick badge such as "1U OVER (23/33, 70%)" means selection OVER, "1U UNDER (...)" means UNDER and "1U SWEEP (...)" means SWEEP ("1U" is the stake in units). Do NOT use the numbers in the pick badge as ouStats/ouHitRate.
+- A pick badge such as "1U OVER (23/33, 70%)" means selection OVER, "1U UNDER (...)" means UNDER and "1U SWEEP (...)" means SWEEP. The number before "U" is the stake in units: put it in stakeUnits exactly, including decimals ("1.5U OVER" -> 1.5, "1.0U OVER" -> 1, "2U" -> 2). Do NOT use the numbers in the pick badge as ouStats/ouHitRate.
 - The "SWEEP 35%" statistic in the middle of a row is NOT a pick: selection is SWEEP only when the coloured pick badge says SWEEP.
 - pointsLine is the numeric total points line of the pick itself (e.g. "OVER 74.5" -> 74.5). Statistic labels like "O18.5 67%" are NOT the points line.
 - ouStats/ouHitRate come from the statistic labelled "O/U", e.g. "O/U 24/9 · 73%" -> ouStats "24/9", ouHitRate 73. Other statistics (H2H, SWEEP, O18.5, OT, SPLIT, S-SET, last match points) are not needed.

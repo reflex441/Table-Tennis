@@ -59,4 +59,12 @@ describe("personal plays pick from the O/U %", () => {
     expect(merged.conflicts.find((c) => c.field === "selection")).toBeUndefined();
     expect(mergeCandidates(bot, personal)).toMatchObject({ playType: "BOT", selection: "UNDER" });
   });
+
+  it("bot plays keep the badge's units (1.5U OVER -> 1.5u)", () => {
+    expect(candidateFromExtraction(extracted({ selection: "OVER", stakeUnits: 1.5 }), shot, settings)).toMatchObject({ playType: "BOT", stakeUnits: "1.5" });
+    expect(candidateFromExtraction(extracted({ selection: "OVER", stakeUnits: 1 }), shot, settings).stakeUnits).toBe("1");
+    expect(candidateFromExtraction(extracted({}), shot, settings).stakeUnits).toBe("1"); // personal: 1u
+    const merged = mergeCandidates(candidateFromExtraction(extracted({}), shot, settings), candidateFromExtraction(extracted({ selection: "OVER", stakeUnits: 1.5 }), shot, settings));
+    expect(merged).toMatchObject({ playType: "BOT", stakeUnits: "1.5" });
+  });
 });

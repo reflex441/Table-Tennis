@@ -116,6 +116,8 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     // A SWEEP read with a badge stake ("1U SWEEP") is still a bot play.
     playType: m.selection && (m.selection !== "SWEEP" || m.stakeUnits !== null) ? "BOT" : "PERSONAL",
     ...defaultBet(settings),
+    // The badge's units, e.g. "1.5U OVER (...)" -> 1.5u (otherwise 1u).
+    ...(m.stakeUnits && m.stakeUnits > 0 ? { stakeUnits: String(m.stakeUnits) } : {}),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: m.confidence,
     conflicts: [],
@@ -224,7 +226,8 @@ export function mergeCandidates(primary: Candidate, secondary: Candidate): Candi
     ouHitRate: (merged.ouHitRate as string | null) ?? "",
     edge: (merged.edge as string | null) ?? "",
     playType: primary.playType === "BOT" || secondary.playType === "BOT" ? "BOT" : "PERSONAL",
-    stakeUnits: primary.stakeUnits || secondary.stakeUnits,
+    // A bot play's badge units beat the 1u default of a personal play.
+    stakeUnits: (botPickFromSecondary ? sec.stakeUnits : primary.stakeUnits) || secondary.stakeUnits,
     odds: primary.odds || secondary.odds,
     screenshotIds: Array.from(new Set([...primary.screenshotIds, ...secondary.screenshotIds])),
     timeSourceId: timeFromPrimary ? primary.timeSourceId : sec.timeSourceId,
