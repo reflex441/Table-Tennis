@@ -22,7 +22,7 @@ const NAV = [
 
 export function AppShell({ children, dbError, user }: { children: React.ReactNode; dbError: boolean; user: PublicUser }) {
   const pathname = usePathname();
-  if (pathname === "/login" || pathname === "/signup") return <>{children}</>;
+  if (pathname === "/login" || pathname === "/signup" || pathname === "/access") return <>{children}</>;
 
   return (
     <div className="flex min-h-screen flex-col">
