@@ -191,6 +191,8 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await acknowledgeAlarm(prisma, userId, skipRes.match.alarm!.id, "skipped", now)).bet).toBeNull();
 
     const rows = await listBetRows(prisma, userId);
+    // Existing bets get their matchups from the stored O/U record (20/9 -> 29).
+    expect(rows.every((r) => r.matchups === 29)).toBe(true);
     expect(summarize(rows.filter((r) => r.playType === "BOT")).profit).toBe(1.8);
     expect(summarize(rows.filter((r) => r.playType === "PERSONAL")).profit).toBe(-1);
     expect((await listBetRows(prisma, userId, { playType: "PERSONAL" })).map((r) => r.matchId)).toEqual([personalRes.match.id]);
@@ -579,6 +581,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const rows = await listBetRows(prisma, userId);
     expect(summarize(rows)).toMatchObject({ bets: 3, won: 1, lost: 1, pending: 1, profit: 0.2 });
     expect(rows.find((r) => r.matchId === won.matchId)).toMatchObject({ stake: 1.5, odds: 1.8, profit: 1.2, selection: "OVER", playType: "BOT" });
+    expect(rows.every((r) => r.matchups === null)).toBe(true); // no O/U record on these
     // Same match twice, or a match that hasn't happened yet, is refused.
     await expect(createPastBet(prisma, userId, { ...base, player1: "Warpas B.", startsAt: "2030-09-20T06:55:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, player1: "Later L.", startsAt: "2030-09-21T13:00:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 422 });

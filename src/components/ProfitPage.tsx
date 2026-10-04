@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Bot, Trophy, User } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Swords, Trophy, User } from "lucide-react";
 import type { BetRowWithMatch } from "@/lib/bets/queries";
 import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
 import { formatDayLabel, formatTime } from "@/lib/format";
@@ -17,6 +17,7 @@ import { DateTime } from "luxon";
 import { SELECTIONS, SELECTION_LABEL, type Selection } from "@/lib/selection";
 import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 import { AddPastBet } from "./AddPastBet";
+import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
 
 type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
@@ -44,6 +45,7 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
   const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
   const [type, setType] = useState<TypeFilter>("ALL");
   const [pick, setPick] = useState<PickFilter>("ALL");
+  const [mu, setMu] = useState<"ALL" | MatchupBucket>("ALL");
   const [chartMode, setChartMode] = useState<"total" | "picks">("total");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "date", desc: true });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -53,10 +55,19 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
     () => (period.fromDay === null ? initial : initial.filter((r) => dayKey(r.startsAt, tz) >= period.fromDay!)),
     [initial, period.fromDay, tz],
   );
-  const typeOk = useCallback((r: BetRowWithMatch) => type === "ALL" || r.playType === type, [type]);
+  const playOk = useCallback((r: BetRowWithMatch) => type === "ALL" || r.playType === type, [type]);
+  // Previous matchups of the players (from the O/U record).
+  const muOk = useCallback((r: BetRowWithMatch) => mu === "ALL" || matchupBucket(r.matchups) === mu, [mu]);
+  const typeOk = useCallback((r: BetRowWithMatch) => playOk(r) && muOk(r), [playOk, muOk]);
   const pickOk = useCallback((r: BetRowWithMatch) => pick === "ALL" || r.selection === pick, [pick]);
-  const bot = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "BOT" && pickOk(r))), [inPeriod, pickOk]);
-  const personal = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "PERSONAL" && pickOk(r))), [inPeriod, pickOk]);
+  const bot = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "BOT" && pickOk(r) && muOk(r))), [inPeriod, pickOk, muOk]);
+  const personal = useMemo(() => summarize(inPeriod.filter((r) => r.playType === "PERSONAL" && pickOk(r) && muOk(r))), [inPeriod, pickOk, muOk]);
+  // Profit by how many times the players have met before.
+  const matchups = useMemo(
+    () => MATCHUP_BUCKETS.map((b) => ({ b, summary: summarize(inPeriod.filter((r) => playOk(r) && pickOk(r) && matchupBucket(r.matchups) === b)) })),
+    [inPeriod, playOk, pickOk],
+  );
+  const noMatchupData = useMemo(() => inPeriod.filter((r) => playOk(r) && pickOk(r) && r.matchups === null).length, [inPeriod, playOk, pickOk]);
   // Over / Under / Sweep performance for the chosen play type.
   const picks = useMemo(
     () => SELECTIONS.map((sel) => ({ sel, summary: summarize(inPeriod.filter((r) => typeOk(r) && r.selection === sel)) })),
@@ -83,7 +94,11 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
     if (!from || !to) return [];
     return perPick.map((p) => ({ pick: p.sel, points: cumulativeSeries(p.days, from, to < from ? from : to) }));
   }, [initial, typeOk, today, period.fromDay, tz]);
-  const scope = [type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays", pick === "ALL" ? null : `${SELECTION_LABEL[pick]} picks`]
+  const scope = [
+    type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays",
+    pick === "ALL" ? null : `${SELECTION_LABEL[pick]} picks`,
+    mu === "ALL" ? null : `${MATCHUP_LABEL[mu]} matchups`,
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -111,6 +126,8 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
   const settledPicks = picks.filter((p) => p.summary.settled > 0).sort((a, b) => b.summary.profit - a.summary.profit);
   const pickLeader =
     settledPicks.length >= 2 && settledPicks[0].summary.profit !== settledPicks[1].summary.profit ? settledPicks[0].sel : null;
+  const settledMu = matchups.filter((m) => m.summary.settled > 0).sort((a, c) => c.summary.profit - a.summary.profit);
+  const matchupLeader = settledMu.length >= 2 && settledMu[0].summary.profit !== settledMu[1].summary.profit ? settledMu[0].b : null;
   const leader = bot.settled && personal.settled ? (bot.profit === personal.profit ? null : bot.profit > personal.profit ? "BOT" : "PERSONAL") : null;
   const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }));
 
@@ -156,6 +173,12 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
             value={pick}
             options={[{ id: "ALL", label: "All picks" }, ...SELECTIONS.map((sel) => ({ id: sel, label: SELECTION_LABEL[sel] }))]}
             onChange={(id) => setPick(id as PickFilter)}
+          />
+          <Segmented
+            label="Matchups"
+            value={mu}
+            options={[{ id: "ALL", label: "All matchups" }, ...MATCHUP_BUCKETS.map((b) => ({ id: b, label: MATCHUP_LABEL[b] }))]}
+            onChange={(id) => setMu(id as "ALL" | MatchupBucket)}
           />
         </div>
       </div>
@@ -212,6 +235,29 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
               leading={pickLeader === sel}
               active={pick === sel}
               onSelect={() => setPick(pick === sel ? "ALL" : sel)}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold">
+          Matchups{" "}
+          <span className="font-normal text-muted">
+            · profit by how often the players have met before (O/U record, e.g. 11/3 = 14)
+            {noMatchupData ? ` · ${noMatchupData} bet${noMatchupData === 1 ? "" : "s"} without O/U stats not counted` : ""}
+          </span>
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {matchups.map(({ b, summary }) => (
+            <PlayTypeCard
+              key={b}
+              title={`${MATCHUP_LABEL[b]} matchups`}
+              icon={<Swords className="h-4 w-4" />}
+              summary={summary}
+              leading={matchupLeader === b}
+              active={mu === b}
+              onSelect={() => setMu(mu === b ? "ALL" : b)}
             />
           ))}
         </div>
@@ -333,6 +379,7 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
                       <span className="block truncate text-[11px] text-muted">
                         {r.selection ? `${r.selection}${r.pointsLine !== null ? ` ${r.pointsLine}` : ""} · ` : ""}
                         {r.split ? `split ${r.split.index + 1}/${r.split.of} · ` : ""}
+                        {r.matchups !== null ? `${r.matchups} matchups · ` : ""}
                         {r.competition ?? "Unknown competition"}
                       </span>
                     </td>

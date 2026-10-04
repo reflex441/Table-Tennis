@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { BetResult, BetRow, PlayType } from "./profit";
 import type { Selection } from "@/lib/selection";
+import { matchupCount } from "./matchups";
 
 export interface BetRowWithMatch extends BetRow {
   player1: string;
@@ -8,6 +9,8 @@ export interface BetRowWithMatch extends BetRow {
   startsAt: string;
   selection: Selection | null;
   pointsLine: number | null;
+  /** Previous matchups of the two players (O/U record "11/3" -> 14), null if unknown. */
+  matchups: number | null;
   /** Set on the rows of a split bet: this is pick `index + 1` of `of`. */
   split: { index: number; of: number } | null;
 }
@@ -46,6 +49,7 @@ export async function listBetRows(prisma: PrismaClient, userId: string, opts: { 
       startsAt: b.match.startsAt.toISOString(),
       selection: (b.match.statistics?.selection as Selection | null) ?? null,
       pointsLine: b.match.statistics?.pointsLine ?? null,
+      matchups: matchupCount(b.match.statistics?.ouStats),
       split: null,
     };
     if (!b.legs.length) return [base];
