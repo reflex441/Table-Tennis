@@ -2,13 +2,17 @@ import { dispatchDueAlarms, type DispatchReport } from "@/lib/alarms/dispatcher"
 import { createPrismaStore } from "@/lib/alarms/prisma-store";
 import { createWebPushSender } from "@/lib/push/web-push";
 import { db } from "@/lib/db";
+import { deleteOldScreenshotsIfDue } from "@/lib/storage";
 
 /**
  * Run one dispatch pass against the database. Used by the in-process loop,
  * the standalone worker and the /api/cron/dispatch endpoint.
  */
 export async function runDispatchOnce(log?: (msg: string) => void): Promise<DispatchReport> {
-  return dispatchDueAlarms({ store: createPrismaStore(db()), push: createWebPushSender(), log });
+  const report = await dispatchDueAlarms({ store: createPrismaStore(db()), push: createWebPushSender(), log });
+  // Housekeeping on the same schedule: screenshots are kept for a week.
+  await deleteOldScreenshotsIfDue(db());
+  return report;
 }
 
 const fallback = globalThis as unknown as { __ttLastFallbackDispatch?: number };

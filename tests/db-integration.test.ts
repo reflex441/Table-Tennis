@@ -20,6 +20,7 @@ import { authenticate, registerUser, signInWithGoogle, updateDisplayName } from 
 import { getMatch, listMatches } from "@/lib/alarms/queries";
 import { deleteMatch } from "@/lib/alarms/service";
 import { getLeaderboard } from "@/lib/leaderboard";
+import { deleteOldScreenshots, storageUsage } from "@/lib/storage";
 import { getSessionSecret } from "@/lib/auth/session";
 import { copyBets, getTailProfile, getTailedAccount } from "@/lib/tailing";
 import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
@@ -592,6 +593,35 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // Same match twice, or a match that hasn't happened yet, is refused.
     await expect(createPastBet(prisma, userId, { ...base, player1: "Warpas B.", startsAt: "2030-09-20T06:55:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, player1: "Later L.", startsAt: "2030-09-21T13:00:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("screenshots are deleted a day after their match; matches and bets stay", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+    const match = (player1: string, startsAt: Date) =>
+      prisma.match.create({ data: { userId, player1, player2: "X", startsAt, timezone: "UTC", dedupeKey: player1, bet: { create: { stake: 1, odds: 2, result: "WON", profit: 1 } } } });
+    const shot = (name: string, createdAt: Date, matchIds: string[]) =>
+      prisma.screenshot.create({
+        data: { userId, filename: name, mimeType: "image/png", sizeBytes: 1000, sha256: name, data: Buffer.from("png"), createdAt, sources: { create: matchIds.map((matchId) => ({ matchId })) } },
+      });
+    const played = await match("Played", hoursAgo(30));
+    const recent = await match("Recent", hoursAgo(3));
+    const upcoming = await match("Upcoming", hoursAgo(-5));
+    await shot("old-match", hoursAgo(40), [played.id]);
+    await shot("mixed", hoursAgo(40), [played.id, recent.id]); // waits for the later match
+    await shot("upcoming", hoursAgo(40), [upcoming.id]);
+    await shot("never-used-old", hoursAgo(30), []);
+    await shot("never-used-new", hoursAgo(1), []);
+
+    expect(await deleteOldScreenshots(prisma, now)).toBe(2);
+    expect((await prisma.screenshot.findMany({ orderBy: { filename: "asc" } })).map((s) => s.filename)).toEqual(["mixed", "never-used-new", "upcoming"]);
+    // The match and its bet are untouched.
+    expect(await prisma.match.count({ where: { id: played.id } })).toBe(1);
+    expect((await listBetRows(prisma, userId)).length).toBe(3);
+
+    const usage = await storageUsage(prisma);
+    expect(usage.usedBytes).toBeGreaterThan(0);
+    expect(usage).toMatchObject({ limitBytes: 500 * 1024 * 1024, screenshots: 3, screenshotBytes: 3000 });
   });
 
   it("new accounts see the tutorial until it is finished", async () => {

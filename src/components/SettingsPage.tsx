@@ -29,6 +29,7 @@ interface Health {
   /** Only with SCHEDULER_MODE=external (Vercel): when cron-job.org last called. */
   cronLastRunAt?: string | null;
   cronHealthy?: boolean;
+  storage?: { usedBytes?: number; limitBytes?: number; screenshots?: number; screenshotBytes?: number; screenshotKeepHours: number };
 }
 
 interface Device {
@@ -278,6 +279,7 @@ export function SettingsPage() {
               />
             )}
           </ul>
+          {health.storage?.usedBytes !== undefined && health.storage.limitBytes ? <StorageMeter storage={health.storage as Required<NonNullable<Health["storage"]>>} /> : null}
           {health.schedulerMode === "external" && !health.cronHealthy && (
             <p className="mt-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
               cron-job.org isn&apos;t calling the app, so alarms only fire while someone has the app open, and phones with the app closed get nothing. In cron-job.org,
@@ -1041,4 +1043,30 @@ async function squareThumbnail(file: File, size: number): Promise<Blob> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+
+/** How full the database is (Supabase free plan: 500 MB, read-only when full). */
+function StorageMeter({ storage }: { storage: Required<NonNullable<Health["storage"]>> }) {
+  const pct = Math.min(100, (storage.usedBytes / storage.limitBytes) * 100);
+  const tone = pct >= 90 ? "bg-under" : pct >= 70 ? "bg-warn" : "bg-over";
+  return (
+    <div className="mt-3">
+      <div className="flex items-baseline justify-between text-sm">
+        <span>Storage</span>
+        <span className="tabular text-muted">
+          <span className="font-semibold text-text">{mb(storage.usedBytes)}</span> of {mb(storage.limitBytes)} ({pct < 1 ? pct.toFixed(1) : Math.round(pct)}%)
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-line" role="meter" aria-label="Database storage used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(pct, 1)}%` }} />
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Screenshots: {storage.screenshots} ({mb(storage.screenshotBytes)}). Each is deleted {storage.screenshotKeepHours / 24 === 1 ? "a day" : `${storage.screenshotKeepHours} hours`} after its
+        match; your matches and bets are kept.
+        {pct >= 90 && " Almost full: when it's full the database becomes read-only and new bets can't be saved."}
+      </p>
+    </div>
+  );
 }
