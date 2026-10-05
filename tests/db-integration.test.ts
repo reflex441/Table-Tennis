@@ -473,6 +473,13 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await copyBets(prisma, sam, null, now)).toMatchObject({ copied: 0 });
     expect(await listMatches(prisma, sam, "upcoming")).toHaveLength(4);
 
+    // A rematch of the same players at a different time is a different match: it can be copied.
+    const rematch = await createMatchWithAlarm(prisma, userId, input({ player1: "Lamparski M.", player2: "Kolek M.", startsAt: "2030-09-21T22:00:00Z", allowSimilar: true }), now);
+    if (rematch.status !== "created") throw new Error("not created");
+    expect((await getTailProfile(prisma, sam, now))!.upcoming.find((m) => m.id === rematch.match.id)?.copied).toBe(false);
+    expect(await copyBets(prisma, sam, [rematch.match.id], now)).toMatchObject({ copied: 1, skipped: [] });
+    expect(await listMatches(prisma, sam, "upcoming")).toHaveLength(5);
+
     // TAILING_ACCOUNT_EMAIL picks a different account.
     process.env.TAILING_ACCOUNT_EMAIL = "SAM@example.com";
     try {

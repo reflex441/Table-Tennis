@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { ServiceError } from "@/lib/alarms/service-error";
-import { createMatchWithAlarm, SIMILAR_WINDOW_MS } from "@/lib/alarms/service";
+import { createMatchWithAlarm } from "@/lib/alarms/service";
 import { playersKey } from "@/lib/matching/dedupe";
 import { avatarUrl } from "@/lib/auth/accounts";
 import { listBetRows, type BetRowWithMatch } from "@/lib/bets/queries";
@@ -68,22 +68,26 @@ async function upcomingMatches(prisma: PrismaClient, targetId: string, now: Date
 }
 
 /**
- * Which of `matches` the viewer already has: same players (either order)
- * within 3 hours - the same rule that stops a copy from being a duplicate.
+ * The same match: same players (either order) within 5 minutes. The same two
+ * players often meet again later the same day - that's a different match and
+ * can be copied.
  */
+const SAME_MATCH_WINDOW_MS = 5 * 60_000;
+
+/** Which of `matches` the viewer already has (see SAME_MATCH_WINDOW_MS). */
 async function viewerHas(prisma: PrismaClient, viewerId: string, matches: { player1: string; player2: string; startsAt: Date }[]) {
   if (!matches.length) return () => false;
   const times = matches.map((m) => m.startsAt.getTime());
   const mine = await prisma.match.findMany({
     where: {
       userId: viewerId,
-      startsAt: { gte: new Date(Math.min(...times) - SIMILAR_WINDOW_MS), lte: new Date(Math.max(...times) + SIMILAR_WINDOW_MS) },
+      startsAt: { gte: new Date(Math.min(...times) - SAME_MATCH_WINDOW_MS), lte: new Date(Math.max(...times) + SAME_MATCH_WINDOW_MS) },
     },
     select: { player1: true, player2: true, startsAt: true },
   });
   return (m: { player1: string; player2: string; startsAt: Date }) => {
     const key = playersKey(m.player1, m.player2);
-    return mine.some((o) => playersKey(o.player1, o.player2) === key && Math.abs(o.startsAt.getTime() - m.startsAt.getTime()) <= SIMILAR_WINDOW_MS);
+    return mine.some((o) => playersKey(o.player1, o.player2) === key && Math.abs(o.startsAt.getTime() - m.startsAt.getTime()) <= SAME_MATCH_WINDOW_MS);
   };
 }
 
@@ -135,8 +139,13 @@ export async function copyBets(prisma: PrismaClient, viewerId: string, matchIds:
   const targetId = target.id;
   const settings = await getSettings(prisma, viewerId);
   const source = (await upcomingMatches(prisma, targetId, now)).filter((m) => !matchIds || matchIds.includes(m.id));
+  const alreadyHave = await viewerHas(prisma, viewerId, source);
   const result: CopyResult = { copied: 0, skipped: [] };
   for (const m of source) {
+    if (alreadyHave(m)) {
+      result.skipped.push({ id: m.id, reason: "Already on your dashboard." });
+      continue;
+    }
     const input = matchInputSchema.parse({
       player1: m.player1,
       player2: m.player2,
@@ -154,6 +163,8 @@ export async function copyBets(prisma: PrismaClient, viewerId: string, matchIds:
       // Same units as the play (e.g. 1.5u), 1u if none were set.
       stakeUnits: m.stakeUnits && m.stakeUnits > 0 ? m.stakeUnits : 1,
       odds: settings.useAverageOdds ? settings.averageOdds : m.odds,
+      // Rematches of the same players at another time are separate matches.
+      allowSimilar: true,
     });
     const out = await createMatchWithAlarm(prisma, viewerId, input, now, { copiedFromUserId: targetId });
     if (out.status === "created") result.copied++;
