@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { isSelection, type Selection } from "@/lib/selection";
 import { ExtractionFormatError } from "./normalize";
+import { shortPlayerName } from "@/lib/matching/player-names";
 
 /**
  * Reading bookmaker bet slips ("My Bets" / settled bets screenshots from
@@ -85,6 +86,9 @@ function number(v: unknown, min: number, max: number): number | null {
   return Number.isFinite(n) && n >= min && n <= max ? Math.round(n * 100) / 100 : null;
 }
 
+/** "Mariusz Koczyba" -> "Koczyba M.", like the rest of the app. */
+const short = (name: string | null) => (name ? shortPlayerName(name) : null);
+
 export function normalizeBetSlips(raw: unknown): SlipBet[] {
   if (!raw || typeof raw !== "object" || !Array.isArray((raw as { bets?: unknown }).bets)) {
     throw new ExtractionFormatError("Gemini's reply has no list of bets.");
@@ -96,8 +100,8 @@ export function normalizeBetSlips(raw: unknown): SlipBet[] {
       const sel = typeof b.selection === "string" ? b.selection.toUpperCase() : null;
       const resultText = clean(b.resultText, 40);
       return {
-        player1: clean(b.player1, 60),
-        player2: clean(b.player2, 60),
+        player1: short(clean(b.player1, 60)),
+        player2: short(clean(b.player2, 60)),
         competition: clean(b.competition, 120),
         selection: isSelection(sel) ? sel : null,
         pointsLine: number(b.pointsLine, 0, 500),

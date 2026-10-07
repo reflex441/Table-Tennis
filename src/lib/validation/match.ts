@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SELECTIONS } from "@/lib/selection";
+import { shortPlayerName } from "@/lib/matching/player-names";
 
 export const REMINDER_PRESETS = [1, 3, 5, 10, 15, 30] as const;
 export const MIN_REMINDER_MINUTES = 0;
@@ -11,7 +12,8 @@ export const reminderMinutesSchema = z
   .min(MIN_REMINDER_MINUTES, "Reminder cannot be negative")
   .max(MAX_REMINDER_MINUTES, "Reminder can be at most 24 hours");
 
-const nameSchema = z.string().trim().min(1, "Required").max(60, "Too long");
+/** Stored as "Surname F." ("Mariusz Koczyba" -> "Koczyba M."). */
+const nameSchema = z.string().trim().min(1, "Required").max(60, "Too long").transform(shortPlayerName);
 const optionalText = (max: number) =>
   z
     .string()

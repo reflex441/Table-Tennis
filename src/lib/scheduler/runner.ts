@@ -3,6 +3,7 @@ import { createPrismaStore } from "@/lib/alarms/prisma-store";
 import { createWebPushSender } from "@/lib/push/web-push";
 import { db } from "@/lib/db";
 import { deleteOldScreenshotsIfDue } from "@/lib/storage";
+import { shortenStoredPlayerNamesIfDue } from "@/lib/matching/tidy-names";
 
 /**
  * Run one dispatch pass against the database. Used by the in-process loop,
@@ -10,8 +11,9 @@ import { deleteOldScreenshotsIfDue } from "@/lib/storage";
  */
 export async function runDispatchOnce(log?: (msg: string) => void): Promise<DispatchReport> {
   const report = await dispatchDueAlarms({ store: createPrismaStore(db()), push: createWebPushSender(), log });
-  // Housekeeping on the same schedule: screenshots are kept for a week.
+  // Housekeeping on the same schedule (hourly): old screenshots, full player names.
   await deleteOldScreenshotsIfDue(db());
+  await shortenStoredPlayerNamesIfDue(db());
   return report;
 }
 

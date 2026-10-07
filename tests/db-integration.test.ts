@@ -24,6 +24,8 @@ import { deleteOldScreenshots, storageUsage } from "@/lib/storage";
 import { getSessionSecret } from "@/lib/auth/session";
 import { copyBets, getTailProfile, getTailedAccount } from "@/lib/tailing";
 import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
+import { shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
+import { matchDedupeKey } from "@/lib/matching/dedupe";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -436,7 +438,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // Sam (anyone else) sees the owner's page automatically.
     const profile = (await getTailProfile(prisma, sam, now))!;
     expect(profile).toMatchObject({ isSelf: false, account: { id: userId, name: "Owner", upcoming: 2, summary: { profit: 1, won: 1 } } });
-    expect(profile.upcoming.map((m) => m.player1)).toEqual(["Varcl J", "Kosmal D."]);
+    expect(profile.upcoming.map((m) => m.player1)).toEqual(["Varcl J.", "Kosmal D."]);
     expect(profile.bets.map((r) => r.matchId)).toEqual([old.id]);
     expect(JSON.stringify(profile)).not.toMatch(/@example\.com|screenshot/i);
 
@@ -452,7 +454,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(all.skipped).toHaveLength(1);
     const copies = await listMatches(prisma, sam, "upcoming");
     expect(copies).toHaveLength(2);
-    expect(copies[0]).toMatchObject({ player1: "Varcl J", copiedFrom: { id: userId, name: "Owner" }, stakeUnits: 1, odds: 1.85, playType: "BOT" });
+    expect(copies[0]).toMatchObject({ player1: "Varcl J.", copiedFrom: { id: userId, name: "Owner" }, stakeUnits: 1, odds: 1.85, playType: "BOT" });
     expect(copies[0].alarm?.reminderMinutes).toBe(10);
     expect(copies[1].statistics.selection).toBe("SWEEP");
     expect((await getTailProfile(prisma, sam, now))!.upcoming.every((m) => m.copied)).toBe(true);
@@ -615,6 +617,24 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // The same pick again is still a duplicate.
     await expect(createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 1, odds: 1.9, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("full player names already stored are shortened to 'Surname F.'", async () => {
+    const at = new Date("2030-09-20T06:55:00Z");
+    const mk = (player1: string, player2: string, startsAt = at) =>
+      prisma.match.create({ data: { userId, player1, player2, startsAt, timezone: "UTC", dedupeKey: matchDedupeKey(player1, player2, startsAt) } });
+    const full = await mk("Mariusz Koczyba", "Grzegorz Jurowicz");
+    const short = await mk("Sobel A.", "Sulkowski B.");
+    // Same players and minute as a match already stored short: left alone.
+    await mk("Varcl J.", "Prokop T.", new Date("2030-09-21T10:00:00Z"));
+    const clash = await mk("Jiri Varcl", "Tomas Prokop", new Date("2030-09-21T10:00:00Z"));
+    expect(await shortenStoredPlayerNames(prisma)).toEqual({ renamed: 1, skipped: 1 });
+    const renamed = await prisma.match.findUniqueOrThrow({ where: { id: full.id } });
+    expect(renamed).toMatchObject({ player1: "Koczyba M.", player2: "Jurowicz G.", dedupeKey: matchDedupeKey("Koczyba M.", "Jurowicz G.", at) });
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: short.id } })).player1).toBe("Sobel A.");
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: clash.id } })).player1).toBe("Jiri Varcl");
+    // Running it again changes nothing.
+    expect(await shortenStoredPlayerNames(prisma)).toEqual({ renamed: 0, skipped: 1 });
   });
 
   it("screenshots are deleted a day after their match; matches and bets stay", async () => {

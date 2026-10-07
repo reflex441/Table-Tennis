@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareNames, comparePlayers, matchDedupeKey, mergeRecords, normalizeName, playersKey, suggestMerges } from "@/lib/matching/dedupe";
-import { createMatchesSchema, matchInputSchema, updateMatchSchema } from "@/lib/validation/match";
+import { createMatchesSchema, matchInputSchema, pastBetSchema, updateMatchSchema } from "@/lib/validation/match";
+import { shortPlayerName } from "@/lib/matching/player-names";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
 import { ALARM_SOUNDS } from "@/lib/alarm-sounds";
 import { volumeToGain } from "@/lib/siren";
@@ -317,3 +318,25 @@ describe("uploads and auth helpers", () => {
     expect(rateLimited(key, 5, 60_000, 1_000 + 120_000)).toBe(false); // window passed
   });
 });
+
+describe("player names are stored as 'Surname F.'", () => {
+  it("shortens full names and leaves short ones", () => {
+    expect(shortPlayerName("Mariusz Koczyba")).toBe("Koczyba M.");
+    expect(shortPlayerName("  Grzegorz   Jurowicz ")).toBe("Jurowicz G.");
+    expect(shortPlayerName("Sobel A.")).toBe("Sobel A.");
+    expect(shortPlayerName("Sobel A")).toBe("Sobel A.");
+    expect(shortPlayerName("A. Sobel")).toBe("Sobel A.");
+    expect(shortPlayerName("KOCZYBA Mariusz")).toBe("Koczyba M.");
+    expect(shortPlayerName("mariusz koczyba")).toBe("Koczyba M.");
+    expect(shortPlayerName("Jose Maria Garcia")).toBe("Garcia J.");
+    expect(shortPlayerName("Tom van der Berg")).toBe("van der Berg T.");
+    expect(shortPlayerName("Kim J.H.")).toBe("Kim J.H.");
+    expect(shortPlayerName("Solo")).toBe("Solo");
+  });
+
+  it("applies to matches and past bets as they're saved", () => {
+    const past = pastBetSchema.parse({ player1: "Mariusz Koczyba", player2: "Grzegorz Jurowicz", startsAt: "2026-10-06T19:40:00Z", timezone: "UTC", playType: "BOT", stake: 1, odds: 1.8, result: "WON" });
+    expect([past.player1, past.player2]).toEqual(["Koczyba M.", "Jurowicz G."]);
+  });
+});
+
