@@ -44,6 +44,19 @@ describe("bet slips", () => {
     expect(slipDate("gibberish", null, tz, now)).toBeNull();
   });
 
+  it("says why Gemini couldn't be reached, and retries an empty reply", async () => {
+    const run = (generateContent: () => Promise<unknown>) =>
+      generateJsonFromImage({ apiKey: "", client: { models: { generateContent } } as never, model: "m", fallbackModel: "b", image: Buffer.from("x"), mimeType: "image/png", prompt: "p", schema: {}, sleep: async () => {} });
+    const timeout = () => Promise.reject(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }));
+    await expect(run(timeout)).rejects.toThrow(/didn't answer in time/);
+    const network = () => Promise.reject(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } }));
+    await expect(run(network)).rejects.toThrow(/Could not reach Gemini \(fetch failed: ECONNRESET\)/);
+    let calls = 0;
+    const emptyThenOk = async () => (++calls === 1 ? { text: "", candidates: [{ finishReason: "MAX_TOKENS" }] } : { text: '{"bets":[]}' });
+    expect((await run(emptyThenOk)).raw).toEqual({ bets: [] });
+    expect(calls).toBe(2);
+  });
+
   it("sends the bet-slip prompt to Gemini", async () => {
     let prompt = "";
     const client = {

@@ -103,11 +103,24 @@ function friendlyMessage(status: number | undefined, raw: string, attempts: numb
     return `Gemini rate limit reached (429). ${tried} Free API keys only allow a limited number of requests per minute - wait a minute, then press Retry.`;
   }
   if (status === 404) return `Gemini model not found (404): ${models.join(", ")}. Check the model names in Settings → Gemini API (Test lists the models your key can use).`;
-  if (status === undefined) return `Could not reach Gemini (network error or timeout). ${tried} Press Retry.`;
+  if (status === undefined && /timed out/.test(raw)) return `Gemini didn't answer in time. ${tried} Google is probably slow right now - press Retry.`;
+  if (status === undefined) return `Could not reach Gemini (${raw || "network error"}). ${tried} Press Retry.`;
   if (status >= 500) return `Gemini had a server error (${status}). ${tried} Press Retry.`;
   if (status === 401 || status === 403 || /api key/i.test(raw)) return `Gemini rejected the API key (${status}) - check it in Settings. ${raw}`;
   if (status === 400) return `Gemini rejected the request (400): ${raw}`;
   return `Gemini request failed (${status}): ${raw}`;
+}
+
+/**
+ * What went wrong with a request that got no HTTP status: a timeout, or the
+ * network error and its cause (e.g. "fetch failed: ECONNRESET"). Never
+ * contains the API key (it is sent in a header, and masked here anyway).
+ */
+function describeFailure(err: unknown): string {
+  const e = err as { name?: string; message?: string; cause?: { code?: string; message?: string } } | null;
+  if (e?.name === "TimeoutError" || e?.name === "AbortError") return "timed out";
+  const parts = [e?.message ?? String(err), e?.cause?.code ?? e?.cause?.message].filter(Boolean);
+  return [...new Set(parts)].join(": ").replace(/key=[^&\s]+/gi, "key=***").slice(0, 200);
 }
 
 /** Pause before each round of attempts over all models. */
@@ -190,13 +203,19 @@ export async function generateJsonFromImage(
           abortSignal: AbortSignal.timeout(Math.min(opts.timeoutMs ?? 45_000, remaining)),
         },
       });
+      if (!response.text) {
+        // Answered, but with nothing usable (e.g. cut off or blocked): try again.
+        const reason = response.candidates?.[0]?.finishReason ?? response.promptFeedback?.blockReason ?? "no text";
+        throw Object.assign(new Error(`Gemini sent an empty reply (${reason})`), { name: "EmptyReply" });
+      }
       text = response.text;
       usedModel = step.model;
       lastStatus = undefined;
       break;
     } catch (err) {
       lastStatus = (err as { status?: number }).status;
-      lastMessage = err instanceof Error ? err.message : String(err);
+      lastMessage = lastStatus === undefined ? describeFailure(err) : err instanceof Error ? err.message : String(err);
+      console.warn(`[gemini] ${step.model} attempt ${attempts} failed after ${Date.now() - started} ms: ${lastStatus ?? "no status"} ${lastMessage.slice(0, 300)}`);
       if (lastStatus === 404) {
         // Wrong / unavailable model name: use the other models instead.
         console.warn(`Gemini model "${step.model}" not found - skipping it.`);
