@@ -209,7 +209,7 @@ export function SettingsPage() {
                     </p>
                     <p className="text-muted">
                       {d.active ? "active" : "inactive (expired)"}
-                      {d.lastSuccessAt ? ` · last delivered ${new Date(d.lastSuccessAt).toLocaleString()}` : ""}
+                      {d.lastSuccessAt ? ` · last delivered ${DateTime.fromISO(d.lastSuccessAt).toFormat("d LLL yyyy, h:mm a")}` : ""}
                       {d.failureCount ? ` · ${d.failureCount} failure(s)` : ""}
                     </p>
                     {d.lastError && <p className="truncate text-under">{d.lastError}</p>}

@@ -7,10 +7,12 @@ import { api, uploadWithProgress } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { prepareUpload } from "@/lib/shrink-image";
 import { SELECTIONS, type Selection } from "@/lib/selection";
+import { SUGGESTED_LEAGUES } from "@/lib/leagues";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
+import { DateTimeInput } from "./DateTimeInput";
 
 interface Row {
   key: string;
@@ -113,7 +115,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         continue;
       }
       try {
-        await api("/api/bets/past", {
+        const res = await api<{ combined: boolean }>("/api/bets/past", {
           method: "POST",
           json: {
             player1: r.player1.trim(),
@@ -130,7 +132,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
           },
         });
         added++;
-        patch(r.key, { status: { ok: true, message: "Added" } });
+        patch(r.key, { status: { ok: true, message: res.combined ? "Added to the same match (split bet)" : "Added" } });
       } catch (err) {
         patch(r.key, { status: { ok: false, message: err instanceof Error ? err.message : String(err) } });
       }
@@ -192,6 +194,12 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         </p>
       ))}
 
+      <datalist id="slip-leagues">
+        {SUGGESTED_LEAGUES.map((l) => (
+          <option key={l} value={l} />
+        ))}
+      </datalist>
+
       {rows.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
           {rows.map((r) => (
@@ -208,10 +216,14 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                   <span className="label">Player 2</span>
                   <input className="input py-1" value={r.player2} onChange={(e) => patch(r.key, { player2: e.target.value })} aria-label="Player 2" />
                 </label>
-                <label className="w-44">
-                  <span className="label">Date and time</span>
-                  <input className="input py-1" type="datetime-local" value={r.startsAtLocal} onChange={(e) => patch(r.key, { startsAtLocal: e.target.value })} aria-label="Date and time" />
+                <label className="w-40">
+                  <span className="label">League</span>
+                  <input className="input py-1" list="slip-leagues" value={r.competition} onChange={(e) => patch(r.key, { competition: e.target.value })} aria-label="League" />
                 </label>
+                <div>
+                  <span className="label">Date and time</span>
+                  <DateTimeInput value={r.startsAtLocal} onChange={(v) => patch(r.key, { startsAtLocal: v })} compact />
+                </div>
               </div>
               <div className="mt-1.5 flex flex-wrap items-end gap-2 text-xs">
                 <label className="w-24">

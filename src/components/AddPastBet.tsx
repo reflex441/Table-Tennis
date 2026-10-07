@@ -12,6 +12,7 @@ import { SELECTIONS, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
+import { DateTimeInput } from "./DateTimeInput";
 
 type Result = "WON" | "LOST" | "VOID" | "PENDING";
 
@@ -72,7 +73,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/bets/past", {
+      const res = await api<{ combined: boolean }>("/api/bets/past", {
         method: "POST",
         json: {
           player1: f.player1.trim(),
@@ -88,7 +89,12 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
           result: f.result,
         },
       });
-      notify("Past bet added", `${f.player1.trim()} vs ${f.player2.trim()} is on your Profit page.`);
+      notify(
+        "Past bet added",
+        res.combined
+          ? `Added to your existing ${f.player1.trim()} vs ${f.player2.trim()} match as a split bet.`
+          : `${f.player1.trim()} vs ${f.player2.trim()} is on your Profit page.`,
+      );
       router.refresh();
       onClose();
     } catch (err) {
@@ -141,10 +147,10 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
             ))}
           </datalist>
         </label>
-        <label>
+        <div>
           <span className="label">Date and time</span>
-          <input className="input" type="datetime-local" max={nowLocal} value={f.startsAt} onChange={(e) => set({ startsAt: e.target.value })} aria-label="Date and time" />
-        </label>
+          <DateTimeInput value={f.startsAt} max={nowLocal} onChange={(v) => set({ startsAt: v })} />
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <div>

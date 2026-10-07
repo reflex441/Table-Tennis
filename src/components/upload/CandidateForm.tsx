@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Info, Trash2, XCircle } from "lucide-react
 import type { Candidate, CandidateValidation } from "@/lib/review/candidate";
 import { ReminderPicker } from "@/components/ReminderPicker";
 import { fromLocalInputValue, formatDayLabel, formatTime } from "@/lib/format";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
 interface Props {
   candidate: Candidate;
@@ -114,11 +115,10 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
       <div className={`mt-2 rounded-lg border ${timeTone} bg-bg/40 p-2`}>
         <div className="flex flex-wrap items-end gap-2">
           <Field label={`Start time (${timezone})`} error={err.startsAt} className="min-w-[13rem] flex-1">
-            <input
-              type="datetime-local"
-              className="input"
+            <DateTimeInput
               value={c.startsAtLocal}
-              onChange={(e) => onChange({ startsAtLocal: e.target.value, timeStatus: "manual", timeConfirmed: true, timeIssues: [] })}
+              label="Start time"
+              onChange={(v) => onChange({ startsAtLocal: v, timeStatus: "manual", timeConfirmed: true, timeIssues: [] })}
             />
           </Field>
           {iso && (

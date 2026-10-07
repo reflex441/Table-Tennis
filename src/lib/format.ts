@@ -78,3 +78,12 @@ export function listTimeZones(): string[] {
   }
   return ["UTC", "Europe/London", "Europe/Prague", "Europe/Berlin", "Europe/Moscow", "America/New_York", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 }
+
+/** Australian date entry: "7/10/2026", "07-10-26", "7.10.2026" -> "2026-10-07" (day first), else null. */
+export function parseDayFirstDate(text: string): string | null {
+  const m = text.trim().match(/^(\d{1,2})[/.\-\s](\d{1,2})[/.\-\s](\d{2}|\d{4})$/);
+  if (!m) return null;
+  const year = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  const dt = DateTime.fromObject({ year, month: Number(m[2]), day: Number(m[1]) });
+  return dt.isValid ? dt.toISODate() : null;
+}

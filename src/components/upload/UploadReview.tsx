@@ -26,6 +26,7 @@ import { useBrowserTimeZone } from "@/components/useBrowserTimeZone";
 import { useNow } from "@/components/useNow";
 import type { SettingsDTO } from "@/lib/validation/settings";
 import { prepareUpload } from "@/lib/shrink-image";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
 type Phase = "queued" | "uploading" | "uploaded" | "scanning" | "scanned" | "error";
 
@@ -670,7 +671,7 @@ function CaptureTimeEditor({ item, timezone, onSave }: { item: UploadItem; timez
       </div>
       {editing && (
         <div className="mt-2 flex items-center gap-2">
-          <input type="datetime-local" className="input w-auto py-1 text-xs" value={value} onChange={(e) => setValue(e.target.value)} />
+          <DateTimeInput value={value} onChange={setValue} label="Screenshot taken" compact />
           <button
             className="btn-primary px-2 py-1 text-xs"
             onClick={() => {

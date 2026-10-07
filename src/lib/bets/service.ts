@@ -136,14 +136,19 @@ export async function deleteBet(prisma: PrismaClient, userId: string, matchId: s
  * page). It gets no alarm: the match is stored as finished with the bet
  * placed, so it shows in Pending (result not known yet) or Completed.
  */
-export async function createPastBet(prisma: PrismaClient, userId: string, input: PastBetInput, now = new Date()): Promise<{ matchId: string }> {
+export async function createPastBet(
+  prisma: PrismaClient,
+  userId: string,
+  input: PastBetInput,
+  now = new Date(),
+): Promise<{ matchId: string; combined: boolean }> {
   const startsAt = new Date(input.startsAt);
   if (startsAt.getTime() > now.getTime()) {
     throw new ServiceError("That match hasn't started yet - add upcoming matches with Upload or Manual so you get the alarm.", 422, "not_past");
   }
   const dedupeKey = matchDedupeKey(input.player1, input.player2, startsAt);
   const existing = await prisma.match.findUnique({ where: { userId_dedupeKey: { userId, dedupeKey } }, select: { id: true } });
-  if (existing) throw new ServiceError("You already have this match at this time.", 409, "duplicate", { existingId: existing.id });
+  if (existing) return { matchId: existing.id, combined: await addPickToMatch(prisma, userId, existing.id, input, now) };
   const result = input.result as BetResult;
   const match = await prisma.match.create({
     data: {
@@ -175,5 +180,36 @@ export async function createPastBet(prisma: PrismaClient, userId: string, input:
     },
     select: { id: true },
   });
-  return { matchId: match.id };
+  return { matchId: match.id, combined: false };
+}
+
+/**
+ * A second bet on a match you already have, on a different pick (e.g. an
+ * UNDER and a SWEEP on the same game): both become picks of one split bet,
+ * each with its own units, odds and result. The same pick twice is refused.
+ */
+async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: string, input: PastBetInput, now: Date): Promise<true> {
+  const match = await prisma.match.findFirstOrThrow({
+    where: { id: matchId, userId },
+    select: { statistics: { select: { selection: true } }, bet: { select: { stake: true, odds: true, result: true, legs: { orderBy: { position: "asc" } } } } },
+  });
+  const pick = input.selection;
+  const duplicate = () => new ServiceError("You already have this bet (same match, same pick).", 409, "duplicate", { existingId: matchId });
+  const newLeg = { selection: pick!, stake: input.stake, odds: input.odds, result: input.result as BetResult };
+
+  if (!match.bet) {
+    // The match is there (e.g. added for an alarm) but has no bet yet.
+    await updateBet(prisma, userId, matchId, { stake: input.stake, odds: input.odds, result: input.result as BetResult }, now);
+    return true;
+  }
+  if (!pick) throw duplicate();
+  const legs = match.bet.legs.length
+    ? match.bet.legs.map((l) => ({ selection: l.selection as Selection, stake: l.stake, odds: l.odds, result: l.result as BetResult }))
+    : match.statistics?.selection
+      ? [{ selection: match.statistics.selection as Selection, stake: match.bet.stake, odds: match.bet.odds, result: match.bet.result as BetResult }]
+      : null;
+  if (!legs || legs.some((l) => l.selection === pick)) throw duplicate();
+  if (legs.length >= 3) throw new ServiceError("This match already has 3 picks.", 409, "too_many_picks");
+  await updateBet(prisma, userId, matchId, { legs: [...legs, newLeg] }, now);
+  return true;
 }

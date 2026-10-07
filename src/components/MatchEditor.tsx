@@ -6,6 +6,7 @@ import type { MatchDTO } from "@/lib/types";
 import { ReminderPicker } from "./ReminderPicker";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import type { Selection } from "@/lib/selection";
+import { DateTimeInput } from "./DateTimeInput";
 
 export interface MatchFormValues {
   player1: string;
@@ -114,7 +115,7 @@ export function MatchEditor({
           <input className="input" value={competition} onChange={(e) => setCompetition(e.target.value)} />
         </F>
         <F label={`Start time (${timezone})`} error={errors.startsAt} className="col-span-2 sm:col-span-1">
-          <input type="datetime-local" className="input" value={startsLocal} onChange={(e) => setStartsLocal(e.target.value)} />
+          <DateTimeInput value={startsLocal} onChange={setStartsLocal} label="Start time" />
         </F>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">

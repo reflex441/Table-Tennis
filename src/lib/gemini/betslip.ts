@@ -115,8 +115,9 @@ export function normalizeBetSlips(raw: unknown): SlipBet[] {
 const DATE_FORMATS = [
   "d MMM yyyy", "d MMMM yyyy", "ccc d MMM yyyy", "cccc d MMMM yyyy", "ccc, d MMM yyyy",
   "dd/MM/yyyy", "d/M/yyyy", "dd.MM.yyyy", "d.M.yyyy", "yyyy-MM-dd", "dd/MM/yy", "d/M/yy",
+  "cccc d MMM yyyy", "cccc, d MMM yyyy",
 ];
-const DATE_FORMATS_NO_YEAR = ["d MMM", "d MMMM", "ccc d MMM", "cccc d MMMM", "ccc, d MMM", "dd/MM", "d/M"];
+const DATE_FORMATS_NO_YEAR = ["d MMM", "d MMMM", "ccc d MMM", "cccc d MMM", "cccc d MMMM", "ccc, d MMM", "cccc, d MMM", "dd/MM", "d/M"];
 const TIME_FORMATS = ["h:mm a", "h:mma", "h:mm:ss a", "HH:mm", "H:mm", "HH:mm:ss"];
 
 /**
@@ -151,7 +152,14 @@ export function slipDate(dateText: string | null, timeText: string | null, timez
   if (!date) return null;
   let hour = 12;
   let minute = 0;
-  const t = (timeText ?? "").replace(/\s+/g, " ").trim().toUpperCase().replace(/\.(?=M)/g, "");
+  // "6:40am (AEDT)" -> "6:40AM": drop a timezone in brackets or at the end.
+  const t = (timeText ?? "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(AEDT|AEST|ACDT|ACST|AWST|NZDT|NZST|GMT|UTC)([+-]\d+)?\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+    .replace(/\.(?=M)/g, "");
   for (const f of TIME_FORMATS) {
     const tm = DateTime.fromFormat(t, f, { locale: "en-AU" });
     if (t && tm.isValid) {

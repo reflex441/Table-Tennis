@@ -595,6 +595,28 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await expect(createPastBet(prisma, userId, { ...base, player1: "Later L.", startsAt: "2030-09-21T13:00:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 422 });
   });
 
+  it("past bets: a different pick on the same match becomes a split bet", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { player1: "Warpas B.", player2: "Krcil F.", competition: "TT Elite", timezone: "Australia/Sydney", playType: "PERSONAL" as const, pointsLine: 73.5, startsAt: "2030-09-20T06:55:00Z" };
+    const under = await createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 0.5, odds: 1.88, result: "WON" }, now);
+    expect(under.combined).toBe(false);
+    const sweep = await createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.75, result: "LOST" }, now);
+    expect(sweep).toEqual({ matchId: under.matchId, combined: true });
+    const bet = await prisma.bet.findUniqueOrThrow({ where: { matchId: under.matchId }, include: { legs: { orderBy: { position: "asc" } } } });
+    expect(bet.legs.map((l) => [l.selection, l.stake, l.odds, l.result])).toEqual([
+      ["UNDER", 0.5, 1.88, "WON"],
+      ["SWEEP", 1, 3.75, "LOST"],
+    ]);
+    expect(bet).toMatchObject({ stake: 1.5, profit: -0.56 });
+    const rows = await listBetRows(prisma, userId);
+    expect(rows.map((r) => [r.selection, r.profit])).toEqual(expect.arrayContaining([["UNDER", 0.44], ["SWEEP", -1]]));
+    expect(rows).toHaveLength(2);
+    expect(await prisma.match.count({ where: { userId } })).toBe(1);
+    // The same pick again is still a duplicate.
+    await expect(createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 1, odds: 1.9, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
+    await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
+  });
+
   it("screenshots are deleted a day after their match; matches and bets stay", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);

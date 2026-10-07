@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeBetSlips, slipDate, slipResult, BET_SLIP_PROMPT } from "@/lib/gemini/betslip";
 import { generateJsonFromImage } from "@/lib/gemini/extract";
 import { pastBetSchema } from "@/lib/validation/match";
+import { parseDayFirstDate } from "@/lib/format";
 
 describe("bet slips", () => {
   it("'Win' is won and 'No Return' is lost", () => {
@@ -35,6 +36,10 @@ describe("bet slips", () => {
     expect(slipDate("Friday 2nd October 2026", "16:55", tz, now)?.toISOString()).toBe("2026-10-02T06:55:00.000Z");
     expect(slipDate("02/10/2026", null, tz, now)?.toISOString()).toBe("2026-10-02T02:00:00.000Z"); // no time: midday
     expect(slipDate("28 Dec", "9:00 PM", tz, now)?.toISOString()).toBe("2025-12-28T10:00:00.000Z"); // last year, not the future
+    // As on a Ladbrokes slip: "Wednesday 7 Oct 6:40am (AEDT)".
+    const later = new Date("2026-10-07T03:00:00Z");
+    expect(slipDate("Wednesday 7 Oct", "6:40am (AEDT)", tz, later)?.toISOString()).toBe("2026-10-06T19:40:00.000Z");
+    expect(slipDate("Wednesday 7 Oct", "6:40am AEDT", tz, later)?.toISOString()).toBe("2026-10-06T19:40:00.000Z");
     expect(slipDate(null, "4:55 PM", tz, now)).toBeNull();
     expect(slipDate("gibberish", null, tz, now)).toBeNull();
   });
@@ -59,5 +64,16 @@ describe("bet slips", () => {
     expect(pastBetSchema.parse({ ...base, odds: 1.8 })).toMatchObject({ odds: 1.8, selection: null, competition: null });
     expect(pastBetSchema.safeParse({ ...base, stake: 0 }).success).toBe(false);
     expect(pastBetSchema.safeParse({ ...base, result: "MAYBE" }).success).toBe(false);
+  });
+
+  it("dates are typed day first (DD/MM/YYYY)", () => {
+    expect(parseDayFirstDate("07/10/2026")).toBe("2026-10-07");
+    expect(parseDayFirstDate("7/10/2026")).toBe("2026-10-07");
+    expect(parseDayFirstDate("7.10.26")).toBe("2026-10-07");
+    expect(parseDayFirstDate(" 31-12-2026 ")).toBe("2026-12-31");
+    expect(parseDayFirstDate("10/31/2026")).toBeNull(); // month-first: no month 31
+    expect(parseDayFirstDate("31/02/2026")).toBeNull();
+    expect(parseDayFirstDate("2026-10-07")).toBeNull();
+    expect(parseDayFirstDate("")).toBeNull();
   });
 });
