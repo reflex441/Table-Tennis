@@ -76,4 +76,17 @@ describe("bet slips", () => {
     expect(parseDayFirstDate("2026-10-07")).toBeNull();
     expect(parseDayFirstDate("")).toBeNull();
   });
+
+  it("a player at -2.5 sets ('Dawid Kosmal (-2.5)', 'Line 2.5') is the sweep", () => {
+    const slip = (b: Record<string, unknown>) =>
+      normalizeBetSlips({ bets: [{ player1: "Dawid Kosmal", player2: "Daniel Kosiba", odds: 3.75, stake: 10, resultText: "No Return", ...b }] })[0];
+    expect(slip({ selectionText: "Dawid Kosmal (-2.5)", selection: null, pointsLine: 2.5 })).toMatchObject({ selection: "SWEEP", pointsLine: null, odds: 3.75 });
+    expect(slip({ selectionText: "Dawid Kosmal (\u22122.5)", selection: "UNDER", pointsLine: 2.5 })).toMatchObject({ selection: "SWEEP", pointsLine: null });
+    expect(slip({ selectionText: null, selection: "SWEEP", pointsLine: 2.5 })).toMatchObject({ selection: "SWEEP", pointsLine: null });
+    // Over/Under stay as they are.
+    expect(slip({ selectionText: "Under 74.5", selection: "UNDER", pointsLine: 74.5 })).toMatchObject({ selection: "UNDER", pointsLine: 74.5 });
+    expect(slip({ selectionText: "Dawid Kosmal (+2.5)", selection: null, pointsLine: 2.5 })).toMatchObject({ selection: null });
+    expect(BET_SLIP_PROMPT).toContain("(-2.5)");
+  });
 });
+

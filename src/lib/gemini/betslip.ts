@@ -15,6 +15,8 @@ export interface SlipBet {
   player1: string | null;
   player2: string | null;
   competition: string | null;
+  /** The selection as shown, e.g. "Over 73.5" or "Dawid Kosmal (-2.5)". */
+  selectionText: string | null;
   selection: Selection | null;
   pointsLine: number | null;
   odds: number | null;
@@ -41,15 +43,16 @@ export const BET_SLIP_JSON_SCHEMA = {
           player1: str("First player's name as shown (e.g. 'Blazej Warpas' from 'Blazej Warpas vs Frantisek Krcil')."),
           player2: str("Second player's name."),
           competition: str("League / competition if shown (usually 'TT Elite Series', 'TT Cup' or 'Czech Liga Pro'). Null if not shown."),
-          selection: { type: ["string", "null"], enum: ["OVER", "UNDER", "SWEEP", null], description: "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet. Null for other markets." },
-          pointsLine: num("The total points line, e.g. 'Over 73.5' -> 73.5."),
+          selectionText: str("The selection exactly as shown on the slip, e.g. 'Over 73.5', 'Under 74.5', 'Dawid Kosmal (-2.5)'."),
+          selection: { type: ["string", "null"], enum: ["OVER", "UNDER", "SWEEP", null], description: "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet, SWEEP for a player at -2.5 sets (e.g. 'Dawid Kosmal (-2.5)' with 'Line 2.5': winning 3-0). Null for other markets." },
+          pointsLine: num("The total points line, e.g. 'Over 73.5' -> 73.5. Null for a SWEEP (its 'Line 2.5' is sets, not points)."),
           odds: num("Decimal odds of the bet, e.g. '@ 1.80' -> 1.8."),
           stake: num("Stake amount in money without the currency sign, e.g. 'Stake $20.00' -> 20."),
           resultText: str("The settlement shown on the slip exactly, e.g. 'Win', 'Won', 'No Return', 'Lost', 'Refund', 'Void'. Null if the bet is still open / pending."),
           dateText: str("Date shown for the bet or event, verbatim, e.g. 'Fri 2 Oct', '02/10/2026', 'Friday 2nd October 2026'."),
           timeText: str("Time shown for the bet or event, verbatim, e.g. '4:55 PM'."),
         },
-        required: ["player1", "player2", "competition", "selection", "pointsLine", "odds", "stake", "resultText", "dateText", "timeText"],
+        required: ["player1", "player2", "competition", "selectionText", "selection", "pointsLine", "odds", "stake", "resultText", "dateText", "timeText"],
       },
     },
   },
@@ -59,8 +62,9 @@ export const BET_SLIP_JSON_SCHEMA = {
 export const BET_SLIP_PROMPT = `You are reading a screenshot of bookmaker bet slips (e.g. Ladbrokes or Sportsbet "My Bets" / "Settled" / "Resulted" bets) for table tennis.
 Return every bet visible in the screenshot, one entry per bet, in order.
 - player1 / player2: the two players of the match ("A vs B").
-- selection: OVER for "Over 73.5", UNDER for "Under 73.5" (total points markets). Null for other markets (head to head, handicap...).
-- pointsLine: the number after Over/Under. odds: the decimal odds of the bet. stake: the amount staked, without the currency sign.
+- selectionText: the selection exactly as shown (e.g. "Over 73.5", "Dawid Kosmal (-2.5)").
+- selection: OVER for "Over 73.5", UNDER for "Under 73.5" (total points markets). SWEEP for a player with a -2.5 set handicap, shown like "Dawid Kosmal (-2.5)" with "Line 2.5" (that player winning 3-0). Null for other markets (head to head, other handicaps...).
+- pointsLine: the number after Over/Under; null for a SWEEP (its "Line 2.5" counts sets, not points). odds: the decimal odds of the bet. stake: the amount staked, without the currency sign.
 - resultText: copy the settlement exactly: "Win"/"Won" (and a return amount) means the bet won; "No Return" means it lost; "Refund"/"Void" means void. Null if the bet hasn't been settled yet.
 - dateText / timeText: copy the date and time shown for the bet verbatim. Don't convert or guess.
 Use null for anything you can't read. Don't invent bets.`;
@@ -89,6 +93,12 @@ function number(v: unknown, min: number, max: number): number | null {
 /** "Mariusz Koczyba" -> "Koczyba M.", like the rest of the app. */
 const short = (name: string | null) => (name ? shortPlayerName(name) : null);
 
+/** A player at -2.5 sets ("Dawid Kosmal (-2.5)"): wins 3-0, i.e. the sweep. */
+export function isSweepText(text: string | null | undefined): boolean {
+  const t = (text ?? "").replace(/[\u2212\u2013]/g, "-");
+  return !/\b(over|under)\b/i.test(t) && /(^|[\s(])-\s?2\.5\b/.test(t);
+}
+
 export function normalizeBetSlips(raw: unknown): SlipBet[] {
   if (!raw || typeof raw !== "object" || !Array.isArray((raw as { bets?: unknown }).bets)) {
     throw new ExtractionFormatError("Gemini's reply has no list of bets.");
@@ -97,14 +107,20 @@ export function normalizeBetSlips(raw: unknown): SlipBet[] {
     .slice(0, 50)
     .filter((b): b is Record<string, unknown> => Boolean(b) && typeof b === "object")
     .map((b): SlipBet => {
-      const sel = typeof b.selection === "string" ? b.selection.toUpperCase() : null;
+      const selectionText = clean(b.selectionText, 80);
+      const raw = typeof b.selection === "string" ? b.selection.toUpperCase() : null;
+      // "Dawid Kosmal (-2.5)" is the sweep, whatever Gemini picked.
+      const sweep = isSweepText(selectionText) || raw === "SWEEP";
+      const sel = sweep ? "SWEEP" : raw;
       const resultText = clean(b.resultText, 40);
       return {
         player1: short(clean(b.player1, 60)),
         player2: short(clean(b.player2, 60)),
         competition: clean(b.competition, 120),
+        selectionText,
         selection: isSelection(sel) ? sel : null,
-        pointsLine: number(b.pointsLine, 0, 500),
+        // A sweep's "Line 2.5" is sets, not a points line.
+        pointsLine: sweep ? null : number(b.pointsLine, 0, 500),
         odds: number(b.odds, 1.0001, 1000),
         stake: number(b.stake, 0.01, 1_000_000),
         result: slipResult(resultText),
