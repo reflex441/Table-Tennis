@@ -9,8 +9,7 @@ import { BET_SLIP_JSON_SCHEMA, BET_SLIP_PROMPT, normalizeBetSlips, slipDate } fr
 import { MAX_SCREENSHOT_BYTES, detectImageType } from "@/lib/screenshots";
 import { getGeminiApiKey, getGeminiModels, getSettings } from "@/lib/settings";
 import { canonicalCompetition } from "@/lib/leagues";
-import { guessCompetition, loadLeagueIndex } from "@/lib/bets/league-guess";
-import { getTailedAccount } from "@/lib/tailing";
+import { guessCompetition, ownerLeagueIndex } from "@/lib/bets/league-guess";
 
 export const maxDuration = 120;
 
@@ -44,10 +43,9 @@ export const POST = handle(async (request: Request) => {
       prompt: BET_SLIP_PROMPT,
       schema: BET_SLIP_JSON_SCHEMA,
     });
-    const tailed = await getTailedAccount(prisma);
-    const leagues = await loadLeagueIndex(prisma, tailed ? [userId, tailed.id] : [userId]);
+    const leagues = await ownerLeagueIndex(prisma);
     const bets = normalizeBetSlips(out.raw).map((b) => {
-      // The league printed on the slip, else the one the players played in before.
+      // The league printed on the slip, else the one the players played in on the owner's account.
       const fromSlip = canonicalCompetition(b.competition);
       const guessed = fromSlip ? null : guessCompetition(b.player1, b.player2, leagues);
       return {

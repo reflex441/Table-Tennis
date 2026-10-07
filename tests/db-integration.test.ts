@@ -25,6 +25,7 @@ import { getSessionSecret } from "@/lib/auth/session";
 import { copyBets, getTailProfile, getTailedAccount } from "@/lib/tailing";
 import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
 import { capitalizeStoredCompetitions, shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
+import { guessCompetition, ownerLeagueIndex } from "@/lib/bets/league-guess";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -617,6 +618,18 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // The same pick again is still a duplicate.
     await expect(createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 1, odds: 1.9, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("bet slip league guesses come only from the owner's matches", async () => {
+    // userId is the first account, i.e. the owner everyone tails.
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    const at = new Date("2030-09-20T06:55:00Z");
+    await prisma.match.create({ data: { userId, player1: "Kovtanyuk D.", player2: "Pavlov A.", competition: "TT CUP", startsAt: at, timezone: "UTC", dedupeKey: "k1" } });
+    await prisma.match.create({ data: { userId: sam, player1: "Varcl J.", player2: "Prokop T.", competition: "CZECH LIGA PRO", startsAt: at, timezone: "UTC", dedupeKey: "k2" } });
+    const index = await ownerLeagueIndex(prisma);
+    expect(guessCompetition("Komorowicz J.", "Dmytro Kovtanyuk", index)).toBe("TT CUP");
+    // Sam's own matches aren't used, not even for Sam.
+    expect(guessCompetition("Varcl J.", null, index)).toBeNull();
   });
 
   it("full player names already stored are shortened to 'Surname F.'", async () => {
