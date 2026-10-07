@@ -39,7 +39,7 @@ export const BET_SLIP_JSON_SCHEMA = {
         properties: {
           player1: str("First player's name as shown (e.g. 'Blazej Warpas' from 'Blazej Warpas vs Frantisek Krcil')."),
           player2: str("Second player's name."),
-          competition: str("League / competition if shown, e.g. 'TT Elite Series', 'TT Cup', 'Czech Liga Pro'."),
+          competition: str("League / competition if shown (usually 'TT Elite Series', 'TT Cup' or 'Czech Liga Pro'). Null if not shown."),
           selection: { type: ["string", "null"], enum: ["OVER", "UNDER", "SWEEP", null], description: "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet. Null for other markets." },
           pointsLine: num("The total points line, e.g. 'Over 73.5' -> 73.5."),
           odds: num("Decimal odds of the bet, e.g. '@ 1.80' -> 1.8."),

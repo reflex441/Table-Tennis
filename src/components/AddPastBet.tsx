@@ -7,12 +7,12 @@ import { SlipScanner } from "./SlipScanner";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue } from "@/lib/format";
-import { SUGGESTED_LEAGUES } from "@/lib/leagues";
 import { SELECTIONS, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
+import { LeagueSelect } from "./LeagueSelect";
 
 type Result = "WON" | "LOST" | "VOID" | "PENDING";
 
@@ -140,12 +140,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
         </label>
         <label>
           <span className="label">League</span>
-          <input className="input" list="past-bet-leagues" value={f.competition} onChange={(e) => set({ competition: e.target.value })} aria-label="League" />
-          <datalist id="past-bet-leagues">
-            {SUGGESTED_LEAGUES.map((l) => (
-              <option key={l} value={l} />
-            ))}
-          </datalist>
+          <LeagueSelect value={f.competition} onChange={(v) => set({ competition: v })} />
         </label>
         <div>
           <span className="label">Date and time</span>

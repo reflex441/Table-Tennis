@@ -8,6 +8,20 @@ export interface LeagueLink {
 /** Leagues offered by default in Settings. */
 export const SUGGESTED_LEAGUES = ["TT Cup", "TT Elite", "Czech Liga Pro"];
 
+/** The only competitions bets are on (the League picker on the Profit page). */
+export const COMPETITIONS = ["TT Elite", "TT Cup", "Czech Liga Pro"] as const;
+export type Competition = (typeof COMPETITIONS)[number];
+
+/** "TT Elite Series - Men", "TT CUP", "Liga Pro" -> one of COMPETITIONS, else null. */
+export function canonicalCompetition(name: string | null | undefined): Competition | null {
+  const key = normalizeLeague(name);
+  if (!key) return null;
+  if (key.includes("elite")) return "TT Elite";
+  if (key.includes("czech") || key.includes("ligapro")) return "Czech Liga Pro";
+  if (key.includes("ttcup") || key === "cup") return "TT Cup";
+  return null;
+}
+
 /** "TT CUP", "tt-cup" and "TT Cup " all become "ttcup". */
 export function normalizeLeague(name: string | null | undefined): string {
   return (name ?? "")

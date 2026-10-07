@@ -7,12 +7,12 @@ import { api, uploadWithProgress } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { prepareUpload } from "@/lib/shrink-image";
 import { SELECTIONS, type Selection } from "@/lib/selection";
-import { SUGGESTED_LEAGUES } from "@/lib/leagues";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
+import { LeagueSelect } from "./LeagueSelect";
 
 interface Row {
   key: string;
@@ -20,6 +20,8 @@ interface Row {
   player1: string;
   player2: string;
   competition: string;
+  /** The league was guessed from the players' past matches. */
+  leagueGuessed: boolean;
   startsAtLocal: string;
   playType: "BOT" | "PERSONAL";
   selection: "" | Selection;
@@ -32,6 +34,8 @@ interface Row {
 }
 
 const RESULT_LABEL: Record<SlipResult, string> = { WON: "Won", LOST: "Lost", VOID: "Void", PENDING: "Not settled" };
+
+type ScannedBet = SlipBet & { startsAt: string | null; competitionGuessed?: boolean };
 
 let counter = 0;
 
@@ -53,12 +57,13 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
 
   const patch = (key: string, p: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
-  const toRow = (b: SlipBet & { startsAt: string | null }): Row => ({
+  const toRow = (b: ScannedBet): Row => ({
     key: `slip${++counter}`,
     include: true,
     player1: b.player1 ?? "",
     player2: b.player2 ?? "",
     competition: b.competition ?? "",
+    leagueGuessed: Boolean(b.competitionGuessed && b.competition),
     startsAtLocal: b.startsAt ? toLocalInputValue(b.startsAt, tz) : "",
     playType,
     selection: b.selection ?? "",
@@ -80,7 +85,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         const { file } = await prepareUpload(original);
         const form = new FormData();
         form.append("file", file);
-        const res = await uploadWithProgress<{ bets: (SlipBet & { startsAt: string | null })[] }>("/api/bets/scan", form, () => {});
+        const res = await uploadWithProgress<{ bets: ScannedBet[] }>("/api/bets/scan", form, () => {});
         if (!res.bets.length) setErrors((e) => [...e, `${original.name}: no bets found.`]);
         setRows((prev) => [...prev, ...res.bets.map(toRow)]);
       } catch (err) {
@@ -194,11 +199,6 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         </p>
       ))}
 
-      <datalist id="slip-leagues">
-        {SUGGESTED_LEAGUES.map((l) => (
-          <option key={l} value={l} />
-        ))}
-      </datalist>
 
       {rows.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
@@ -218,7 +218,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 </label>
                 <label className="w-40">
                   <span className="label">League</span>
-                  <input className="input py-1" list="slip-leagues" value={r.competition} onChange={(e) => patch(r.key, { competition: e.target.value })} aria-label="League" />
+                  <LeagueSelect className="input py-1" value={r.competition} onChange={(v) => patch(r.key, { competition: v, leagueGuessed: false })} />
+                  <span className="mt-0.5 block text-[11px] text-muted">{r.leagueGuessed ? "From past matches" : "\u00a0"}</span>
                 </label>
                 <div>
                   <span className="label">Date and time</span>

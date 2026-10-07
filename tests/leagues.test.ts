@@ -1,5 +1,6 @@
+import { buildLeagueIndex, guessCompetition } from "@/lib/bets/league-guess";
 import { describe, expect, it } from "vitest";
-import { findLeagueUrl, isSafeUrl, normalizeLeague, parseLeagueLinks, withBookmakerLinks } from "@/lib/leagues";
+import { canonicalCompetition, findLeagueUrl, isSafeUrl, normalizeLeague, parseLeagueLinks, withBookmakerLinks } from "@/lib/leagues";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
 
 const links = [
@@ -63,3 +64,33 @@ describe("bookmaker presets", () => {
     expect(sb.filter((l) => l.league === "Setka Cup")).toHaveLength(1);
   });
 });
+
+describe("bet slip competition", () => {
+  it("maps any spelling to TT Elite, TT Cup or Czech Liga Pro", () => {
+    expect(canonicalCompetition("TT Elite Series - Men")).toBe("TT Elite");
+    expect(canonicalCompetition("TT CUP")).toBe("TT Cup");
+    expect(canonicalCompetition("Czech Liga Pro")).toBe("Czech Liga Pro");
+    expect(canonicalCompetition("Liga Pro")).toBe("Czech Liga Pro");
+    expect(canonicalCompetition("Setka Cup")).toBeNull();
+    expect(canonicalCompetition("")).toBeNull();
+  });
+
+  it("guesses it from where the players have played before", () => {
+    const at = (d: string) => new Date(`2026-10-0${d}T10:00:00Z`);
+    const index = buildLeagueIndex([
+      { player1: "Kovtanyuk D.", player2: "Pavlov A.", competition: "TT Cup", startsAt: at("1") },
+      { player1: "Kovtanyuk D.", player2: "Ivanov S.", competition: "TT CUP", startsAt: at("2") },
+      { player1: "Warpas B.", player2: "Krcil F.", competition: "TT Elite Series", startsAt: at("3") },
+      { player1: "Varcl J.", player2: "Prokop T.", competition: "Czech Liga Pro", startsAt: at("4") },
+      { player1: "Nobody N.", player2: "Else E.", competition: null, startsAt: at("5") },
+    ]);
+    // One known player is enough, by exact name or by surname.
+    expect(guessCompetition("Kovtanyuk D.", "Wiekiera A.", index)).toBe("TT Cup");
+    expect(guessCompetition("Dmytro Kovtanyuk", "Adam Wiekiera", index)).toBe("TT Cup");
+    expect(guessCompetition("Wiekiera A.", "Blazej Warpas", index)).toBe("TT Elite");
+    expect(guessCompetition("Jiri Varcl", null, index)).toBe("Czech Liga Pro");
+    expect(guessCompetition("Unknown U.", "Stranger S.", index)).toBeNull();
+    expect(guessCompetition("Nobody N.", null, index)).toBeNull();
+  });
+});
+
