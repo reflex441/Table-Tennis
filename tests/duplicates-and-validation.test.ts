@@ -337,6 +337,7 @@ describe("player names are stored as 'Surname F.'", () => {
   it("applies to matches and past bets as they're saved", () => {
     const past = pastBetSchema.parse({ player1: "Mariusz Koczyba", player2: "Grzegorz Jurowicz", startsAt: "2026-10-06T19:40:00Z", timezone: "UTC", playType: "BOT", stake: 1, odds: 1.8, result: "WON" });
     expect([past.player1, past.player2]).toEqual(["Koczyba M.", "Jurowicz G."]);
+    expect(pastBetSchema.parse({ ...past, competition: "TT Cup" }).competition).toBe("TT CUP");
   });
 });
 

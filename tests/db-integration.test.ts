@@ -24,7 +24,7 @@ import { deleteOldScreenshots, storageUsage } from "@/lib/storage";
 import { getSessionSecret } from "@/lib/auth/session";
 import { copyBets, getTailProfile, getTailedAccount } from "@/lib/tailing";
 import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
-import { shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
+import { capitalizeStoredCompetitions, shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -635,6 +635,14 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await prisma.match.findUniqueOrThrow({ where: { id: clash.id } })).player1).toBe("Jiri Varcl");
     // Running it again changes nothing.
     expect(await shortenStoredPlayerNames(prisma)).toEqual({ renamed: 0, skipped: 1 });
+
+    // Leagues: one spelling, in capitals.
+    await prisma.match.update({ where: { id: full.id }, data: { competition: "TT Cup" } });
+    await prisma.match.update({ where: { id: short.id }, data: { competition: "TT Elite Series" } });
+    await prisma.match.update({ where: { id: clash.id }, data: { competition: "Setka Cup" } });
+    expect(await capitalizeStoredCompetitions(prisma)).toBe(2);
+    const leagues = await prisma.match.findMany({ where: { userId }, select: { competition: true } });
+    expect(leagues.map((m) => m.competition).sort()).toEqual(["Setka Cup", "TT CUP", "TT ELITE", null]);
   });
 
   it("screenshots are deleted a day after their match; matches and bets stay", async () => {

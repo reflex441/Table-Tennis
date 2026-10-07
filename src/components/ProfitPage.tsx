@@ -18,6 +18,7 @@ import { SELECTIONS, SELECTION_LABEL, type Selection } from "@/lib/selection";
 import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 import { AddPastBet } from "./AddPastBet";
 import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
+import { tidyCompetition } from "@/lib/leagues";
 
 type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
@@ -75,7 +76,7 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
   );
   const filtered = useMemo(() => inPeriod.filter((r) => typeOk(r) && pickOk(r)), [inPeriod, typeOk, pickOk]);
   const overall = useMemo(() => summarize(filtered), [filtered]);
-  const byCompetition = useMemo(() => summarizeBy(filtered, (r) => r.competition ?? "Unknown competition"), [filtered]);
+  const byCompetition = useMemo(() => summarizeBy(filtered, (r) => tidyCompetition(r.competition) ?? "Unknown competition"), [filtered]);
 
   // Daily P/L for the chosen play type (the calendar can page through any month).
   const daily = useMemo(() => dailyPL(initial.filter((r) => typeOk(r) && pickOk(r)), tz), [initial, typeOk, pickOk, tz]);

@@ -6,19 +6,22 @@ export interface LeagueLink {
 }
 
 /** Leagues offered by default in Settings. */
-export const SUGGESTED_LEAGUES = ["TT Cup", "TT Elite", "Czech Liga Pro"];
+export const SUGGESTED_LEAGUES = ["TT CUP", "TT ELITE", "CZECH LIGA PRO"];
 
-/** The only competitions bets are on (the League picker on the Profit page). */
-export const COMPETITIONS = ["TT Elite", "TT Cup", "Czech Liga Pro"] as const;
+/**
+ * The only competitions bets are on (the League picker on the Profit page).
+ * Always stored in capitals so "TT Cup" and "TT CUP" count as one league.
+ */
+export const COMPETITIONS = ["TT ELITE", "TT CUP", "CZECH LIGA PRO"] as const;
 export type Competition = (typeof COMPETITIONS)[number];
 
-/** "TT Elite Series - Men", "TT CUP", "Liga Pro" -> one of COMPETITIONS, else null. */
+/** "TT Elite Series - Men", "TT Cup", "Liga Pro" -> one of COMPETITIONS, else null. */
 export function canonicalCompetition(name: string | null | undefined): Competition | null {
   const key = normalizeLeague(name);
   if (!key) return null;
-  if (key.includes("elite")) return "TT Elite";
-  if (key.includes("czech") || key.includes("ligapro")) return "Czech Liga Pro";
-  if (key.includes("ttcup") || key === "cup") return "TT Cup";
+  if (key.includes("elite")) return "TT ELITE";
+  if (key.includes("czech") || key.includes("ligapro")) return "CZECH LIGA PRO";
+  if (key.includes("ttcup") || key === "cup") return "TT CUP";
   return null;
 }
 
@@ -71,14 +74,14 @@ export type Bookmaker = "ladbrokes" | "sportsbet";
 /** League pages per bookmaker, used to fill in League links in one click. */
 export const BOOKMAKER_LINKS: Record<Bookmaker, LeagueLink[]> = {
   ladbrokes: [
-    { league: "TT Cup", url: "https://www.ladbrokes.com.au/sports/table-tennis/tt-cup" },
-    { league: "TT Elite", url: "https://www.ladbrokes.com.au/sports/table-tennis/tt-elite-series" },
-    { league: "Czech Liga Pro", url: "https://www.ladbrokes.com.au/sports/table-tennis/czech-liga-pro" },
+    { league: "TT CUP", url: "https://www.ladbrokes.com.au/sports/table-tennis/tt-cup" },
+    { league: "TT ELITE", url: "https://www.ladbrokes.com.au/sports/table-tennis/tt-elite-series" },
+    { league: "CZECH LIGA PRO", url: "https://www.ladbrokes.com.au/sports/table-tennis/czech-liga-pro" },
   ],
   // Sportsbet doesn't offer Czech Liga Pro.
   sportsbet: [
-    { league: "TT Cup", url: "https://www.sportsbet.com.au/betting/table-tennis/tt-cup" },
-    { league: "TT Elite", url: "https://www.sportsbet.com.au/betting/table-tennis/tt-elite-series-men" },
+    { league: "TT CUP", url: "https://www.sportsbet.com.au/betting/table-tennis/tt-cup" },
+    { league: "TT ELITE", url: "https://www.sportsbet.com.au/betting/table-tennis/tt-elite-series-men" },
   ],
 };
 
@@ -94,3 +97,8 @@ export function withBookmakerLinks(current: LeagueLink[], bookmaker: Bookmaker):
  * before the match: the suggested alarm time for that bookmaker.
  */
 export const BOOKMAKER_LINES_MINUTES: Record<Bookmaker, number> = { ladbrokes: 5, sportsbet: 30 };
+
+/** Known leagues in capitals ("TT Cup" -> "TT CUP"); anything else as typed. */
+export function tidyCompetition(name: string | null): string | null {
+  return name ? (canonicalCompetition(name) ?? name) : name;
+}

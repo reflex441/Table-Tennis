@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { matchDedupeKey } from "./dedupe";
 import { shortPlayerName } from "./player-names";
+import { tidyCompetition } from "@/lib/leagues";
 
 /**
  * Rename stored matches with full player names ("Mariusz Koczyba") to the
@@ -32,6 +33,18 @@ export async function shortenStoredPlayerNames(prisma: PrismaClient): Promise<{ 
   return { renamed, skipped };
 }
 
+/** Leagues stored as "TT Cup" / "TT Elite Series" become "TT CUP" / "TT ELITE". */
+export async function capitalizeStoredCompetitions(prisma: PrismaClient): Promise<number> {
+  const spellings = await prisma.match.groupBy({ by: ["competition"], where: { competition: { not: null } } });
+  let changed = 0;
+  for (const { competition } of spellings) {
+    const tidy = tidyCompetition(competition);
+    if (!competition || tidy === competition) continue;
+    changed += (await prisma.match.updateMany({ where: { competition }, data: { competition: tidy } })).count;
+  }
+  return changed;
+}
+
 const state = globalThis as unknown as { __ttLastNameTidy?: number };
 
 /** At most once an hour per server instance (called from the alarm checker). */
@@ -41,6 +54,8 @@ export async function shortenStoredPlayerNamesIfDue(prisma: PrismaClient, now = 
   try {
     const { renamed, skipped } = await shortenStoredPlayerNames(prisma);
     if (renamed || skipped) console.log(`[names] shortened ${renamed} match(es) to "Surname F."; ${skipped} left as they'd duplicate another match`);
+    const leagues = await capitalizeStoredCompetitions(prisma);
+    if (leagues) console.log(`[names] wrote the league of ${leagues} match(es) in capitals`);
   } catch (err) {
     console.error("[names] tidy failed", err);
   }

@@ -1,6 +1,6 @@
 import { buildLeagueIndex, guessCompetition } from "@/lib/bets/league-guess";
 import { describe, expect, it } from "vitest";
-import { canonicalCompetition, findLeagueUrl, isSafeUrl, normalizeLeague, parseLeagueLinks, withBookmakerLinks } from "@/lib/leagues";
+import { canonicalCompetition, findLeagueUrl, tidyCompetition, isSafeUrl, normalizeLeague, parseLeagueLinks, withBookmakerLinks } from "@/lib/leagues";
 import { settingsUpdateSchema } from "@/lib/validation/settings";
 
 const links = [
@@ -54,7 +54,7 @@ describe("bookmaker presets", () => {
       { league: "Setka Cup", url: "https://example.com/setka" },
     ];
     const lad = withBookmakerLinks(current, "ladbrokes");
-    expect(lad.map((l) => l.league)).toEqual(["TT Cup", "TT Elite", "Czech Liga Pro", "Setka Cup"]);
+    expect(lad.map((l) => l.league)).toEqual(["TT CUP", "TT ELITE", "CZECH LIGA PRO", "Setka Cup"]);
     expect(findLeagueUrl("TT ELITE", lad)).toBe("https://www.ladbrokes.com.au/sports/table-tennis/tt-elite-series");
     const sb = withBookmakerLinks(current, "sportsbet");
     expect(findLeagueUrl("TT CUP", sb)).toBe("https://www.sportsbet.com.au/betting/table-tennis/tt-cup");
@@ -67,12 +67,15 @@ describe("bookmaker presets", () => {
 
 describe("bet slip competition", () => {
   it("maps any spelling to TT Elite, TT Cup or Czech Liga Pro", () => {
-    expect(canonicalCompetition("TT Elite Series - Men")).toBe("TT Elite");
-    expect(canonicalCompetition("TT CUP")).toBe("TT Cup");
-    expect(canonicalCompetition("Czech Liga Pro")).toBe("Czech Liga Pro");
-    expect(canonicalCompetition("Liga Pro")).toBe("Czech Liga Pro");
+    expect(canonicalCompetition("TT Elite Series - Men")).toBe("TT ELITE");
+    expect(canonicalCompetition("TT Cup")).toBe("TT CUP");
+    expect(canonicalCompetition("Czech Liga Pro")).toBe("CZECH LIGA PRO");
+    expect(canonicalCompetition("Liga Pro")).toBe("CZECH LIGA PRO");
     expect(canonicalCompetition("Setka Cup")).toBeNull();
     expect(canonicalCompetition("")).toBeNull();
+    expect(tidyCompetition("tt elite")).toBe("TT ELITE");
+    expect(tidyCompetition("Setka Cup")).toBe("Setka Cup");
+    expect(tidyCompetition(null)).toBeNull();
   });
 
   it("guesses it from where the players have played before", () => {
@@ -85,10 +88,10 @@ describe("bet slip competition", () => {
       { player1: "Nobody N.", player2: "Else E.", competition: null, startsAt: at("5") },
     ]);
     // One known player is enough, by exact name or by surname.
-    expect(guessCompetition("Kovtanyuk D.", "Wiekiera A.", index)).toBe("TT Cup");
-    expect(guessCompetition("Dmytro Kovtanyuk", "Adam Wiekiera", index)).toBe("TT Cup");
-    expect(guessCompetition("Wiekiera A.", "Blazej Warpas", index)).toBe("TT Elite");
-    expect(guessCompetition("Jiri Varcl", null, index)).toBe("Czech Liga Pro");
+    expect(guessCompetition("Kovtanyuk D.", "Wiekiera A.", index)).toBe("TT CUP");
+    expect(guessCompetition("Dmytro Kovtanyuk", "Adam Wiekiera", index)).toBe("TT CUP");
+    expect(guessCompetition("Wiekiera A.", "Blazej Warpas", index)).toBe("TT ELITE");
+    expect(guessCompetition("Jiri Varcl", null, index)).toBe("CZECH LIGA PRO");
     expect(guessCompetition("Unknown U.", "Stranger S.", index)).toBeNull();
     expect(guessCompetition("Nobody N.", null, index)).toBeNull();
   });

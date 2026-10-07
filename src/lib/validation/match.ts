@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SELECTIONS } from "@/lib/selection";
 import { shortPlayerName } from "@/lib/matching/player-names";
+import { tidyCompetition } from "@/lib/leagues";
 
 export const REMINDER_PRESETS = [1, 3, 5, 10, 15, 30] as const;
 export const MIN_REMINDER_MINUTES = 0;
@@ -21,6 +22,8 @@ const optionalText = (max: number) =>
     .max(max, "Too long")
     .nullish()
     .transform((v) => (v ? v : null));
+/** "TT Cup" / "tt elite series" -> "TT CUP" / "TT ELITE", so a league is always spelt one way. */
+const competitionSchema = optionalText(120).transform(tidyCompetition);
 
 export const statisticsSchema = z.object({
   selection: z.enum(SELECTIONS).nullish().transform((v) => v ?? null),
@@ -72,7 +75,7 @@ export const matchInputSchema = z
   .object({
     player1: nameSchema,
     player2: nameSchema,
-    competition: optionalText(120),
+    competition: competitionSchema,
     startsAt: isoDate,
     timezone: z.string().trim().min(1).max(64),
     rawTimeText: optionalText(200),
@@ -100,7 +103,7 @@ export const updateMatchSchema = z
   .object({
     player1: nameSchema.optional(),
     player2: nameSchema.optional(),
-    competition: optionalText(120).optional(),
+    competition: competitionSchema.optional(),
     startsAt: isoDate.optional(),
     timezone: z.string().trim().min(1).max(64).optional(),
     notes: optionalText(500).optional(),
@@ -134,7 +137,7 @@ export function formatZodError(error: z.ZodError): string {
 export const pastBetSchema = z.object({
   player1: nameSchema,
   player2: nameSchema,
-  competition: optionalText(120),
+  competition: competitionSchema,
   startsAt: isoDate,
   timezone: z.string().trim().min(1).max(64),
   playType: playTypeSchema,

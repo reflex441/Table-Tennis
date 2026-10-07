@@ -6,6 +6,7 @@ import { handle, jsonError } from "@/lib/api";
 import { listBetRows } from "@/lib/bets/queries";
 import { summarize, summarizeBy } from "@/lib/bets/profit";
 import { formatZodError, playTypeSchema } from "@/lib/validation/match";
+import { tidyCompetition } from "@/lib/leagues";
 
 const querySchema = z.object({
   days: z.coerce.number().int().min(1).max(3650).optional(),
@@ -27,7 +28,7 @@ export const GET = handle(async (request: Request) => {
       BOT: summarize(rows.filter((r) => r.playType === "BOT")),
       PERSONAL: summarize(rows.filter((r) => r.playType === "PERSONAL")),
     },
-    byCompetition: summarizeBy(rows, (r) => r.competition ?? "Unknown"),
+    byCompetition: summarizeBy(rows, (r) => tidyCompetition(r.competition) ?? "Unknown"),
     bets: rows,
   });
 });
