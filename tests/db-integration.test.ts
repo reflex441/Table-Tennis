@@ -598,6 +598,35 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await expect(createPastBet(prisma, userId, { ...base, player1: "Later L.", startsAt: "2030-09-21T13:00:00Z", stake: 1, odds: 1.8, result: "WON" }, now)).rejects.toMatchObject({ status: 422 });
   });
 
+  it("split bets: each pick can be a bot or a personal play", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const res = await createMatchWithAlarm(prisma, userId, input({ selection: "UNDER", pointsLine: 74.5 }), now);
+    if (res.status !== "created") throw new Error("not created");
+    const matchId = res.match.id;
+    expect(res.match.playType).toBe("BOT");
+    await updateBet(prisma, userId, matchId, { legs: [{ selection: "UNDER", stake: 1, odds: 1.85 }, { selection: "SWEEP", stake: 0.75, odds: 3.65 }, { selection: "SET_SPREAD", stake: 0.5, odds: 1.75 }] }, now);
+    // The sweep becomes a personal play; the others follow the match (bot).
+    await updateBet(prisma, userId, matchId, { leg: { index: 1, playType: "PERSONAL" } }, now);
+    const types = async () => (await listBetRows(prisma, userId)).map((r) => [r.selection, r.playType]);
+    expect(await types()).toEqual([["UNDER", "BOT"], ["SWEEP", "PERSONAL"], ["SET_SPREAD", "BOT"]]);
+    expect((await listBetRows(prisma, userId, { playType: "PERSONAL" })).map((r) => r.selection)).toEqual(["SWEEP"]);
+    expect((await listBetRows(prisma, userId, { playType: "BOT" })).map((r) => r.selection)).toEqual(["UNDER", "SET_SPREAD"]);
+    // Settling or editing the picks keeps it.
+    await updateBet(prisma, userId, matchId, { leg: { index: 1, result: "WON" } }, now);
+    await updateBet(prisma, userId, matchId, { legs: [{ selection: "UNDER", stake: 1, odds: 1.85 }, { selection: "SWEEP", stake: 1, odds: 3.65 }, { selection: "SET_SPREAD", stake: 0.5, odds: 1.75 }] }, now);
+    expect(await types()).toEqual([["UNDER", "BOT"], ["SWEEP", "PERSONAL"], ["SET_SPREAD", "BOT"]]);
+    expect((await listBetRows(prisma, userId)).find((r) => r.selection === "SWEEP")).toMatchObject({ result: "WON", stake: 1 });
+    // Picks that follow the match change with it.
+    await prisma.match.update({ where: { id: matchId }, data: { playType: "PERSONAL" } });
+    expect(await types()).toEqual([["UNDER", "PERSONAL"], ["SWEEP", "PERSONAL"], ["SET_SPREAD", "PERSONAL"]]);
+    // Past bets: a personal SWEEP added to a bot UNDER keeps its own type.
+    const past = { player1: "Molenda D.", player2: "Zelezik J.", competition: "TT ELITE", timezone: "UTC", startsAt: "2030-09-20T06:55:00Z", pointsLine: null };
+    const under = await createPastBet(prisma, userId, { ...past, playType: "BOT", selection: "UNDER", stake: 1, odds: 1.85, result: "WON" }, now);
+    await createPastBet(prisma, userId, { ...past, playType: "PERSONAL", selection: "SWEEP", stake: 0.75, odds: 3.65, result: "WON" }, now);
+    const rows = (await listBetRows(prisma, userId)).filter((r) => r.matchId === under.matchId);
+    expect(rows.map((r) => [r.selection, r.playType])).toEqual([["UNDER", "BOT"], ["SWEEP", "PERSONAL"]]);
+  });
+
   it("past bets: a different pick on the same match becomes a split bet", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const base = { player1: "Warpas B.", player2: "Krcil F.", competition: "TT Elite", timezone: "Australia/Sydney", playType: "PERSONAL" as const, pointsLine: 73.5, startsAt: "2030-09-20T06:55:00Z" };

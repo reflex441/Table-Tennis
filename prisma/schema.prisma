@@ -277,6 +277,8 @@ model BetLeg {
   odds      Float?
   result    BetResult @default(PENDING)
   profit    Float?
+  /// Bot or personal for this pick only; null = the match's play type.
+  playType  PlayType?
 
   @@unique([betId, position])
 }

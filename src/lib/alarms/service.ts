@@ -338,7 +338,7 @@ export function toMatchDTO(m: MatchWithRelations): MatchDTO {
           profit: m.bet.profit,
           placedAt: m.bet.placedAt.toISOString(),
           settledAt: m.bet.settledAt?.toISOString() ?? null,
-          legs: m.bet.legs.map((l) => ({ selection: l.selection, stake: l.stake, odds: l.odds, result: l.result, profit: l.profit })),
+          legs: m.bet.legs.map((l) => ({ selection: l.selection, stake: l.stake, odds: l.odds, result: l.result, profit: l.profit, playType: l.playType })),
         }
       : null,
     statistics: {

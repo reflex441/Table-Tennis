@@ -158,6 +158,33 @@ export function LegsEditor({ legs, onChange }: { legs: LegDraft[]; onChange: (le
   );
 }
 
+type PlayType = "BOT" | "PERSONAL";
+
+/** Bot / Personal switch for one pick of a split bet. */
+function LegPlayType({ value, busy, label, onChange }: { value: PlayType; busy: boolean; label: string; onChange: (t: PlayType) => void }) {
+  return (
+    <span className="inline-flex rounded-md border border-line p-px text-[10px]" role="radiogroup" aria-label={`${label}: bot or personal play`}>
+      {(["BOT", "PERSONAL"] as const).map((t) => (
+        <button
+          key={t}
+          type="button"
+          role="radio"
+          aria-checked={value === t}
+          disabled={busy}
+          className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-semibold ${
+            value === t ? (t === "BOT" ? "bg-violet-500/20 text-violet-300" : "bg-amber-500/15 text-amber-300") : "text-muted hover:text-text"
+          }`}
+          onClick={() => value !== t && onChange(t)}
+          title={t === "BOT" ? "Count this pick as a bot play" : "Count this pick as a personal play"}
+        >
+          {t === "BOT" ? <Bot className="h-3 w-3" /> : <User className="h-3 w-3" />}
+          {t === "BOT" ? "Bot" : "Personal"}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 function SettleButtons({ busy, onSettle }: { busy: boolean; onSettle: (r: Result) => void }) {
   return (
     <>
@@ -189,7 +216,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
   const [odds, setOdds] = useState("");
   const [legs, setLegs] = useState<LegDraft[] | null>(null);
 
-  const send = async (body: { stake?: number; odds?: number | null; result?: Result; legs?: unknown; leg?: { index: number; result: Result } } | null) => {
+  const send = async (body: { stake?: number; odds?: number | null; result?: Result; legs?: unknown; leg?: { index: number; result?: Result; playType?: PlayType | null } } | null) => {
     setBusy(true);
     setError(null);
     try {
@@ -323,6 +350,13 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
           {bet.legs.map((l, i) => (
             <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               <SelectionBadge selection={l.selection} pointsLine={l.selection === match.statistics.selection ? match.statistics.pointsLine : null} />
+              <LegPlayType
+                value={l.playType ?? match.playType}
+                busy={busy}
+                label={`Pick ${i + 1}`}
+                // Same as the match: follow it (null), so changing the match changes this pick too.
+                onChange={(t) => void send({ leg: { index: i, playType: t === match.playType ? null : t } })}
+              />
               <span className="tabular text-text">{formatUnits(l.stake, false)}</span>
               {l.odds ? <span className="tabular text-muted">@ {l.odds.toFixed(2)}</span> : <span className="text-warn">add odds</span>}
               {l.result !== "PENDING" && <ResultChip result={l.result} />}

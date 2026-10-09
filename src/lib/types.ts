@@ -35,6 +35,8 @@ export interface BetLegDTO {
   odds: number | null;
   result: "PENDING" | "WON" | "LOST" | "VOID";
   profit: number | null;
+  /** Bot / personal for this pick only; null = the match's play type. */
+  playType: "BOT" | "PERSONAL" | null;
 }
 
 export interface BetDTO {

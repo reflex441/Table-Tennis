@@ -10,7 +10,11 @@ interface Leg {
   stake: number;
   odds: number | null;
   result: BetResult;
+  /** Bot / personal for this pick only; null = the match's play type. */
+  playType: PlayType | null;
 }
+
+type PlayType = "BOT" | "PERSONAL";
 
 /**
  * Record that a bet was placed on a match (idempotent: an existing bet is
@@ -68,11 +72,12 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
       : prisma.bet.findUniqueOrThrow({ where: { matchId } });
   }
 
-  const current: Leg[] = bet.legs.map((l) => ({ selection: l.selection as Selection, stake: l.stake, odds: l.odds, result: l.result as BetResult }));
+  const current: Leg[] = bet.legs.map((l) => ({ selection: l.selection as Selection, stake: l.stake, odds: l.odds, result: l.result as BetResult, playType: l.playType }));
   let legs = input.legs === null ? [] : input.legs ? toLegs(input.legs, current) : current;
   if (input.leg) {
     if (!legs[input.leg.index]) throw new ServiceError("That pick doesn't exist on this bet.", 400, "invalid_leg");
-    legs = legs.map((l, i) => (i === input.leg!.index ? { ...l, result: input.leg!.result } : l));
+    const { index, result, playType } = input.leg;
+    legs = legs.map((l, i) => (i === index ? { ...l, ...(result ? { result } : {}), ...(playType !== undefined ? { playType } : {}) } : l));
   } else if (input.result && !input.legs) {
     legs = legs.map((l) => ({ ...l, result: input.result! }));
   }
@@ -117,14 +122,18 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
   });
 }
 
-/** New picks from the editor; a pick keeps its result unless one is given. */
+/** New picks from the editor; a pick keeps its result and bot/personal unless given. */
 function toLegs(input: BetLegInput[], current: Leg[]): Leg[] {
-  return input.map((l, i) => ({
-    selection: l.selection,
-    stake: round2(l.stake),
-    odds: l.odds ?? null,
-    result: l.result ?? (current[i]?.selection === l.selection ? current[i].result : "PENDING"),
-  }));
+  return input.map((l, i) => {
+    const same = current[i]?.selection === l.selection ? current[i] : null;
+    return {
+      selection: l.selection,
+      stake: round2(l.stake),
+      odds: l.odds ?? null,
+      result: l.result ?? same?.result ?? "PENDING",
+      playType: l.playType !== undefined ? l.playType : (same?.playType ?? null),
+    };
+  });
 }
 
 export async function deleteBet(prisma: PrismaClient, userId: string, matchId: string) {
@@ -191,11 +200,12 @@ export async function createPastBet(
 async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: string, input: PastBetInput, now: Date): Promise<true> {
   const match = await prisma.match.findFirstOrThrow({
     where: { id: matchId, userId },
-    select: { statistics: { select: { selection: true } }, bet: { select: { stake: true, odds: true, result: true, legs: { orderBy: { position: "asc" } } } } },
+    select: { playType: true, statistics: { select: { selection: true } }, bet: { select: { stake: true, odds: true, result: true, legs: { orderBy: { position: "asc" } } } } },
   });
   const pick = input.selection;
   const duplicate = () => new ServiceError("You already have this bet (same match, same pick).", 409, "duplicate", { existingId: matchId });
-  const newLeg = { selection: pick!, stake: input.stake, odds: input.odds, result: input.result as BetResult };
+  // Its own Bot / Personal when that differs from the match (e.g. a bot UNDER plus a personal SWEEP).
+  const newLeg = { selection: pick!, stake: input.stake, odds: input.odds, result: input.result as BetResult, playType: input.playType === match.playType ? null : input.playType };
 
   if (!match.bet) {
     // The match is there (e.g. added for an alarm) but has no bet yet.
@@ -204,9 +214,9 @@ async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: str
   }
   if (!pick) throw duplicate();
   const legs = match.bet.legs.length
-    ? match.bet.legs.map((l) => ({ selection: l.selection as Selection, stake: l.stake, odds: l.odds, result: l.result as BetResult }))
+    ? match.bet.legs.map((l) => ({ selection: l.selection as Selection, stake: l.stake, odds: l.odds, result: l.result as BetResult, playType: l.playType }))
     : match.statistics?.selection
-      ? [{ selection: match.statistics.selection as Selection, stake: match.bet.stake, odds: match.bet.odds, result: match.bet.result as BetResult }]
+      ? [{ selection: match.statistics.selection as Selection, stake: match.bet.stake, odds: match.bet.odds, result: match.bet.result as BetResult, playType: null }]
       : null;
   if (!legs || legs.some((l) => l.selection === pick)) throw duplicate();
   if (legs.length >= 3) throw new ServiceError("This match already has 3 picks.", 409, "too_many_picks");

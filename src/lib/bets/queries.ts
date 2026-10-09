@@ -26,14 +26,13 @@ export async function listBetRows(prisma: PrismaClient, userId: string, opts: { 
       match: {
         userId,
         ...(opts.since ? { startsAt: { gte: opts.since } } : {}),
-        ...(opts.playType ? { playType: opts.playType } : {}),
       },
     },
     include: { match: { include: { statistics: true } }, legs: { orderBy: { position: "asc" } } },
     orderBy: { match: { startsAt: "desc" } },
     take: 5000,
   });
-  return rows.flatMap((b): BetRowWithMatch[] => {
+  const all = rows.flatMap((b): BetRowWithMatch[] => {
     const base: BetRowWithMatch = {
       id: b.id,
       matchId: b.matchId,
@@ -61,9 +60,13 @@ export async function listBetRows(prisma: PrismaClient, userId: string, opts: { 
       result: l.result as BetResult,
       profit: l.profit,
       selection: l.selection as Selection,
+      // A pick can be bot or personal on its own (e.g. a bot UNDER + a personal SWEEP).
+      playType: (l.playType as PlayType | null) ?? base.playType,
       // The points line belongs to the match's own pick.
       pointsLine: l.selection === base.selection ? base.pointsLine : null,
       split: { index: i, of: b.legs.length },
     }));
   });
+  // Filtered per row, as the picks of one split bet can differ.
+  return opts.playType ? all.filter((r) => r.playType === opts.playType) : all;
 }

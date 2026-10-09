@@ -52,6 +52,8 @@ export const betLegSchema = z.object({
   stake: z.number().positive("Stake must be more than 0").max(1000, "At most 1000 units"),
   odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish(),
   result: betResultSchema.optional(),
+  /** Bot or personal for this pick only (null: the match's). Kept as it was when left out. */
+  playType: z.enum(["BOT", "PERSONAL"]).nullish(),
 });
 
 /** 2-3 picks on one play, e.g. 0.5u UNDER + 0.5u SWEEP; null turns a split bet back into one bet. */
@@ -63,8 +65,11 @@ export const betInputSchema = z.object({
   /** Settles the whole bet (every pick of a split bet). */
   result: betResultSchema.optional(),
   legs: betLegsSchema.nullish(),
-  /** Settles one pick of a split bet. */
-  leg: z.object({ index: z.number().int().min(0).max(2), result: betResultSchema }).optional(),
+  /** Settles one pick of a split bet, or makes it a bot / personal play (null: the match's). */
+  leg: z
+    .object({ index: z.number().int().min(0).max(2), result: betResultSchema.optional(), playType: z.enum(["BOT", "PERSONAL"]).nullish() })
+    .refine((l) => l.result !== undefined || l.playType !== undefined, "Nothing to change on that pick")
+    .optional(),
 });
 
 export type BetLegInput = z.infer<typeof betLegSchema>;
