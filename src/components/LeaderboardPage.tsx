@@ -146,13 +146,13 @@ function Board({
               <Avatar name={r.name} url={r.avatarUrl} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
-                  {r.userId !== currentUserId && r.tailable ? (
-                    <Link href="/tailing" className="hover:underline" title={`See ${r.name}'s profit and bets on the Tailing page`}>
-                      {r.name}
-                    </Link>
-                  ) : (
-                    r.name
-                  )}
+                  <Link
+                    href={r.userId === currentUserId ? "/profit" : r.tailable ? "/tailing" : `/users/${r.userId}`}
+                    className="hover:underline"
+                    title={r.userId === currentUserId ? "Your profit page" : `See ${r.name}'s profit page`}
+                  >
+                    {r.name}
+                  </Link>
                   {r.userId === currentUserId && <span className="ml-1.5 chip bg-accent/20 text-accent">You</span>}
                 </span>
                 <span className="block text-[11px] text-muted">

@@ -26,6 +26,7 @@ import { copyBets, getTailProfile, getTailedAccount } from "@/lib/tailing";
 import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
 import { capitalizeStoredCompetitions, shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
 import { guessCompetition, ownerLeagueIndex } from "@/lib/bets/league-guess";
+import { getPublicProfile } from "@/lib/profiles";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -647,6 +648,21 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // The same pick again is still a duplicate.
     await expect(createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 1, odds: 1.9, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("profit pages from the leaderboard: only for accounts shown on it", async () => {
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    const hidden = (await prisma.user.create({ data: { email: "hid@example.com", name: "Hid", settings: { create: { showOnLeaderboard: false } } } })).id;
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { player2: "Krcil F.", competition: "TT ELITE", timezone: "UTC", playType: "BOT" as const, selection: "OVER" as const, pointsLine: 73.5, startsAt: "2030-09-20T06:55:00Z" };
+    await createPastBet(prisma, sam, { ...base, player1: "Warpas B.", stake: 1, odds: 1.8, result: "WON" }, now);
+    await createPastBet(prisma, hidden, { ...base, player1: "Kolek M.", stake: 1, odds: 1.8, result: "WON" }, now);
+    const profile = await getPublicProfile(prisma, sam);
+    expect(profile).toMatchObject({ account: { id: sam, name: "Sam", summary: { bets: 1, profit: 0.8 } } });
+    expect(profile!.bets.map((b) => b.player1)).toEqual(["Warpas B."]);
+    expect(JSON.stringify(profile)).not.toContain("sam@example.com");
+    expect(await getPublicProfile(prisma, hidden)).toBeNull();
+    expect(await getPublicProfile(prisma, "nobody")).toBeNull();
   });
 
   it("bet slip league guesses come only from the owner's matches", async () => {

@@ -907,7 +907,7 @@ function AccountSection() {
       <p className="mt-1 text-xs text-muted">Shown in the app and on the leaderboard. Your email is never shown to others.</p>
       <Toggle
         label="Show me on the leaderboard"
-        hint="Only your display name and your results are shown - never your email."
+        hint="Your display name and results are shown, and others can open your profit page (your bets) by clicking your name - never your email or screenshots. Turn off to hide both."
         checked={settings.showOnLeaderboard}
         onChange={(v) => void update({ showOnLeaderboard: v })}
       />

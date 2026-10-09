@@ -11,7 +11,7 @@ export interface LeaderboardRow {
   userId: string;
   name: string;
   avatarUrl: string | null;
-  /** This is the account everyone tails (link to the Tailing page). */
+  /** This is the account everyone tails (its name opens the Tailing page; others open /users/[id]). */
   tailable: boolean;
   /** Settled bets with a known profit (won / lost / void). */
   bets: number;
