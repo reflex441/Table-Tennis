@@ -6,6 +6,7 @@ import type { Candidate, CandidateValidation } from "@/lib/review/candidate";
 import { ReminderPicker } from "@/components/ReminderPicker";
 import { fromLocalInputValue, formatDayLabel, formatTime } from "@/lib/format";
 import { DateTimeInput } from "@/components/DateTimeInput";
+import { LeagueSelect } from "@/components/LeagueSelect";
 
 interface Props {
   candidate: Candidate;
@@ -108,7 +109,7 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
           <input className="input" value={c.player2} onChange={(e) => onChange({ player2: e.target.value })} placeholder="e.g. Jan S" />
         </Field>
         <Field label="Competition" className="col-span-2">
-          <input className="input" value={c.competition} onChange={(e) => onChange({ competition: e.target.value })} placeholder="e.g. Czech Liga Pro" />
+          <LeagueSelect value={c.competition} onChange={(v) => onChange({ competition: v })} />
         </Field>
       </div>
 

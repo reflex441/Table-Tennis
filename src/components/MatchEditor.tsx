@@ -7,6 +7,7 @@ import { ReminderPicker } from "./ReminderPicker";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import type { Selection } from "@/lib/selection";
 import { DateTimeInput } from "./DateTimeInput";
+import { LeagueSelect } from "./LeagueSelect";
 
 export interface MatchFormValues {
   player1: string;
@@ -112,7 +113,7 @@ export function MatchEditor({
           <input className="input" value={player2} onChange={(e) => setPlayer2(e.target.value)} />
         </F>
         <F label="Competition" className="col-span-2">
-          <input className="input" value={competition} onChange={(e) => setCompetition(e.target.value)} />
+          <LeagueSelect value={competition} onChange={setCompetition} />
         </F>
         <F label={`Start time (${timezone})`} error={errors.startsAt} className="col-span-2 sm:col-span-1">
           <DateTimeInput value={startsLocal} onChange={setStartsLocal} label="Start time" />
