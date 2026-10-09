@@ -43,9 +43,14 @@ export const BET_SLIP_JSON_SCHEMA = {
           player1: str("First player's name as shown (e.g. 'Blazej Warpas' from 'Blazej Warpas vs Frantisek Krcil')."),
           player2: str("Second player's name."),
           competition: str("League / competition if shown (usually 'TT Elite Series', 'TT Cup' or 'Czech Liga Pro'). Null if not shown."),
-          selectionText: str("The selection exactly as shown on the slip, e.g. 'Over 73.5', 'Under 74.5', 'Dawid Kosmal (-2.5)'."),
-          selection: { type: ["string", "null"], enum: ["OVER", "UNDER", "SWEEP", null], description: "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet, SWEEP for a player at -2.5 sets (e.g. 'Dawid Kosmal (-2.5)' with 'Line 2.5': winning 3-0). Null for other markets." },
-          pointsLine: num("The total points line, e.g. 'Over 73.5' -> 73.5. Null for a SWEEP (its 'Line 2.5' is sets, not points)."),
+          selectionText: str("The selection exactly as shown on the slip, e.g. 'Over 73.5', 'Under 74.5', 'Dawid Kosmal (-2.5)', 'Dawid Kosmal (+1.5)', 'Dawid Kosmal (-4.5)'."),
+          selection: {
+            type: ["string", "null"],
+            enum: ["OVER", "UNDER", "SWEEP", "SET_SPREAD", "POINTS_SPREAD", null],
+            description:
+              "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet. SWEEP for a player at -2.5 sets (e.g. 'Dawid Kosmal (-2.5)' with 'Line 2.5': winning 3-0). SET_SPREAD for any other set handicap (e.g. '(-1.5)', '(+1.5)', '(+2.5)'). POINTS_SPREAD for a points handicap (e.g. '(-4.5)', '(+3.5)'). Null for other markets (e.g. head to head).",
+          },
+          pointsLine: num("The total points line, e.g. 'Over 73.5' -> 73.5. For a spread, the handicap with its sign, e.g. '(-4.5)' -> -4.5. Null for a SWEEP."),
           odds: num("Decimal odds of the bet, e.g. '@ 1.80' -> 1.8."),
           stake: num("Stake amount in money without the currency sign, e.g. 'Stake $20.00' -> 20."),
           resultText: str("The settlement shown on the slip exactly, e.g. 'Win', 'Won', 'No Return', 'Lost', 'Refund', 'Void'. Null if the bet is still open / pending."),
@@ -63,8 +68,8 @@ export const BET_SLIP_PROMPT = `You are reading a screenshot of bookmaker bet sl
 Return every bet visible in the screenshot, one entry per bet, in order.
 - player1 / player2: the two players of the match ("A vs B").
 - selectionText: the selection exactly as shown (e.g. "Over 73.5", "Dawid Kosmal (-2.5)").
-- selection: OVER for "Over 73.5", UNDER for "Under 73.5" (total points markets). SWEEP for a player with a -2.5 set handicap, shown like "Dawid Kosmal (-2.5)" with "Line 2.5" (that player winning 3-0). Null for other markets (head to head, other handicaps...).
-- pointsLine: the number after Over/Under; null for a SWEEP (its "Line 2.5" counts sets, not points). odds: the decimal odds of the bet. stake: the amount staked, without the currency sign.
+- selection: OVER for "Over 73.5", UNDER for "Under 73.5" (total points markets). SWEEP for a player with a -2.5 set handicap, shown like "Dawid Kosmal (-2.5)" with "Line 2.5" (that player winning 3-0). SET_SPREAD for any other set handicap ("(-1.5)", "(+1.5)", "(+2.5)"). POINTS_SPREAD for a points handicap ("(-4.5)", "(+3.5)"). Null for other markets (head to head...).
+- pointsLine: the number after Over/Under; for a spread, the handicap with its sign (-4.5); null for a SWEEP. odds: the decimal odds of the bet. stake: the amount staked, without the currency sign.
 - resultText: copy the settlement exactly: "Win"/"Won" (and a return amount) means the bet won; "No Return" means it lost; "Refund"/"Void" means void. Null if the bet hasn't been settled yet.
 - dateText / timeText: copy the date and time shown for the bet verbatim. Don't convert or guess.
 Use null for anything you can't read. Don't invent bets.`;
@@ -93,10 +98,20 @@ function number(v: unknown, min: number, max: number): number | null {
 /** "Mariusz Koczyba" -> "Koczyba M.", like the rest of the app. */
 const short = (name: string | null) => (name ? shortPlayerName(name) : null);
 
-/** A player at -2.5 sets ("Dawid Kosmal (-2.5)"): wins 3-0, i.e. the sweep. */
-export function isSweepText(text: string | null | undefined): boolean {
+/**
+ * A handicap selection ("Dawid Kosmal (-2.5)"): -2.5 sets is the sweep
+ * (winning 3-0), other handicaps up to 2.5 are set spreads ("(+1.5)"), and
+ * bigger ones points spreads ("(-4.5)"). Null for Over/Under and the rest.
+ */
+export function handicapPick(text: string | null | undefined): { selection: Selection; line: number | null } | null {
   const t = (text ?? "").replace(/[\u2212\u2013]/g, "-");
-  return !/\b(over|under)\b/i.test(t) && /(^|[\s(])-\s?2\.5\b/.test(t);
+  if (!t || /\b(over|under)\b/i.test(t)) return null;
+  const m = t.match(/\(\s*([+-]?\s?\d+(?:\.\d+)?)\s*\)/) ?? t.match(/(?:^|\s)([+-]\s?\d+(?:\.\d+)?)(?!\S)/);
+  if (!m) return null;
+  const value = Number(m[1].replace(/\s/g, ""));
+  if (!Number.isFinite(value) || value === 0) return null;
+  if (value === -2.5) return { selection: "SWEEP", line: null };
+  return { selection: Math.abs(value) <= 2.5 ? "SET_SPREAD" : "POINTS_SPREAD", line: value };
 }
 
 export function normalizeBetSlips(raw: unknown): SlipBet[] {
@@ -109,9 +124,9 @@ export function normalizeBetSlips(raw: unknown): SlipBet[] {
     .map((b): SlipBet => {
       const selectionText = clean(b.selectionText, 80);
       const raw = typeof b.selection === "string" ? b.selection.toUpperCase() : null;
-      // "Dawid Kosmal (-2.5)" is the sweep, whatever Gemini picked.
-      const sweep = isSweepText(selectionText) || raw === "SWEEP";
-      const sel = sweep ? "SWEEP" : raw;
+      // "Dawid Kosmal (-2.5)" is the sweep, "(+1.5)" a set spread, "(-4.5)" a points spread, whatever Gemini picked.
+      const handicap = handicapPick(selectionText);
+      const sel = handicap?.selection ?? raw;
       const resultText = clean(b.resultText, 40);
       return {
         player1: short(clean(b.player1, 60)),
@@ -120,7 +135,7 @@ export function normalizeBetSlips(raw: unknown): SlipBet[] {
         selectionText,
         selection: isSelection(sel) ? sel : null,
         // A sweep's "Line 2.5" is sets, not a points line.
-        pointsLine: sweep ? null : number(b.pointsLine, 0, 500),
+        pointsLine: handicap ? handicap.line : sel === "SWEEP" ? null : number(b.pointsLine, -500, 500),
         odds: number(b.odds, 1.0001, 1000),
         stake: number(b.stake, 0.01, 1_000_000),
         result: slipResult(resultText),

@@ -272,7 +272,7 @@ export function validateCandidate(c: Candidate, timezone: string, now: Date = ne
   if (c.ouStats.trim() && !/^\d{1,4}\/\d{1,4}$/.test(c.ouStats.trim())) errors.ouStats = 'Use the form "20/9"';
   if (optNumber(c.ouHitRate, 0, 100) === "invalid") errors.ouHitRate = "0-100";
   if (optNumber(c.edge, -100, 100) === "invalid") errors.edge = "-100..100";
-  if (optNumber(c.pointsLine, 0, 500) === "invalid") errors.pointsLine = "Invalid";
+  if (optNumber(c.pointsLine, -500, 500) === "invalid") errors.pointsLine = "Invalid";
   const stake = optNumber(c.stakeUnits, 0, 1000);
   if (stake === "invalid" || stake === 0) errors.stakeUnits = "Stake must be above 0 units";
   const odds = optNumber(c.odds, 0, 1000);

@@ -14,7 +14,7 @@ import { DailyCalendar } from "./DailyCalendar";
 import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
 import { X } from "lucide-react";
 import { DateTime } from "luxon";
-import { SELECTIONS, SELECTION_LABEL, type Selection } from "@/lib/selection";
+import { SELECTIONS, SELECTION_LABEL, isSpread, pickText, type Selection } from "@/lib/selection";
 import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 import { AddPastBet } from "./AddPastBet";
 import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
@@ -220,10 +220,10 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">
-          Picks <span className="font-normal text-muted">· how OVER, UNDER and SWEEP are doing{type === "ALL" ? "" : ` (${type === "BOT" ? "bot" : "personal"} plays)`}</span>
+          Picks <span className="font-normal text-muted">· how each pick is doing{type === "ALL" ? "" : ` (${type === "BOT" ? "bot" : "personal"} plays)`}</span>
         </h2>
         <div className="grid gap-3 sm:grid-cols-3">
-          {picks.map(({ sel, summary }) => (
+          {picks.filter(({ sel, summary }) => summary.bets > 0 || !isSpread(sel) || pick === sel).map(({ sel, summary }) => (
             <PlayTypeCard
               key={sel}
               title={SELECTION_LABEL[sel]}
@@ -378,7 +378,7 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
                         </Link>
                       )}
                       <span className="block truncate text-[11px] text-muted">
-                        {r.selection ? `${r.selection}${r.pointsLine !== null ? ` ${r.pointsLine}` : ""} · ` : ""}
+                        {r.selection ? `${pickText(r.selection, r.pointsLine)} · ` : ""}
                         {r.split ? `split ${r.split.index + 1}/${r.split.of} · ` : ""}
                         {r.matchups !== null ? `${r.matchups} matchups · ` : ""}
                         {r.competition ?? "Unknown competition"}

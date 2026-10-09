@@ -3,7 +3,7 @@
 import { formatCountdown, formatPct } from "@/lib/format";
 import { useNow } from "./useNow";
 import type { AlarmStatus } from "@/lib/types";
-import type { Selection } from "@/lib/selection";
+import { pickText, type Selection } from "@/lib/selection";
 
 export function SelectionBadge({ selection, pointsLine }: { selection: Selection | null; pointsLine?: number | null }) {
   if (!selection) return <span className="chip bg-line/60 text-muted">NO PICK</span>;
@@ -12,13 +12,12 @@ export function SelectionBadge({ selection, pointsLine }: { selection: Selection
       ? "bg-over/15 text-over ring-1 ring-over/30"
       : selection === "UNDER"
         ? "bg-under/15 text-under ring-1 ring-under/30"
-        : "bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30";
-  return (
-    <span className={`chip ${style}`}>
-      {selection}
-      {pointsLine !== null && pointsLine !== undefined ? ` ${pointsLine}` : ""}
-    </span>
-  );
+        : selection === "SWEEP"
+          ? "bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30"
+          : selection === "POINTS_SPREAD"
+            ? "bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"
+            : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30";
+  return <span className={`chip ${style}`}>{pickText(selection, pointsLine)}</span>;
 }
 
 /** Thin progress bar for a 0-100 percentage. */

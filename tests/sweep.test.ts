@@ -20,7 +20,7 @@ const shot: ScreenshotContext = { id: "S", capturedAt: "2026-10-01T08:00:00Z", c
 
 describe("SWEEP pick", () => {
   it("is a valid selection everywhere", () => {
-    expect(SELECTIONS).toEqual(["OVER", "UNDER", "SWEEP"]);
+    expect(SELECTIONS).toEqual(["OVER", "UNDER", "SWEEP", "POINTS_SPREAD", "SET_SPREAD"]);
     expect(isSelection("SWEEP")).toBe(true);
     expect(isSelection("sweep")).toBe(false);
     const base = { player1: "A", player2: "B", startsAt: "2030-01-01T10:00:00Z", timezone: "Australia/Sydney", reminderMinutes: 5 };

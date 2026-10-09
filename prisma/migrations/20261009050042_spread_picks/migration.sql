@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "Selection" ADD VALUE 'POINTS_SPREAD';
+ALTER TYPE "Selection" ADD VALUE 'SET_SPREAD';

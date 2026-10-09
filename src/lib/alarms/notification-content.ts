@@ -1,4 +1,4 @@
-import type { Selection } from "@/lib/selection";
+import { pickText, type Selection } from "@/lib/selection";
 /** Builds notification text for an alarm. Pure so it can be unit-tested. */
 
 export interface NotificationMatch {
@@ -40,7 +40,7 @@ export function formatPercent(n: number): string {
 export function statsLine(stats: NotificationMatch["statistics"]): string | null {
   if (!stats) return null;
   const parts: string[] = [];
-  if (stats.selection) parts.push(stats.pointsLine !== null ? `${stats.selection} ${stats.pointsLine}` : stats.selection);
+  if (stats.selection) parts.push(pickText(stats.selection, stats.pointsLine));
   if (stats.ouStats || stats.ouHitRate !== null) {
     const pct = stats.ouHitRate !== null ? formatPercent(stats.ouHitRate) : null;
     parts.push(`O/U ${[stats.ouStats, pct].filter(Boolean).join(" - ")}`);

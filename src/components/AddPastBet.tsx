@@ -7,7 +7,7 @@ import { SlipScanner } from "./SlipScanner";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue } from "@/lib/format";
-import { SELECTIONS, type Selection } from "@/lib/selection";
+import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
@@ -69,7 +69,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
     if (!Number.isFinite(stake) || stake <= 0) return setError("Units must be a number above 0.");
     if (odds === null && f.result === "WON") return setError("Enter the odds so the profit of a win can be counted.");
     if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return setError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
-    if (line !== null && (!Number.isFinite(line) || line < 0)) return setError("The points line must be a number, e.g. 74.5.");
+    if (line !== null && !Number.isFinite(line)) return setError("The line must be a number, e.g. 74.5 (or -4.5 for a spread).");
     setBusy(true);
     setError(null);
     try {
@@ -152,13 +152,13 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
           <span className="label">Play</span>
           {seg(f.playType, [["BOT", "Bot"], ["PERSONAL", "Personal"]] as const, (v) => set({ playType: v }), "Play type")}
         </div>
-        <label className="w-28">
+        <label className="w-40">
           <span className="label">Pick</span>
           <select className="input py-1.5" value={f.selection} onChange={(e) => set({ selection: e.target.value as "" | Selection })} aria-label="Pick">
             <option value="">—</option>
             {SELECTIONS.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {selectionName(s)}
               </option>
             ))}
           </select>

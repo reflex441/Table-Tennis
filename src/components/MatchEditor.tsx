@@ -69,7 +69,7 @@ export function MatchEditor({
     if (!player2.trim()) errs.player2 = "Required";
     const startsAt = fromLocalInputValue(startsLocal, timezone);
     if (!startsAt) errs.startsAt = "Required";
-    const pl = parseNum(pointsLine, 0, 500);
+    const pl = parseNum(pointsLine, -500, 500);
     const hr = parseNum(ouHitRate, 0, 100);
     const ed = parseNum(edge, -100, 100);
     if (pl === "invalid") errs.pointsLine = "Invalid";
@@ -125,6 +125,8 @@ export function MatchEditor({
             <option value="OVER">OVER</option>
             <option value="UNDER">UNDER</option>
             <option value="SWEEP">SWEEP</option>
+            <option value="POINTS_SPREAD">POINTS SPREAD</option>
+            <option value="SET_SPREAD">SET SPREAD</option>
           </select>
         </F>
         <F label="Line" error={errors.pointsLine}>

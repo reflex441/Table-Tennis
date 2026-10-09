@@ -7,7 +7,7 @@ import { defaultStake, formatMoney, formatUnits, round2 } from "@/lib/bets/profi
 import { api } from "@/lib/client-api";
 import { useSettings } from "./SettingsProvider";
 import { SelectionBadge } from "./MatchBits";
-import { SELECTIONS, type Selection } from "@/lib/selection";
+import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
 import { parseLegs, splitLegs, type LegDraft } from "@/lib/bets/split";
 
 export { parseLegs, splitLegs, type LegDraft };
@@ -121,12 +121,12 @@ export function LegsEditor({ legs, onChange }: { legs: LegDraft[]; onChange: (le
     <div className="flex flex-col gap-1.5">
       {legs.map((l, i) => (
         <div key={i} className="flex flex-wrap items-end gap-2">
-          <label className="w-24">
+          <label className="w-36">
             <span className="label">Pick {i + 1}</span>
             <select className="input py-1" value={l.selection} onChange={(e) => set(i, { selection: e.target.value as Selection })} aria-label={`Pick ${i + 1}`}>
               {SELECTIONS.map((sel) => (
                 <option key={sel} value={sel}>
-                  {sel}
+                  {selectionName(sel)}
                 </option>
               ))}
             </select>

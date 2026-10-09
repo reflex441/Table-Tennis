@@ -632,6 +632,17 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(guessCompetition("Varcl J.", null, index)).toBeNull();
   });
 
+  it("spread picks are saved and split like any other pick", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { player1: "Kosmal D.", player2: "Minda M.", competition: "TT ELITE", timezone: "UTC", playType: "PERSONAL" as const, startsAt: "2030-09-20T06:55:00Z" };
+    const first = await createPastBet(prisma, userId, { ...base, selection: "POINTS_SPREAD", pointsLine: -4.5, stake: 1, odds: 1.9, result: "WON" }, now);
+    const second = await createPastBet(prisma, userId, { ...base, selection: "SET_SPREAD", pointsLine: 1.5, stake: 0.5, odds: 1.5, result: "LOST" }, now);
+    expect(second).toEqual({ matchId: first.matchId, combined: true });
+    const rows = await listBetRows(prisma, userId);
+    expect(rows.map((r) => [r.selection, r.profit])).toEqual(expect.arrayContaining([["POINTS_SPREAD", 0.9], ["SET_SPREAD", -0.5]]));
+    expect((await prisma.matchStatistics.findFirstOrThrow({ where: { matchId: first.matchId } })).pointsLine).toBe(-4.5);
+  });
+
   it("full player names already stored are shortened to 'Surname F.'", async () => {
     const at = new Date("2030-09-20T06:55:00Z");
     const mk = (player1: string, player2: string, startsAt = at) =>

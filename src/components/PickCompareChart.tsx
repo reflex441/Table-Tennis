@@ -18,6 +18,8 @@ export const PICK_SERIES: Record<Selection, { color: string; dash?: string }> = 
   OVER: { color: "#17ad4e" },
   UNDER: { color: "#c22541", dash: "6 4" },
   SWEEP: { color: "#8b5cf6", dash: "2 3" },
+  POINTS_SPREAD: { color: "#0ea5e9", dash: "8 3 2 3" },
+  SET_SPREAD: { color: "#f59e0b", dash: "1 3" },
 };
 
 export interface PickSeries {

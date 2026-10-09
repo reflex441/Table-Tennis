@@ -6,7 +6,7 @@ import { Check, CheckCircle2, ImagePlus, Loader2, TriangleAlert, X } from "lucid
 import { api, uploadWithProgress } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { prepareUpload } from "@/lib/shrink-image";
-import { SELECTIONS, type Selection } from "@/lib/selection";
+import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { useSettings } from "./SettingsProvider";
@@ -234,13 +234,13 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                     <option value="PERSONAL">Personal</option>
                   </select>
                 </label>
-                <label className="w-24">
+                <label className="w-36">
                   <span className="label">Pick</span>
                   <select className="input py-1" value={r.selection} onChange={(e) => patch(r.key, { selection: e.target.value as Row["selection"] })} aria-label="Pick">
                     <option value="">—</option>
                     {SELECTIONS.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {selectionName(s)}
                       </option>
                     ))}
                   </select>

@@ -30,7 +30,7 @@ export interface AlarmDTO {
 
 /** One pick of a split bet (e.g. 0.5u UNDER of 0.5u UNDER + 0.5u SWEEP). */
 export interface BetLegDTO {
-  selection: "OVER" | "UNDER" | "SWEEP";
+  selection: Selection;
   stake: number;
   odds: number | null;
   result: "PENDING" | "WON" | "LOST" | "VOID";

@@ -3,6 +3,7 @@ import { normalizeBetSlips, slipDate, slipResult, BET_SLIP_PROMPT } from "@/lib/
 import { generateJsonFromImage } from "@/lib/gemini/extract";
 import { pastBetSchema } from "@/lib/validation/match";
 import { parseDayFirstDate } from "@/lib/format";
+import { pickText } from "@/lib/selection";
 
 describe("bet slips", () => {
   it("'Win' is won and 'No Return' is lost", () => {
@@ -98,8 +99,22 @@ describe("bet slips", () => {
     expect(slip({ selectionText: null, selection: "SWEEP", pointsLine: 2.5 })).toMatchObject({ selection: "SWEEP", pointsLine: null });
     // Over/Under stay as they are.
     expect(slip({ selectionText: "Under 74.5", selection: "UNDER", pointsLine: 74.5 })).toMatchObject({ selection: "UNDER", pointsLine: 74.5 });
-    expect(slip({ selectionText: "Dawid Kosmal (+2.5)", selection: null, pointsLine: 2.5 })).toMatchObject({ selection: null });
+    // Other handicaps are spreads: up to 2.5 sets, bigger ones points.
+    expect(slip({ selectionText: "Dawid Kosmal (+2.5)", selection: null, pointsLine: 2.5 })).toMatchObject({ selection: "SET_SPREAD", pointsLine: 2.5 });
+    expect(slip({ selectionText: "Dawid Kosmal (-1.5)", selection: "SWEEP", pointsLine: 1.5 })).toMatchObject({ selection: "SET_SPREAD", pointsLine: -1.5 });
+    expect(slip({ selectionText: "Dawid Kosmal (-4.5)", selection: null, pointsLine: 4.5 })).toMatchObject({ selection: "POINTS_SPREAD", pointsLine: -4.5 });
+    expect(slip({ selectionText: "Kosmal D. +3.5", selection: "POINTS_SPREAD", pointsLine: 3.5 })).toMatchObject({ selection: "POINTS_SPREAD", pointsLine: 3.5 });
+    expect(slip({ selectionText: null, selection: "POINTS_SPREAD", pointsLine: -5.5 })).toMatchObject({ selection: "POINTS_SPREAD", pointsLine: -5.5 });
+    expect(slip({ selectionText: "Dawid Kosmal", selection: null, pointsLine: null })).toMatchObject({ selection: null });
     expect(BET_SLIP_PROMPT).toContain("(-2.5)");
+  });
+
+  it("names the picks, with a sign on spreads", () => {
+    expect(pickText("OVER", 73.5)).toBe("OVER 73.5");
+    expect(pickText("SWEEP", null)).toBe("SWEEP");
+    expect(pickText("POINTS_SPREAD", -4.5)).toBe("POINTS SPREAD -4.5");
+    expect(pickText("SET_SPREAD", 1.5)).toBe("SET SPREAD +1.5");
+    expect(pastBetSchema.parse({ player1: "A", player2: "B", startsAt: "2026-10-06T19:40:00Z", timezone: "UTC", playType: "BOT", selection: "POINTS_SPREAD", pointsLine: -4.5, stake: 1, odds: 1.9, result: "WON" })).toMatchObject({ selection: "POINTS_SPREAD", pointsLine: -4.5 });
   });
 });
 

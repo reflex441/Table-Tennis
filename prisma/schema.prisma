@@ -31,6 +31,8 @@ enum Selection {
   OVER
   UNDER
   SWEEP
+  POINTS_SPREAD
+  SET_SPREAD
 }
 
 enum AlarmStatus {
