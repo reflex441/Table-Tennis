@@ -103,6 +103,12 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
     .filter(Boolean)
     .join(" · ");
 
+  // The bets of the day picked on the calendar (same filters as the calendar).
+  const dayRows = useMemo(
+    () => (selectedDay ? initial.filter((r) => typeOk(r) && pickOk(r) && dayKey(r.startsAt, tz) === selectedDay) : null),
+    [initial, typeOk, pickOk, selectedDay, tz],
+  );
+
   const sorted = useMemo(() => {
     const val = (r: BetRowWithMatch): number => {
       switch (sort.key) {
@@ -117,11 +123,9 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
       }
     };
     // A day picked on the calendar shows that day's bets, whatever the period.
-    const rows = selectedDay
-      ? initial.filter((r) => typeOk(r) && pickOk(r) && dayKey(r.startsAt, tz) === selectedDay)
-      : filtered;
+    const rows = dayRows ?? filtered;
     return [...rows].sort((a, b) => (sort.desc ? val(b) - val(a) : val(a) - val(b)));
-  }, [filtered, initial, typeOk, pickOk, sort, selectedDay, tz]);
+  }, [filtered, dayRows, sort]);
 
   // The most profitable pick (only once at least two picks have settled bets).
   const settledPicks = picks.filter((p) => p.summary.settled > 0).sort((a, b) => b.summary.profit - a.summary.profit);
@@ -296,6 +300,7 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
             <span className="font-normal text-muted"> · {scope}</span>
           </h2>
           <DailyCalendar days={daily} today={today} selected={selectedDay} onSelect={setSelectedDay} unitSize={settings.unitSize} currency={settings.currency} />
+          {selectedDay && dayRows && <DayStats day={selectedDay} rows={dayRows} onClose={() => setSelectedDay(null)} />}
         </div>
       </section>
 
@@ -499,5 +504,96 @@ function SortHeader({ label, k, sort, onSort, right }: { label: string; k: SortK
         {active && (sort.desc ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />)}
       </button>
     </th>
+  );
+}
+
+/** Stats of the day picked on the calendar: totals, Bot vs Personal and each pick. */
+function DayStats({ day, rows, onClose }: { day: string; rows: BetRowWithMatch[]; onClose: () => void }) {
+  const all = summarize(rows);
+  const byType = (["BOT", "PERSONAL"] as const)
+    .map((t) => ({ label: t === "BOT" ? "Bot plays" : "Personal plays", summary: summarize(rows.filter((r) => r.playType === t)) }))
+    .filter((g) => g.summary.bets > 0);
+  const byPick = SELECTIONS.map((sel) => ({ label: SELECTION_LABEL[sel], summary: summarize(rows.filter((r) => r.selection === sel)) })).filter(
+    (g) => g.summary.bets > 0,
+  );
+  const line = (label: string, s: ProfitSummary) => (
+    <tr key={label}>
+      <td className="py-1 pr-2">{label}</td>
+      <td className="py-1 pr-2 text-right tabular text-muted">
+        {s.won}-{s.lost}
+        {s.void ? `-${s.void}` : ""}
+        {s.pending ? ` · ${s.pending} pending` : ""}
+      </td>
+      <td className="py-1 pr-2 text-right tabular text-muted">{pct(s.roi)}</td>
+      <td className="py-1 text-right">
+        <ProfitAmount units={s.profit} />
+      </td>
+    </tr>
+  );
+  return (
+    <section className="mt-3 rounded-lg border border-line p-3" aria-label={`Stats for ${DateTime.fromISO(day).toFormat("cccc d LLLL")}`}>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{DateTime.fromISO(day).toFormat("cccc d LLLL")}</h3>
+        <button className="rounded-md p-1 text-muted hover:text-text" onClick={onClose} aria-label="Close day stats">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {all.bets === 0 ? (
+        <p className="mt-1 text-xs text-muted">No bets on this day.</p>
+      ) : (
+        <>
+          <div className="mt-1">
+            <ProfitAmount units={all.profit} size="lg" />
+          </div>
+          <dl className="mt-2 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
+            <div>
+              <dt className="text-muted">Bets</dt>
+              <dd className="tabular font-semibold">
+                {all.bets}
+                {all.pending ? <span className="block text-[11px] font-normal text-muted">{all.pending} pending</span> : null}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Record</dt>
+              <dd className="tabular font-semibold">
+                {all.won}-{all.lost}
+                {all.void ? `-${all.void}` : ""}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Win rate</dt>
+              <dd className="tabular font-semibold">{all.winRate === null ? "–" : `${all.winRate}%`}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">ROI</dt>
+              <dd className={`tabular font-semibold ${all.roi === null ? "" : all.roi >= 0 ? "text-over" : "text-under"}`}>{pct(all.roi)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Staked</dt>
+              <dd className="tabular font-semibold">{formatUnits(all.staked, false)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Avg odds</dt>
+              <dd className="tabular font-semibold">{all.avgOdds === null ? "–" : all.avgOdds.toFixed(2)}</dd>
+            </div>
+          </dl>
+          <table className="mt-3 w-full text-xs">
+            <thead className="text-left text-[10px] uppercase tracking-wide text-muted">
+              <tr>
+                <th className="pb-1 font-medium" />
+                <th className="pb-1 pr-2 text-right font-medium">Record</th>
+                <th className="pb-1 pr-2 text-right font-medium">ROI</th>
+                <th className="pb-1 text-right font-medium">Profit</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {byType.map((g) => line(g.label, g.summary))}
+              {byPick.map((g) => line(g.label, g.summary))}
+            </tbody>
+          </table>
+          {all.missingOdds > 0 && <p className="mt-2 text-[11px] text-warn">{all.missingOdds} won bet(s) still need odds to count their profit.</p>}
+        </>
+      )}
+    </section>
   );
 }
