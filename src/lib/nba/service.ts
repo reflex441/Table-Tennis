@@ -12,6 +12,7 @@ export interface NbaBetDTO {
   pick: string;
   market: NbaMarket;
   game: string | null;
+  team: string | null;
   player: string | null;
   stat: string | null;
   line: number | null;
@@ -24,6 +25,10 @@ export interface NbaBetDTO {
   profit: number | null;
   settledAt: string | null;
   notes: string | null;
+  /** Settled automatically from ESPN. */
+  autoGraded: boolean;
+  /** What the automatic check found or is waiting for. */
+  gradeNote: string | null;
 }
 
 export function toNbaBetDTO(b: NbaBet): NbaBetDTO {
@@ -33,6 +38,7 @@ export function toNbaBetDTO(b: NbaBet): NbaBetDTO {
     pick: b.pick,
     market: b.market as NbaMarket,
     game: b.game,
+    team: b.team,
     player: b.player,
     stat: b.stat,
     line: b.line,
@@ -45,6 +51,8 @@ export function toNbaBetDTO(b: NbaBet): NbaBetDTO {
     profit: b.profit,
     settledAt: b.settledAt?.toISOString() ?? null,
     notes: b.notes,
+    autoGraded: b.autoGraded,
+    gradeNote: b.gradeNote,
   };
 }
 
@@ -69,6 +77,7 @@ export async function createNbaBet(prisma: PrismaClient, userId: string, input: 
       pick: input.pick,
       market: input.market,
       game: input.game,
+      team: input.team,
       player: input.player,
       stat: input.stat,
       line: input.line,
@@ -97,6 +106,8 @@ export async function updateNbaBet(prisma: PrismaClient, userId: string, id: str
   const stake = input.stake !== undefined ? round2(input.stake) : bet.stake;
   const odds = input.odds !== undefined ? input.odds : bet.odds;
   const result = (input.result ?? bet.result) as BetResult;
+  // Changing what the bet is (or its date) means checking ESPN again soon.
+  const regrade = (["pick", "placedAt", "market", "game", "team", "player", "stat", "line", "side"] as const).some((k) => input[k] !== undefined);
   try {
     const updated = await prisma.nbaBet.update({
       where: { id },
@@ -109,6 +120,7 @@ export async function updateNbaBet(prisma: PrismaClient, userId: string, id: str
         result,
         ...(input.market !== undefined ? { market: input.market } : {}),
         ...(input.game !== undefined ? { game: input.game } : {}),
+        ...(input.team !== undefined ? { team: input.team } : {}),
         ...(input.player !== undefined ? { player: input.player } : {}),
         ...(input.stat !== undefined ? { stat: input.stat } : {}),
         ...(input.line !== undefined ? { line: input.line } : {}),
@@ -118,6 +130,9 @@ export async function updateNbaBet(prisma: PrismaClient, userId: string, id: str
         profit: computeProfit(stake, odds, result),
         settledAt: result === "PENDING" ? null : (bet.settledAt ?? now),
         dedupeKey: nbaDedupeKey(tipster, pick, placedAt),
+        // Settled by you: no longer marked as automatic.
+        ...(input.result !== undefined ? { autoGraded: false } : {}),
+        ...(regrade || input.result === "PENDING" ? { gradeCheckedAt: null, gradeNote: null } : {}),
       },
     });
     return toNbaBetDTO(updated);

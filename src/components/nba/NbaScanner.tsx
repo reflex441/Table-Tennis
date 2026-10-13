@@ -10,8 +10,9 @@ import type { ScannedPick } from "@/lib/gemini/nba";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { useSettings } from "../SettingsProvider";
 import { NbaDatalists, NbaFields, draftToJson, type NbaDraft } from "./NbaBetForm";
+import { statCode } from "@/lib/nba/stats";
 
-type Scanned = ScannedPick & { tipster: string | null; bookmaker: string | null; odds: number | null; placedAt: string | null };
+type Scanned = ScannedPick & { tipster: string | null; bookmaker: string | null; odds: number | null; placedAt: string | null; gameTimeKnown?: boolean };
 
 interface Row {
   key: string;
@@ -53,8 +54,20 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
       bookmaker: b.bookmaker ?? "",
       placedAtLocal: b.placedAt ? toLocalInputValue(b.placedAt, tz) : DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"),
       result: "PENDING",
+      team: b.team ?? "",
+      player: b.player ?? "",
+      stat: statCode(b.stat) ?? b.stat ?? "",
+      line: b.line !== null ? String(b.line) : "",
+      side: b.side ?? "",
     },
-    seen: [b.sender && `Sent by ${b.sender}`, b.oddsText && `odds ${b.oddsText}`, b.bookmakerText && `on ${b.bookmakerText}`, b.postedText].filter(Boolean).join(" · "),
+    seen: [
+      b.sender && `Sent by ${b.sender}`,
+      b.oddsText && `odds ${b.oddsText}`,
+      b.bookmakerText && `on ${b.bookmakerText}`,
+      b.gameTimeText ? `game ${b.gameTimeText}` : b.postedText && `posted ${b.postedText} (no game time shown - check the game date)`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
     status: null,
   });
 

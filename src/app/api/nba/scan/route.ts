@@ -10,6 +10,7 @@ import { MAX_SCREENSHOT_BYTES, detectImageType } from "@/lib/screenshots";
 import { getGeminiApiKey, getGeminiModels, getSettings } from "@/lib/settings";
 import { bookmakerFor, tipsterFor } from "@/lib/nba/aliases";
 import { discordDate, parseOdds } from "@/lib/nba/parse";
+import { gameTimeFromText } from "@/lib/nba/grade";
 
 export const maxDuration = 120;
 
@@ -45,13 +46,19 @@ export const POST = handle(async (request: Request) => {
       schema: NBA_PICKS_JSON_SCHEMA,
     });
     const now = new Date();
-    const bets = normalizeNbaPicks(out.raw).map((b) => ({
-      ...b,
-      tipster: tipsterFor(b.sender, settings.nbaTipsters),
-      bookmaker: bookmakerFor(b.bookmakerText, settings.nbaBookmakers),
-      odds: parseOdds(b.oddsText),
-      placedAt: discordDate(b.postedText, settings.timezone, now)?.toISOString() ?? null,
-    }));
+    const bets = normalizeNbaPicks(out.raw).map((b) => {
+      const posted = discordDate(b.postedText, settings.timezone, now);
+      // The game's date when the slip shows it (that's what finds the result), else the day it was posted.
+      const gameAt = gameTimeFromText(b.gameTimeText, posted ?? now, settings.timezone);
+      return {
+        ...b,
+        tipster: tipsterFor(b.sender, settings.nbaTipsters),
+        bookmaker: bookmakerFor(b.bookmakerText, settings.nbaBookmakers),
+        odds: parseOdds(b.oddsText),
+        placedAt: (gameAt ?? posted)?.toISOString() ?? null,
+        gameTimeKnown: Boolean(gameAt),
+      };
+    });
     return NextResponse.json({ bets });
   } catch (err) {
     if (err instanceof GeminiConfigError) return jsonError(503, "gemini_not_configured", err.message);

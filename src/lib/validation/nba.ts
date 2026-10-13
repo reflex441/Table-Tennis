@@ -16,6 +16,7 @@ const fields = {
   pick: z.string().trim().min(1, "Enter the pick").max(200),
   market: z.enum(NBA_MARKETS),
   game: text(120),
+  team: text(60),
   player: text(60),
   stat: text(20),
   line: z.number().min(-500).max(500).nullish().transform((v) => v ?? null),

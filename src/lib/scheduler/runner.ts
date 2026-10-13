@@ -4,6 +4,7 @@ import { createWebPushSender } from "@/lib/push/web-push";
 import { db } from "@/lib/db";
 import { deleteOldScreenshotsIfDue } from "@/lib/storage";
 import { shortenStoredPlayerNamesIfDue } from "@/lib/matching/tidy-names";
+import { gradeNbaBetsIfDue } from "@/lib/nba/grading-service";
 
 /**
  * Run one dispatch pass against the database. Used by the in-process loop,
@@ -14,6 +15,8 @@ export async function runDispatchOnce(log?: (msg: string) => void): Promise<Disp
   // Housekeeping on the same schedule (hourly): old screenshots, full player names.
   await deleteOldScreenshotsIfDue(db());
   await shortenStoredPlayerNamesIfDue(db());
+  // NBA results from ESPN (every 10 minutes), after the alarms so they're never delayed.
+  await gradeNbaBetsIfDue(db());
   return report;
 }
 

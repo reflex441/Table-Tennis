@@ -14,6 +14,10 @@ export interface ScannedPick {
   pick: string;
   market: NbaMarket;
   game: string | null;
+  /** When the game is, as shown on a slip, e.g. "SAT 8:40PM ET". */
+  gameTimeText: string | null;
+  /** Team the bet is on (moneyline / spread), or the player's team. */
+  team: string | null;
   player: string | null;
   stat: string | null;
   line: number | null;
@@ -45,15 +49,17 @@ export const NBA_PICKS_JSON_SCHEMA = {
             description: "PLAYER_PROP for a player's stat (points, threes, rebounds...), MONEYLINE / SPREAD / TOTAL for a game, FUTURE for season-long bets (titles, win streaks, awards), PARLAY for multis.",
           },
           game: str("The game, e.g. 'New York Knicks @ San Antonio Spurs', if shown."),
+          gameTimeText: str("When the game is played, exactly as shown (often on a bet slip), e.g. 'SAT 8:40PM ET', 'Tonight 7:30 PM'. Null if not shown - never the message's timestamp."),
+          team: str("For a moneyline or spread: the team the bet is on (e.g. 'Celtics'). For a player prop: the player's team if shown. Null otherwise."),
           player: str("For a player prop: the player's full name, e.g. 'De'Aaron Fox'."),
           stat: str("For a player prop: the stat, e.g. '3PM' (made threes), 'PTS', 'REB', 'AST', 'PRA'."),
-          line: num("For a player prop or total: the line, e.g. 'O1.5' or '2+ made threes' -> 1.5."),
+          line: num("For a player prop or total: the line, e.g. 'O1.5' or '2+ made threes' -> 1.5. For a spread: the handicap with its sign, e.g. 'Celtics -4.5' -> -4.5."),
           side: { type: ["string", "null"], enum: ["OVER", "UNDER", null], description: "OVER for 'O1.5' / 'Over' / '2+', UNDER for 'U' / 'Under'." },
           units: num("Units staked, e.g. '1.5u' -> 1.5."),
           oddsText: str("This bet's odds exactly as written, e.g. '1.72' or '+138'. If several bookmakers' odds are listed, the first."),
           bookmakerText: str("This bet's bookmaker as written, e.g. 'Sportsbet' or 'FD'. 'All on Sportsbet' applies to every bet in the message. If several are listed with odds, the first."),
         },
-        required: ["sender", "postedText", "pick", "market", "game", "player", "stat", "line", "side", "units", "oddsText", "bookmakerText"],
+        required: ["sender", "postedText", "pick", "market", "game", "gameTimeText", "team", "player", "stat", "line", "side", "units", "oddsText", "bookmakerText"],
       },
     },
   },
@@ -66,7 +72,8 @@ Return every bet in the screenshot, one entry per bet, in order. A message can h
 - postedText: the message's timestamp as shown ("Yesterday at 6:52 PM", "6/13/2026 5:00 AM").
 - pick: the bet in a few words, using the message's heading for context (e.g. under "Teams to record 8+ consecutive wins", "1.5u - knicks" is "Knicks to record 8+ consecutive wins").
 - units: the stake in units ("0.5u" -> 0.5). oddsText: the odds as written (decimal "1.72" or American "+138"). bookmakerText: where it's placed ("All on Sportsbet" -> "Sportsbet" for each; "+138 FD +137 NV" -> "FD").
-- For player props also fill player, stat, line and side ("De'Aaron Fox O1.5 3PM" -> De'Aaron Fox, 3PM, 1.5, OVER).
+- For player props also fill player, stat, line and side ("De'Aaron Fox O1.5 3PM" -> De'Aaron Fox, 3PM, 1.5, OVER). For moneylines and spreads fill team (and line for a spread, e.g. -4.5).
+- gameTimeText: when the game is played if shown (e.g. "SAT 8:40PM ET" on a slip). Not the message timestamp.
 Use null for anything not shown. Don't invent bets. A bet slip shown under a message is the same bet as the message, not another one.`;
 
 function clean(v: unknown, max: number): string | null {
@@ -95,6 +102,8 @@ export function normalizeNbaPicks(raw: unknown): ScannedPick[] {
         pick: clean(b.pick, 200) ?? "",
         market: isNbaMarket(b.market) ? b.market : "OTHER",
         game: clean(b.game, 120),
+        gameTimeText: clean(b.gameTimeText, 60),
+        team: clean(b.team, 60),
         player: clean(b.player, 60),
         stat: clean(b.stat, 20),
         line: number(b.line, -500, 500),

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Check, Pencil, Plus, RotateCcw, ScanText, Trash2, X } from "lucide-react";
+import { Check, Loader2, Pencil, Plus, RefreshCw, RotateCcw, ScanText, Trash2, X, Zap } from "lucide-react";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { formatDayLabel, formatTime } from "@/lib/format";
@@ -47,6 +47,27 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [chart, setChart] = useState<"nba" | "combined">("nba");
   const [busy, setBusy] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  /** Look up pending bets on ESPN now (it also happens every 10-20 minutes by itself). */
+  const checkResults = async () => {
+    setChecking(true);
+    try {
+      const res = await api<{ report: { checked: number; settled: number; waiting: number; failed: number }; bets: NbaBetDTO[] }>("/api/nba/grade", { method: "POST" });
+      setBets(res.bets);
+      const { checked, settled, waiting, failed } = res.report;
+      notify(
+        checked ? `${settled} bet${settled === 1 ? "" : "s"} settled from ESPN` : "Nothing to check right now",
+        checked
+          ? [waiting && `${waiting} still waiting for the final score`, failed && `${failed} couldn't be checked (ESPN didn't answer)`].filter(Boolean).join(" · ")
+          : "Player props, moneylines, spreads and totals are checked once their game date has come.",
+      );
+    } catch (err) {
+      notify("Couldn't check results", err instanceof Error ? err.message : String(err));
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const dated = useMemo(() => bets.map((b) => ({ ...b, startsAt: b.placedAt })), [bets]);
   const tipsters = useMemo(() => knownTipsters(settings.nbaTipsters, bets.map((b) => b.tipster)), [settings.nbaTipsters, bets]);
@@ -108,8 +129,14 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
             Tipsters&apos; picks, tracked in units · 1u = {settings.currency}
             {settings.unitSize} · separate from table tennis
           </p>
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+            <Zap className="h-3 w-3 text-accent" /> Player props, moneylines, spreads and totals are settled automatically from ESPN once the game is final.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button className="btn-ghost" disabled={checking} onClick={() => void checkResults()} title="Look up pending bets on ESPN now">
+            {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Check results
+          </button>
           <button className="btn-ghost" onClick={() => setOpen("scan")}>
             <ScanText className="h-4 w-4" /> Scan picks
           </button>
@@ -253,7 +280,7 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
             <table className="w-full text-sm">
               <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-3 py-1.5 font-medium">Posted</th>
+                  <th className="px-3 py-1.5 font-medium">Game date</th>
                   <th className="px-3 py-1.5 font-medium">Pick</th>
                   <th className="px-3 py-1.5 text-right font-medium">Units</th>
                   <th className="px-3 py-1.5 text-right font-medium">Odds</th>
@@ -275,6 +302,16 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
                         {b.bookmaker ? ` · ${b.bookmaker}` : ""}
                         {b.game ? ` · ${b.game}` : ""}
                       </span>
+                      {b.gradeNote && (b.autoGraded || b.result === "PENDING") && (
+                        <span className={`flex items-center gap-1 truncate text-[11px] ${b.autoGraded ? "text-accent" : "text-muted"}`} title={b.gradeNote}>
+                          {b.autoGraded && (
+                            <span className="chip shrink-0 gap-0.5 bg-accent/15 px-1 py-0 text-[10px] text-accent">
+                              <Zap className="h-2.5 w-2.5" /> auto
+                            </span>
+                          )}
+                          <span className="truncate">{b.gradeNote}</span>
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-1.5 text-right tabular">{formatUnits(b.stake, false)}</td>
                     <td className="px-3 py-1.5 text-right tabular">{b.odds ? b.odds.toFixed(2) : <span className="text-warn">add</span>}</td>

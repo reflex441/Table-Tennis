@@ -28,6 +28,8 @@ import { capitalizeStoredCompetitions, shortenStoredPlayerNames } from "@/lib/ma
 import { guessCompetition, ownerLeagueIndex } from "@/lib/bets/league-guess";
 import { getPublicProfile } from "@/lib/profiles";
 import { createNbaBet, deleteNbaBet, listNbaBets, updateNbaBet } from "@/lib/nba/service";
+import { gradePendingNbaBets } from "@/lib/nba/grading-service";
+import { fakeEspn } from "./fixtures/espn";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -653,7 +655,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   it("NBA bets: added, settled, edited and kept apart from table tennis", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
-    const base = { tipster: "ADP", market: "FUTURE" as const, game: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, placedAt: "2030-09-20T08:52:00Z" };
+    const base = { tipster: "ADP", market: "FUTURE" as const, game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, placedAt: "2030-09-20T08:52:00Z" };
     const knicks = await createNbaBet(prisma, userId, { ...base, pick: "Knicks to record 8+ consecutive wins", stake: 1.5, odds: 1.72, result: "PENDING" }, now);
     const celtics = await createNbaBet(prisma, userId, { ...base, pick: "Celtics to record 8+ consecutive wins", stake: 1, odds: 1.62, result: "PENDING" }, now);
     await createNbaBet(prisma, userId, { ...base, tipster: "Tyvan", market: "PLAYER_PROP", pick: "De'Aaron Fox Over 1.5 3PM", player: "De'Aaron Fox", stat: "3PM", line: 1.5, side: "OVER", bookmaker: "Sportsbet", stake: 0.5, odds: 2.38, result: "WON" }, now);
@@ -681,6 +683,45 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await getSettings(prisma, userId)).nbaTipsters).toEqual([{ match: "Winible", name: "ADP" }]);
     await updateSettings(prisma, userId, { nbaTipsters: [{ match: "Winible", name: "ADP" }, { match: "Tyvan", name: "TY" }] });
     expect((await getSettings(prisma, userId)).nbaTipsters).toHaveLength(2);
+  });
+
+  it("NBA bets are settled from ESPN once their game is final", async () => {
+    const posted = new Date("2026-06-13T08:00:00Z");
+    const now = new Date("2026-06-14T04:00:00Z");
+    const base = { tipster: "Tyvan", game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, odds: 2.38, stake: 0.5, result: "PENDING" as const };
+    const fox = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "De'Aaron Fox Over 1.5 3PM", player: "De'Aaron Fox", stat: "3PM", line: 1.5, side: "OVER", game: "New York Knicks @ San Antonio Spurs", placedAt: "2026-06-14T00:40:00Z" }, posted);
+    const tatum = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "Tatum O25.5 pts", player: "Jayson Tatum", stat: "PTS", line: 25.5, side: "OVER", placedAt: "2026-06-14T02:00:00Z" }, posted);
+    const knicks = await createNbaBet(prisma, userId, { ...base, tipster: "ADP", market: "MONEYLINE", pick: "Knicks ML", team: "Knicks", odds: 1.9, stake: 1, placedAt: posted.toISOString() }, posted);
+    const future = await createNbaBet(prisma, userId, { ...base, tipster: "ADP", market: "FUTURE", pick: "Knicks 8+ wins", placedAt: posted.toISOString() }, posted);
+    const later = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "Fox later", player: "De'Aaron Fox", stat: "PTS", line: 20.5, placedAt: "2026-06-20T00:00:00Z" }, posted);
+
+    const espn = fakeEspn();
+    expect(await gradePendingNbaBets(prisma, { espn, now })).toEqual({ checked: 3, settled: 2, waiting: 1, failed: 0 });
+    const byId = async (id: string) => prisma.nbaBet.findUniqueOrThrow({ where: { id } });
+    expect(await byId(fox.id)).toMatchObject({ result: "WON", profit: 0.69, autoGraded: true, gradeNote: "De'Aaron Fox: 3 threes (line 1.5).", espnEventId: "401" });
+    expect(await byId(knicks.id)).toMatchObject({ result: "LOST", profit: -1, autoGraded: true });
+    expect(await byId(tatum.id)).toMatchObject({ result: "PENDING", autoGraded: false, gradeNote: expect.stringMatching(/Waiting for the final score/) });
+    // Futures and games that haven't come yet aren't looked up.
+    expect(await byId(future.id)).toMatchObject({ result: "PENDING", gradeNote: null });
+    expect(await byId(later.id)).toMatchObject({ result: "PENDING", gradeNote: null });
+
+    // Checked at most every 20 minutes, unless you press "Check results".
+    const again = fakeEspn();
+    expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date(now.getTime() + 5 * 60_000) })).toMatchObject({ checked: 0 });
+    expect(again.calls).toEqual([]);
+    expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date(now.getTime() + 2 * 60_000), force: true, userId })).toMatchObject({ checked: 1, waiting: 1 });
+
+    // Settling by hand turns "auto" off, and the auto check never overrides it.
+    expect(await updateNbaBet(prisma, userId, fox.id, { result: "LOST" }, now)).toMatchObject({ result: "LOST", autoGraded: false });
+    expect(await updateNbaBet(prisma, userId, tatum.id, { result: "WON" }, now)).toMatchObject({ result: "WON" });
+    expect(await gradePendingNbaBets(prisma, { espn: fakeEspn(), now: new Date(now.getTime() + 3_600_000) })).toMatchObject({ checked: 0 });
+
+    // ESPN down: stays pending, tries again later.
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    const down = await createNbaBet(prisma, sam, { ...base, market: "MONEYLINE", pick: "Spurs ML", team: "Spurs", placedAt: "2026-06-14T00:40:00Z" }, posted);
+    const broken = { scoreboard: async () => Promise.reject(new Error("ESPN returned 503")), boxScore: async () => [] };
+    expect(await gradePendingNbaBets(prisma, { espn: broken, now, userId: sam })).toMatchObject({ checked: 1, failed: 1 });
+    expect(await byId(down.id)).toMatchObject({ result: "PENDING", gradeNote: "Couldn't reach ESPN - will try again." });
   });
 
   it("profit pages from the leaderboard: only for accounts shown on it", async () => {

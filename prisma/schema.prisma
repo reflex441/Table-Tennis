@@ -424,12 +424,22 @@ model NbaBet {
   /// Decimal odds (American odds are converted: +138 -> 2.38).
   odds      Float?
   bookmaker String?
-  /// When the pick was posted.
+  /// Game date and time (when the slip shows it), else when the pick was posted.
   placedAt  DateTime  @db.Timestamptz(3)
+  /// Team the bet is on (moneyline / spread) or the player's team.
+  team      String?
   result    BetResult @default(PENDING)
   profit    Float?
   settledAt DateTime? @db.Timestamptz(3)
   notes     String?
+  /// Settled automatically from ESPN's box score / final score.
+  autoGraded     Boolean   @default(false)
+  /// What the automatic check found, e.g. "Fox: 3 threes" or "Waiting for the final score".
+  gradeNote      String?
+  /// Last automatic check (checked at most every 20 minutes).
+  gradeCheckedAt DateTime? @db.Timestamptz(3)
+  /// ESPN game id the bet was matched to.
+  espnEventId    String?
   /// Tipster + pick + minute posted: the same pick isn't added twice.
   dedupeKey String
 

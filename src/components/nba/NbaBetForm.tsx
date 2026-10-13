@@ -7,6 +7,7 @@ import { api } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { round2, type BetResult } from "@/lib/bets/profit";
 import { NBA_MARKETS, NBA_MARKET_LABEL, parseOdds, type NbaMarket } from "@/lib/nba/parse";
+import { STAT_CODES, STAT_LABEL, statCode } from "@/lib/nba/stats";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { useSettings } from "../SettingsProvider";
 import { DateTimeInput } from "../DateTimeInput";
@@ -21,7 +22,15 @@ export interface NbaDraft {
   bookmaker: string;
   placedAtLocal: string;
   result: BetResult;
+  /** For automatic results: team, player, stat code, line, side. */
+  team: string;
+  player: string;
+  stat: string;
+  line: string;
+  side: "" | "OVER" | "UNDER";
 }
+
+export const EMPTY_GRADING = { team: "", player: "", stat: "", line: "", side: "" as const };
 
 export const RESULT_LABEL: Record<BetResult, string> = { PENDING: "Pending", WON: "Won", LOST: "Lost", VOID: "Void" };
 
@@ -36,6 +45,11 @@ export function draftFromBet(b: NbaBetDTO, tz: string): NbaDraft {
     bookmaker: b.bookmaker ?? "",
     placedAtLocal: toLocalInputValue(b.placedAt, tz),
     result: b.result,
+    team: b.team ?? "",
+    player: b.player ?? "",
+    stat: statCode(b.stat) ?? b.stat ?? "",
+    line: b.line !== null ? String(b.line) : "",
+    side: b.side ?? "",
   };
 }
 
@@ -49,7 +63,9 @@ export function draftToJson(d: NbaDraft, tz: string): string | Record<string, un
   if (d.odds.trim() && odds === null) return "Odds must be decimal (1.72) or American (+138).";
   if (odds === null && d.result === "WON") return "Enter the odds so the win's profit can be counted.";
   const placedAt = fromLocalInputValue(d.placedAtLocal, tz);
-  if (!placedAt) return "Enter the date and time.";
+  if (!placedAt) return "Enter the game date.";
+  const line = d.line.trim() ? Number(d.line) : null;
+  if (line !== null && !Number.isFinite(line)) return "The line must be a number, e.g. 1.5 or -4.5.";
   return {
     tipster: d.tipster.trim(),
     pick: d.pick.trim(),
@@ -60,6 +76,11 @@ export function draftToJson(d: NbaDraft, tz: string): string | Record<string, un
     bookmaker: d.bookmaker.trim() || null,
     placedAt,
     result: d.result,
+    team: d.team.trim() || null,
+    player: d.player.trim() || null,
+    stat: d.stat.trim() || null,
+    line,
+    side: d.side || null,
   };
 }
 
@@ -127,8 +148,8 @@ export function NbaFields({ d, onChange, compact = false }: { d: NbaDraft; onCha
           <span className="mt-0.5 block h-3.5" />
         </label>
         <div>
-          <span className="label">Posted</span>
-          <DateTimeInput value={d.placedAtLocal} onChange={(v) => onChange({ placedAtLocal: v })} label="Posted" compact={compact} />
+          <span className="label">Game date</span>
+          <DateTimeInput value={d.placedAtLocal} onChange={(v) => onChange({ placedAtLocal: v })} label="Game date" compact={compact} />
         </div>
         <label className="w-28">
           <span className="label">Result</span>
@@ -142,12 +163,68 @@ export function NbaFields({ d, onChange, compact = false }: { d: NbaDraft; onCha
           <span className="mt-0.5 block h-3.5" />
         </label>
       </div>
+      <GradingFields d={d} onChange={onChange} pad={pad} />
       {!compact && (
         <label>
           <span className="label">Game (optional)</span>
           <input className="input py-1.5" value={d.game} onChange={(e) => onChange({ game: e.target.value })} placeholder="New York Knicks @ San Antonio Spurs" aria-label="Game" />
         </label>
       )}
+    </div>
+  );
+}
+
+/** What a result is worked out from, depending on the market (player prop: player, stat, line, side...). */
+function GradingFields({ d, onChange, pad }: { d: NbaDraft; onChange: (patch: Partial<NbaDraft>) => void; pad: string }) {
+  const prop = d.market === "PLAYER_PROP";
+  const team = prop || d.market === "MONEYLINE" || d.market === "SPREAD" || d.market === "TOTAL";
+  const line = prop || d.market === "SPREAD" || d.market === "TOTAL";
+  const side = prop || d.market === "TOTAL";
+  if (!team) return <p className="text-[11px] text-muted">{NBA_MARKET_LABEL[d.market]} bets are marked Won / Lost by you.</p>;
+  const known = statCode(d.stat);
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-line px-2 py-1.5" aria-label="Details for automatic results">
+      {prop && (
+        <label className="w-40">
+          <span className="label">Player</span>
+          <input className={`input ${pad}`} value={d.player} onChange={(e) => onChange({ player: e.target.value })} placeholder="De'Aaron Fox" aria-label="Player" />
+        </label>
+      )}
+      <label className="w-36">
+        <span className="label">{d.market === "TOTAL" ? "Team (either)" : prop ? "Team (optional)" : "Team bet on"}</span>
+        <input className={`input ${pad}`} value={d.team} onChange={(e) => onChange({ team: e.target.value })} placeholder={d.market === "SPREAD" ? "Celtics" : "Knicks"} aria-label="Team" />
+      </label>
+      {prop && (
+        <label className="w-36">
+          <span className="label">Stat</span>
+          <select className={`input ${pad}`} value={known ?? d.stat} onChange={(e) => onChange({ stat: e.target.value })} aria-label="Stat">
+            <option value="">—</option>
+            {STAT_CODES.map((c) => (
+              <option key={c} value={c}>
+                {c} · {STAT_LABEL[c]}
+              </option>
+            ))}
+            {!known && d.stat && <option value={d.stat}>{d.stat}</option>}
+          </select>
+        </label>
+      )}
+      {line && (
+        <label className="w-20">
+          <span className="label">{d.market === "SPREAD" ? "Spread" : "Line"}</span>
+          <input className={`input ${pad} tabular`} inputMode="decimal" value={d.line} onChange={(e) => onChange({ line: e.target.value })} placeholder={d.market === "SPREAD" ? "-4.5" : d.market === "TOTAL" ? "220.5" : "1.5"} aria-label="Line" />
+        </label>
+      )}
+      {side && (
+        <label className="w-24">
+          <span className="label">Over / Under</span>
+          <select className={`input ${pad}`} value={d.side} onChange={(e) => onChange({ side: e.target.value as NbaDraft["side"] })} aria-label="Over or under">
+            <option value="">—</option>
+            <option value="OVER">Over</option>
+            <option value="UNDER">Under</option>
+          </select>
+        </label>
+      )}
+      <span className="pb-1.5 text-[10px] text-muted">Used to mark it automatically from ESPN</span>
     </div>
   );
 }
@@ -179,6 +256,7 @@ export function NbaBetForm({
           bookmaker: "",
           placedAtLocal: DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"),
           result: "PENDING",
+          ...EMPTY_GRADING,
         },
   );
   const [busy, setBusy] = useState(false);
