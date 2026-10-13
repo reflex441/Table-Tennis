@@ -109,8 +109,8 @@ async function candidateGames(bet: Gradable, espn: EspnClient): Promise<EspnGame
 }
 
 export type GradeOutcome =
-  | { kind: "settled"; result: Exclude<BetResult, "PENDING">; note: string; eventId: string }
-  | { kind: "wait"; note: string; eventId?: string }
+  | { kind: "settled"; result: Exclude<BetResult, "PENDING">; note: string; eventId: string; gameStart: Date }
+  | { kind: "wait"; note: string; eventId?: string; gameStart?: Date }
   | { kind: "manual"; note: string };
 
 export const AUTO_MARKETS: NbaMarket[] = ["PLAYER_PROP", "MONEYLINE", "SPREAD", "TOTAL"];
@@ -120,6 +120,9 @@ const scoreLine = (g: EspnGame) => {
   const home = g.teams.find((t) => t.homeAway === "home") ?? g.teams[1];
   return `${away.name || away.displayName} ${away.score ?? "?"} - ${home.score ?? "?"} ${home.name || home.displayName}`;
 };
+
+/** ESPN's status in words, e.g. "final", "in progress", "post / not completed". */
+const statusText = (g: EspnGame) => (g.statusName ? g.statusName.replace("STATUS_", "").replace(/_/g, " ").toLowerCase() : g.state || "unknown status");
 
 const isOff = (g: EspnGame) => /POSTPONED|CANCEL|SUSPENDED|FORFEIT/i.test(g.statusName);
 const isFinal = (g: EspnGame) => g.state === "post" && g.completed && !isOff(g);
@@ -135,8 +138,14 @@ export async function gradeBet(bet: Gradable, espn: EspnClient, now = new Date()
   if (!AUTO_MARKETS.includes(bet.market)) return { kind: "manual", note: "Futures, parlays and other bets are marked by you." };
   const games = await candidateGames(bet, espn);
   const stale = now.getTime() - bet.placedAt.getTime() > 2 * 24 * 3_600_000;
-  const notFound = (what: string): GradeOutcome =>
-    stale ? { kind: "manual", note: `Couldn't find ${what} on ESPN - mark it yourself.` } : { kind: "wait", note: `Looking for ${what} on ESPN.` };
+  // Says exactly what was (not) found, so a wrong date or name is easy to spot.
+  const zone = bet.timezone ?? "America/New_York";
+  const where =
+    bet.dateKind === "POSTED"
+      ? `after ${DateTime.fromJSDate(bet.placedAt, { zone }).toFormat("ccc d LLL h:mm a")}`
+      : `on ${DateTime.fromJSDate(bet.placedAt, { zone }).toFormat("ccc d LLL")}`;
+  const notFound = (note: string): GradeOutcome => (stale ? { kind: "manual", note: `${note} Mark it yourself.` } : { kind: "wait", note });
+  if (!games.length) return notFound(`ESPN lists no NBA games ${where}.`);
 
   const teamText = [bet.team, bet.game, bet.pick].filter(Boolean).join(" | ");
 
@@ -146,35 +155,51 @@ export async function gradeBet(bet: Gradable, espn: EspnClient, now = new Date()
     if (!code) return { kind: "manual", note: "Add the stat (e.g. 3PM, PTS) to grade it automatically." };
     if (bet.line === null) return { kind: "manual", note: "Add the line (e.g. 1.5) to grade it automatically." };
     // The player's game: the team's game when known, else look through that day's box scores.
-    const teamGames = bet.team || bet.game ? games.filter((g) => g.teams.some((t) => mentionsTeam([bet.team, bet.game].filter(Boolean).join(" | "), t))) : [];
+    const teamText = [bet.team, bet.game].filter(Boolean).join(" | ");
+    const teamGames = teamText ? games.filter((g) => g.teams.some((t) => mentionsTeam(teamText, t))) : [];
+    if (teamText && !teamGames.length) return notFound(`No ${bet.team || bet.game} game on ESPN ${where} (${games.length} games then).`);
     const candidates = teamGames.length ? teamGames.slice(0, 1) : games;
+    let looked = 0;
     for (const g of candidates) {
       if (g.state === "pre" || isOff(g)) continue;
-      const line = findPlayer(bet.player, await espn.boxScore(g.id));
-      if (!line) continue;
-      if (!isFinal(g)) return { kind: "wait", note: `Waiting for the final score (${scoreLine(g)}).`, eventId: g.id };
-      if (line.didNotPlay || !line.stats) return { kind: "settled", result: "VOID", note: `${line.name} didn't play - void.`, eventId: g.id };
+      const box = await espn.boxScore(g.id);
+      if (box.length) looked++;
+      const line = findPlayer(bet.player, box);
+      if (!line) {
+        if (candidates.length === 1) {
+          return notFound(box.length ? `Couldn't find ${bet.player} in the ${g.name} box score.` : `ESPN has no box score for ${g.name} yet (${statusText(g)}).`);
+        }
+        continue;
+      }
+      if (!isFinal(g)) return { kind: "wait", note: `Waiting for the final score (${scoreLine(g)}, ${statusText(g)}).`, eventId: g.id, gameStart: g.startsAt };
+      if (line.didNotPlay || !line.stats) return { kind: "settled", result: "VOID", note: `${line.name} didn't play - void.`, eventId: g.id, gameStart: g.startsAt };
       const value = statValue(code, line.stats);
       const result = overUnder(value, bet.line, bet.side ?? "OVER");
-      return { kind: "settled", result, note: `${line.name}: ${value} ${STAT_LABEL[code]} (line ${bet.line}).`, eventId: g.id };
+      return { kind: "settled", result, note: `${line.name}: ${value} ${STAT_LABEL[code]} (line ${bet.line}).`, eventId: g.id, gameStart: g.startsAt };
     }
-    if (candidates.some((g) => g.state === "pre")) return { kind: "wait", note: "Waiting for the game to start." };
-    return notFound(bet.player);
+    if (candidates.length === 1 && candidates[0].state === "pre") {
+      return { kind: "wait", note: `Waiting for ${candidates[0].name} to start.`, eventId: candidates[0].id, gameStart: candidates[0].startsAt };
+    }
+    if (candidates.some((g) => g.state === "pre")) return { kind: "wait", note: `Not in the finished games ${where} yet - waiting for the rest to start.` };
+    return notFound(`Couldn't find ${bet.player} in the box scores of the ${looked} games ${where}.`);
   }
 
   // Game bets: the first game of a team the bet mentions.
   const game = games.find((g) => g.teams.some((t) => mentionsTeam(teamText, t)));
-  if (!game) return notFound("the game");
+  if (!game) return notFound(`No ${bet.team || bet.game || "matching"} game on ESPN ${where} (${games.length} games then).`);
   if (isOff(game)) return { kind: "manual", note: `Game ${game.statusName.replace("STATUS_", "").toLowerCase()} - check with your bookmaker.` };
-  if (!isFinal(game)) return { kind: "wait", note: game.state === "in" ? `Waiting for the final score (${scoreLine(game)}).` : "Waiting for the game to start.", eventId: game.id };
+  const found = { eventId: game.id, gameStart: game.startsAt };
+  if (!isFinal(game)) {
+    return { kind: "wait", note: game.state === "pre" ? `Waiting for ${game.name} to start.` : `Waiting for the final score (${scoreLine(game)}, ${statusText(game)}).`, ...found };
+  }
   const [a, b] = game.teams;
-  if (a.score === null || b.score === null) return { kind: "wait", note: "Waiting for the final score.", eventId: game.id };
+  if (a.score === null || b.score === null) return { kind: "wait", note: "Waiting for the final score.", ...found };
   const final = `Final: ${scoreLine(game)}.`;
 
   if (bet.market === "TOTAL") {
     if (bet.line === null || !bet.side) return { kind: "manual", note: "Add the line and Over/Under to grade it automatically." };
     const total = a.score + b.score;
-    return { kind: "settled", result: overUnder(total, bet.line, bet.side), note: `${total} points in total. ${final}`, eventId: game.id };
+    return { kind: "settled", result: overUnder(total, bet.line, bet.side), note: `${total} points in total. ${final}`, ...found };
   }
 
   // Moneyline / spread: the team the bet is on (the team box, else the only team in the pick).
@@ -184,7 +209,7 @@ export async function gradeBet(bet: Gradable, espn: EspnClient, now = new Date()
   const other = game.teams.find((t) => t !== team)!;
   const margin = team.score! - other.score!;
   if (bet.market === "MONEYLINE") {
-    return { kind: "settled", result: margin > 0 ? "WON" : "LOST", note: `${team.name || team.displayName} ${margin > 0 ? "won" : "lost"}. ${final}`, eventId: game.id };
+    return { kind: "settled", result: margin > 0 ? "WON" : "LOST", note: `${team.name || team.displayName} ${margin > 0 ? "won" : "lost"}. ${final}`, ...found };
   }
   if (bet.line === null) return { kind: "manual", note: "Add the spread (e.g. -4.5) to grade it automatically." };
   const covered = margin + bet.line;
@@ -192,7 +217,7 @@ export async function gradeBet(bet: Gradable, espn: EspnClient, now = new Date()
     kind: "settled",
     result: covered > 0 ? "WON" : covered < 0 ? "LOST" : "VOID",
     note: `${team.name || team.displayName} ${bet.line > 0 ? "+" : ""}${bet.line}: ${margin > 0 ? "won" : "lost"} by ${Math.abs(margin)}. ${final}`,
-    eventId: game.id,
+    ...found,
   };
 }
 

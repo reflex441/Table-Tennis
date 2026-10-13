@@ -696,10 +696,11 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const later = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "Fox later", player: "De'Aaron Fox", stat: "PTS", line: 20.5, placedAt: "2026-06-20T00:00:00Z" }, posted);
 
     const espn = fakeEspn();
-    expect(await gradePendingNbaBets(prisma, { espn, now })).toEqual({ checked: 3, settled: 2, waiting: 1, failed: 0 });
+    expect(await gradePendingNbaBets(prisma, { espn, now })).toMatchObject({ checked: 3, settled: 2, waiting: 1, failed: 0 });
     const byId = async (id: string) => prisma.nbaBet.findUniqueOrThrow({ where: { id } });
     expect(await byId(fox.id)).toMatchObject({ result: "WON", profit: 0.69, autoGraded: true, gradeNote: "De'Aaron Fox: 3 threes (line 1.5).", espnEventId: "401" });
-    expect(await byId(knicks.id)).toMatchObject({ result: "LOST", profit: -1, autoGraded: true });
+    // Posted the day before: once the game is found, the date becomes the game's.
+    expect(await byId(knicks.id)).toMatchObject({ result: "LOST", profit: -1, autoGraded: true, dateKind: "GAME", placedAt: new Date("2026-06-14T00:40:00Z") });
     expect(await byId(tatum.id)).toMatchObject({ result: "PENDING", autoGraded: false, gradeNote: expect.stringMatching(/Waiting for the final score/) });
     // Futures and games that haven't come yet aren't looked up.
     expect(await byId(future.id)).toMatchObject({ result: "PENDING", gradeNote: null });
@@ -728,7 +729,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const down = await createNbaBet(prisma, sam, { ...base, market: "MONEYLINE", pick: "Spurs ML", team: "Spurs", placedAt: "2026-06-14T00:40:00Z" }, posted);
     const broken = { scoreboard: async () => Promise.reject(new Error("ESPN returned 503")), boxScore: async () => [] };
     expect(await gradePendingNbaBets(prisma, { espn: broken, now, userId: sam })).toMatchObject({ checked: 1, failed: 1 });
-    expect(await byId(down.id)).toMatchObject({ result: "PENDING", gradeNote: "Couldn't reach ESPN - will try again." });
+    expect(await byId(down.id)).toMatchObject({ result: "PENDING", gradeNote: "Couldn't reach ESPN (ESPN returned 503) - will try again." });
   });
 
   it("profit pages from the leaderboard: only for accounts shown on it", async () => {

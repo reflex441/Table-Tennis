@@ -14,6 +14,8 @@ export interface GradeReport {
   settled: number;
   waiting: number;
   failed: number;
+  /** What each checked bet came to, for the "Check results" message. */
+  notes: { pick: string; note: string; settled: boolean }[];
 }
 
 /**
@@ -41,7 +43,7 @@ export async function gradePendingNbaBets(
     orderBy: { placedAt: "asc" },
     take: opts.limit ?? 60,
   });
-  const report: GradeReport = { checked: 0, settled: 0, waiting: 0, failed: 0 };
+  const report: GradeReport = { checked: 0, settled: 0, waiting: 0, failed: 0, notes: [] };
   // Each user's timezone: a typed-in game date is that day where they are.
   const zones = new Map(
     (await prisma.settings.findMany({ where: { userId: { in: [...new Set(bets.map((b) => b.userId))] } }, select: { userId: true, timezone: true } })).map((z) => [z.userId, z.timezone]),
@@ -67,6 +69,9 @@ export async function gradePendingNbaBets(
         espn,
         now,
       );
+      report.notes.push({ pick: bet.pick, note: outcome.note, settled: outcome.kind === "settled" });
+      // A posted time becomes the game's date once the game is known.
+      const gameDate = bet.dateKind === "POSTED" && outcome.kind !== "manual" && outcome.gameStart ? { placedAt: outcome.gameStart, dateKind: "GAME" } : {};
       if (outcome.kind === "settled") {
         report.settled++;
         // Only if it's still pending (you may have settled it meanwhile).
@@ -80,20 +85,24 @@ export async function gradePendingNbaBets(
             gradeNote: outcome.note,
             gradeCheckedAt: now,
             espnEventId: outcome.eventId,
+            ...gameDate,
           },
         });
       } else {
         if (outcome.kind === "wait") report.waiting++;
         await prisma.nbaBet.update({
           where: { id: bet.id },
-          data: { gradeNote: outcome.note, gradeCheckedAt: now, ...(outcome.kind === "wait" && outcome.eventId ? { espnEventId: outcome.eventId } : {}) },
+          data: { gradeNote: outcome.note, gradeCheckedAt: now, ...(outcome.kind === "wait" && outcome.eventId ? { espnEventId: outcome.eventId } : {}), ...gameDate },
         });
       }
     } catch (err) {
       // ESPN down or changed: try again later, the bet stays pending.
       report.failed++;
-      console.warn(`[nba] couldn't check bet ${bet.id}:`, err instanceof Error ? err.message : err);
-      await prisma.nbaBet.update({ where: { id: bet.id }, data: { gradeNote: "Couldn't reach ESPN - will try again.", gradeCheckedAt: now } });
+      const why = err instanceof Error ? err.message : String(err);
+      console.warn(`[nba] couldn't check bet ${bet.id}: ${why}`);
+      const note = `Couldn't reach ESPN (${why.slice(0, 80)}) - will try again.`;
+      report.notes.push({ pick: bet.pick, note, settled: false });
+      await prisma.nbaBet.update({ where: { id: bet.id }, data: { gradeNote: note, gradeCheckedAt: now } });
     }
   }
   return report;

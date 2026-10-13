@@ -65,7 +65,7 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
       b.sender && `Sent by ${b.sender}`,
       b.oddsText && `odds ${b.oddsText}`,
       b.bookmakerText && `on ${b.bookmakerText}`,
-      b.gameTimeText ? `game ${b.gameTimeText}` : b.postedText && `posted ${b.postedText} (no game time shown - the result is taken from the team's next game)`,
+      b.gameTimeText ? `game ${b.gameTimeText}` : b.postedText && `posted ${b.postedText} (no game day shown - the result comes from the next game after the post, and the date updates once it's found)`,
     ]
       .filter(Boolean)
       .join(" · "),

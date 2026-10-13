@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Check, Loader2, Pencil, Plus, RefreshCw, RotateCcw, ScanText, Trash2, X, Zap } from "lucide-react";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
-import { formatDayLabel, formatTime } from "@/lib/format";
+import { formatDayLabel } from "@/lib/format";
 import { formatUnits, summarize, summarizeBy, type BetResult, type ProfitSummary, type Settleable } from "@/lib/bets/profit";
 import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
 import { knownTipsters } from "@/lib/nba/aliases";
@@ -53,14 +53,19 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
   const checkResults = async () => {
     setChecking(true);
     try {
-      const res = await api<{ report: { checked: number; settled: number; waiting: number; failed: number }; bets: NbaBetDTO[] }>("/api/nba/grade", { method: "POST" });
+      const res = await api<{ report: { checked: number; settled: number; notes: { pick: string; note: string; settled: boolean }[] }; bets: NbaBetDTO[] }>(
+        "/api/nba/grade",
+        { method: "POST" },
+      );
       setBets(res.bets);
-      const { checked, settled, waiting, failed } = res.report;
+      const { checked, settled, notes } = res.report;
+      // Each bet that wasn't settled, with the reason (also shown under the bet).
+      const open = notes.filter((n) => !n.settled);
       notify(
-        checked ? `${settled} bet${settled === 1 ? "" : "s"} settled from ESPN` : "Nothing to check right now",
+        checked ? `${settled} of ${checked} bet${checked === 1 ? "" : "s"} settled from ESPN` : "Nothing to check right now",
         checked
-          ? [waiting && `${waiting} still waiting for the final score`, failed && `${failed} couldn't be checked (ESPN didn't answer)`].filter(Boolean).join(" · ")
-          : "Player props, moneylines, spreads and totals are checked once their game date has come.",
+          ? open.slice(0, 3).map((n) => `${n.pick}: ${n.note}`).join("\n") + (open.length > 3 ? `\n+${open.length - 3} more (see the notes under each bet)` : "")
+          : "Player props, moneylines, spreads and totals that haven't been settled are checked once their game date has come.",
       );
     } catch (err) {
       notify("Couldn't check results", err instanceof Error ? err.message : String(err));
@@ -293,7 +298,8 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
                 {shown.map((b) => (
                   <tr key={b.id} className="hover:bg-panel-2/60">
                     <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted">
-                      {formatDayLabel(b.placedAt, tz)} {formatTime(b.placedAt, tz)}
+                      {formatDayLabel(b.placedAt, tz)}
+                      {b.dateKind === "POSTED" && b.result === "PENDING" && <span className="block text-[10px]">posted - next game</span>}
                     </td>
                     <td className="max-w-[22rem] px-3 py-1.5">
                       <span className="block truncate font-medium">{b.pick}</span>

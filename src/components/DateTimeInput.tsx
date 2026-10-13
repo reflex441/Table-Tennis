@@ -18,11 +18,14 @@ export function DateTimeInput({
   label = "Date and time",
   compact = false,
   max,
+  dateOnly = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   label?: string;
   compact?: boolean;
+  /** Just the day (no time box); the value's time is set to midday. */
+  dateOnly?: boolean;
   /** Latest allowed value (same form as value), for the calendar. */
   max?: string;
 }) {
@@ -43,7 +46,7 @@ export function DateTimeInput({
   const pad = compact ? "py-1" : "";
 
   const setDate = (iso: string | null) => {
-    if (iso) onChange(`${iso}T${timePart || "12:00"}`);
+    if (iso) onChange(`${iso}T${dateOnly ? "12:00" : timePart || "12:00"}`);
   };
 
   return (
@@ -88,13 +91,15 @@ export function DateTimeInput({
             setDate(e.target.value || null);
           }}
         />
-        <input
-          type="time"
-          className={`input ${pad} w-[7.5rem] tabular`}
-          value={timePart}
-          onChange={(e) => e.target.value && onChange(`${datePart || DateTime.now().toISODate()}T${e.target.value}`)}
-          aria-label={`${label}: time`}
-        />
+        {!dateOnly && (
+          <input
+            type="time"
+            className={`input ${pad} w-[7.5rem] tabular`}
+            value={timePart}
+            onChange={(e) => e.target.value && onChange(`${datePart || DateTime.now().toISODate()}T${e.target.value}`)}
+            aria-label={`${label}: time`}
+          />
+        )}
       </div>
       <p className={`mt-0.5 text-[11px] ${valid ? "text-muted" : "text-under"}`}>
         {!valid ? "Use DD/MM/YYYY, e.g. 07/10/2026" : day?.isValid ? day.toFormat("ccc d LLL yyyy") : " "}

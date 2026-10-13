@@ -153,7 +153,7 @@ export function NbaFields({ d, onChange, compact = false }: { d: NbaDraft; onCha
         </label>
         <div>
           <span className="label">Game date</span>
-          <DateTimeInput value={d.placedAtLocal} onChange={(v) => onChange({ placedAtLocal: v, dateKind: "GAME" })} label="Game date" compact={compact} />
+          <DateTimeInput value={d.placedAtLocal} onChange={(v) => onChange({ placedAtLocal: v, dateKind: "GAME" })} label="Game date" compact={compact} dateOnly />
         </div>
         <label className="w-28">
           <span className="label">Result</span>
@@ -196,7 +196,7 @@ function GradingFields({ d, onChange, pad }: { d: NbaDraft; onChange: (patch: Pa
       )}
       <label className="w-36">
         <span className="label">{d.market === "TOTAL" ? "Team (either)" : prop ? "Team (optional)" : "Team bet on"}</span>
-        <input className={`input ${pad}`} value={d.team} onChange={(e) => onChange({ team: e.target.value })} placeholder={d.market === "SPREAD" ? "Celtics" : "Knicks"} aria-label="Team" />
+        <input className={`input ${pad}`} value={d.team} onChange={(e) => onChange({ team: e.target.value })} placeholder={d.market === "SPREAD" ? "e.g. Celtics" : "e.g. Knicks"} aria-label="Team" />
       </label>
       {prop && (
         <label className="w-36">
@@ -229,7 +229,7 @@ function GradingFields({ d, onChange, pad }: { d: NbaDraft; onChange: (patch: Pa
         </label>
       )}
       <span className="pb-1.5 text-[10px] text-muted">
-        Used to mark it automatically from ESPN. Game date = the day it&apos;s played where you are (the time doesn&apos;t matter).
+        Used to mark it automatically from ESPN. Game date = the day it&apos;s played (your date or the US date both work).
       </span>
     </div>
   );
@@ -260,7 +260,7 @@ export function NbaBetForm({
           units: "1",
           odds: "",
           bookmaker: "",
-          placedAtLocal: DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"),
+          placedAtLocal: DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'12:00"),
           dateKind: "GAME",
           result: "PENDING",
           ...EMPTY_GRADING,

@@ -118,6 +118,34 @@ export const SUMMARY_402 = {
   },
 };
 
+export const MAGIC = team("Orlando Magic", "Magic", "ORL", "Orlando");
+export const CAVS = team("Cleveland Cavaliers", "Cavaliers", "CLE", "Cleveland");
+
+/** Preseason, Mon 12 Oct 2026 (US): Magic 105 @ Cavaliers 119 (the user's test game). */
+export const PRESEASON_20261012 = {
+  events: [event("501", "2026-10-12T23:00Z", "post", "STATUS_FINAL", [CAVS, "119"], [MAGIC, "105"])],
+};
+export const SUMMARY_501 = {
+  boxscore: {
+    players: [
+      {
+        team: MAGIC,
+        statistics: [
+          {
+            names: LABELS,
+            keys: KEYS,
+            labels: LABELS,
+            athletes: [
+              player("Paolo Banchero", "P. Banchero", ["18", "1-10", "1-3", "7-10", "2", "5", "7", "2", "0", "1", "3", "2", "-9", "10"]),
+              player("Jonathan Isaac", "J. Isaac", null, true),
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
 /** ESPN client over the fixtures: Sat 13 Jun 2026 (US). Records what was asked. */
 export function fakeEspn(): EspnClient & { calls: string[] } {
   const calls: string[] = [];
@@ -125,11 +153,11 @@ export function fakeEspn(): EspnClient & { calls: string[] } {
     calls,
     async scoreboard(day) {
       calls.push(`day:${day}`);
-      return day === "20260613" ? parseScoreboard(SCOREBOARD_20260613) : [];
+      return day === "20260613" ? parseScoreboard(SCOREBOARD_20260613) : day === "20261012" ? parseScoreboard(PRESEASON_20261012) : [];
     },
     async boxScore(id) {
       calls.push(`box:${id}`);
-      return parseBoxScore(id === "401" ? SUMMARY_401 : id === "402" ? SUMMARY_402 : {});
+      return parseBoxScore(id === "401" ? SUMMARY_401 : id === "402" ? SUMMARY_402 : id === "501" ? SUMMARY_501 : {});
     },
   };
 }

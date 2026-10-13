@@ -10,7 +10,7 @@ import { MAX_SCREENSHOT_BYTES, detectImageType } from "@/lib/screenshots";
 import { getGeminiApiKey, getGeminiModels, getSettings } from "@/lib/settings";
 import { bookmakerFor, tipsterFor } from "@/lib/nba/aliases";
 import { discordDate, parseOdds } from "@/lib/nba/parse";
-import { gameTimeFromText } from "@/lib/nba/grade";
+import { AUTO_MARKETS, gameTimeFromText } from "@/lib/nba/grade";
 
 export const maxDuration = 120;
 
@@ -57,7 +57,8 @@ export const POST = handle(async (request: Request) => {
         odds: parseOdds(b.oddsText),
         placedAt: (gameAt ?? posted)?.toISOString() ?? null,
         // A posted time means "the next game after this"; a game time is the game itself.
-        dateKind: gameAt || !posted ? "GAME" : "POSTED",
+        // (Futures and other bets aren't matched to a game: their date is just the day.)
+        dateKind: gameAt || !posted || !AUTO_MARKETS.includes(b.market) ? "GAME" : "POSTED",
       };
     });
     return NextResponse.json({ bets });

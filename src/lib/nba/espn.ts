@@ -8,6 +8,15 @@ import { DateTime } from "luxon";
  */
 
 export const ESPN_NBA_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+/** Second address serving the same data, tried when the first fails. */
+export const ESPN_NBA_BASE_2 = "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba";
+
+/** Asked like a browser would (some sites turn away unknown programs). */
+const HEADERS = {
+  accept: "application/json, text/plain, */*",
+  "accept-language": "en-AU,en;q=0.9",
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+};
 
 export interface EspnTeam {
   homeAway: "home" | "away" | null;
@@ -148,24 +157,44 @@ export interface EspnClient {
 /**
  * Fetches with a short timeout, caching each day / game for the life of the
  * client (one grading pass), so a game is only downloaded once per pass.
+ * Tries ESPN's second address if the first fails; a day with no games is
+ * asked again for preseason games (listed separately on some days).
  */
 export function createEspnClient(opts: { baseUrl?: string; fetchImpl?: typeof fetch; timeoutMs?: number } = {}): EspnClient {
-  const base = (opts.baseUrl ?? process.env.NBA_STATS_BASE_URL ?? ESPN_NBA_BASE).replace(/\/$/, "");
+  const custom = opts.baseUrl ?? process.env.NBA_STATS_BASE_URL;
+  const bases = (custom ? [custom] : [ESPN_NBA_BASE, ESPN_NBA_BASE_2]).map((b) => b.replace(/\/$/, ""));
   const doFetch = opts.fetchImpl ?? fetch;
   const days = new Map<string, Promise<EspnGame[]>>();
   const boxes = new Map<string, Promise<EspnPlayerLine[]>>();
-  const getJson = async (url: string) => {
-    const res = await doFetch(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? 8_000), headers: { accept: "application/json" }, cache: "no-store" });
-    if (!res.ok) throw new Error(`ESPN returned ${res.status}`);
-    return res.json();
+  const getJson = async (path: string) => {
+    let last: unknown;
+    for (const base of bases) {
+      try {
+        const res = await doFetch(`${base}${path}`, { signal: AbortSignal.timeout(opts.timeoutMs ?? 8_000), headers: HEADERS, cache: "no-store" });
+        if (!res.ok) throw new Error(`ESPN returned ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        last = err;
+      }
+    }
+    const e = last as { name?: string; message?: string; cause?: { code?: string } };
+    const why = e?.name === "TimeoutError" ? "no answer in time" : [e?.message, e?.cause?.code].filter(Boolean).join(": ");
+    throw new Error(why || "network error");
   };
   return {
     scoreboard(day) {
-      if (!days.has(day)) days.set(day, getJson(`${base}/scoreboard?dates=${day}`).then(parseScoreboard));
+      if (!days.has(day)) {
+        days.set(
+          day,
+          getJson(`/scoreboard?dates=${day}&limit=200`)
+            .then(parseScoreboard)
+            .then(async (games) => (games.length ? games : parseScoreboard(await getJson(`/scoreboard?dates=${day}&limit=200&seasontype=1`)))),
+        );
+      }
       return days.get(day)!;
     },
     boxScore(eventId) {
-      if (!boxes.has(eventId)) boxes.set(eventId, getJson(`${base}/summary?event=${encodeURIComponent(eventId)}`).then(parseBoxScore));
+      if (!boxes.has(eventId)) boxes.set(eventId, getJson(`/summary?event=${encodeURIComponent(eventId)}`).then(parseBoxScore));
       return boxes.get(eventId)!;
     },
   };
