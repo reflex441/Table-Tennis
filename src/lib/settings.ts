@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
 import { parseLeagueLinks } from "@/lib/leagues";
 import { isAlarmSound } from "@/lib/alarm-sounds";
+import { parseBookmakers, parseTipsters } from "@/lib/nba/aliases";
 
 /**
  * Make sure the user's settings row exists. `skipDuplicates` compiles to
@@ -61,6 +62,8 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
     showOnLeaderboard: s.showOnLeaderboard,
     tailPlayType: s.tailPlayType,
     leagueLinks: parseLeagueLinks(s.leagueLinks),
+    nbaTipsters: parseTipsters(s.nbaTipsters),
+    nbaBookmakers: parseBookmakers(s.nbaBookmakers),
     // Never include the key itself in this DTO: it is sent to the browser.
     geminiKeySource: s.geminiApiKey ? "settings" : "none",
     geminiKeyHint: maskKey(s.geminiApiKey),

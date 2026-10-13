@@ -137,6 +137,8 @@ describe("bot vs personal classification", () => {
     showOnLeaderboard: true,
   tailPlayType: null,
     leagueLinks: [],
+    nbaTipsters: [],
+    nbaBookmakers: [],
     geminiKeySource: "none",
     geminiKeyHint: null,
   } as SettingsDTO;

@@ -95,6 +95,7 @@ model User {
   screenshots   Screenshot[]
   subscriptions PushSubscription[]
   notifications InAppNotification[]
+  nbaBets       NbaBet[]
 }
 
 /// Server-generated secrets (e.g. the session signing key when SESSION_SECRET is not set).
@@ -354,6 +355,10 @@ model Settings {
   tailPlayType               PlayType?
   /// Bookmaker links per league: [{ "league": "TT Cup", "url": "https://..." }]
   leagueLinks                Json     @default("[]")
+  /// NBA: whose pick a sender is, [{ "match": "Winible", "name": "ADP" }] (null = the built-in list).
+  nbaTipsters                Json?
+  /// NBA: bookmaker codes, [{ "code": "FD", "name": "Sportsbet" }] (null = the built-in list).
+  nbaBookmakers              Json?
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
   defaultReminderMinutes     Int      @default(5)
   timezone                   String   @default("Australia/Sydney")
@@ -391,4 +396,43 @@ model Settings {
   /// Gemini API key entered in Settings. Never returned to the browser;
   /// takes precedence over the GEMINI_API_KEY environment variable.
   geminiApiKey               String?
+}
+
+/// An NBA bet from a tipster's pick (screenshot or typed in). Separate from
+/// table tennis: no alarm, just tracking.
+model NbaBet {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Whose pick it is, e.g. "ADP" (Winible) or "Tyvan".
+  tipster   String
+  /// The pick as written, e.g. "De'Aaron Fox Over 1.5 3PM".
+  pick      String
+  /// FUTURE, PLAYER_PROP, MONEYLINE, SPREAD, TOTAL, PARLAY or OTHER.
+  market    String    @default("OTHER")
+  /// e.g. "New York Knicks @ San Antonio Spurs".
+  game      String?
+  /// Structured prop (for grading from box scores): player, stat ("3PM"), line (1.5), side (OVER / UNDER).
+  player    String?
+  stat      String?
+  line      Float?
+  side      String?
+  /// Units.
+  stake     Float
+  /// Decimal odds (American odds are converted: +138 -> 2.38).
+  odds      Float?
+  bookmaker String?
+  /// When the pick was posted.
+  placedAt  DateTime  @db.Timestamptz(3)
+  result    BetResult @default(PENDING)
+  profit    Float?
+  settledAt DateTime? @db.Timestamptz(3)
+  notes     String?
+  /// Tipster + pick + minute posted: the same pick isn't added twice.
+  dedupeKey String
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, placedAt])
 }

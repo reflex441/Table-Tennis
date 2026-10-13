@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { round2, type BetRow } from "./profit";
+import { round2, type Settleable } from "./profit";
 
 /** P/L of one calendar day (in the user's timezone), in units. */
 export interface DayPL {
@@ -11,7 +11,7 @@ export interface DayPL {
   void: number;
 }
 
-type DatedRow = BetRow & { startsAt: string };
+type DatedRow = Settleable & { startsAt: string };
 
 /** Local calendar day of a match (the day it was played). */
 export function dayKey(iso: string, timezone: string): string {

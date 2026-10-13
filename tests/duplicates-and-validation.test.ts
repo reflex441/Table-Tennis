@@ -90,6 +90,8 @@ const settings: SettingsDTO = {
   showOnLeaderboard: true,
   tailPlayType: null,
   leagueLinks: [],
+  nbaTipsters: [],
+  nbaBookmakers: [],
   geminiKeySource: "none",
   geminiKeyHint: null,
 };

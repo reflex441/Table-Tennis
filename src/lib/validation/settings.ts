@@ -1,3 +1,4 @@
+import type { BookmakerAlias, TipsterAlias } from "@/lib/nba/aliases";
 import { z } from "zod";
 import { isSafeUrl, type LeagueLink } from "@/lib/leagues";
 import { ALARM_SOUNDS, type AlarmSound } from "@/lib/alarm-sounds";
@@ -82,6 +83,12 @@ export const settingsUpdateSchema = z
         }),
       )
       .max(30),
+    nbaTipsters: z
+      .array(z.object({ match: z.string().trim().min(1, "Enter the sender's name").max(60), name: z.string().trim().min(1, "Enter the tipster").max(40) }))
+      .max(50),
+    nbaBookmakers: z
+      .array(z.object({ code: z.string().trim().min(1, "Enter the code").max(30), name: z.string().trim().min(1, "Enter the bookmaker").max(40) }))
+      .max(60),
     /** New Gemini API key, or null to remove the stored key. */
     geminiApiKey: geminiApiKeySchema.nullable(),
   })
@@ -126,6 +133,10 @@ export interface SettingsDTO {
   tailPlayType: "BOT" | "PERSONAL" | null;
   /** Bookmaker link per league, opened from the player names. */
   leagueLinks: LeagueLink[];
+  /** NBA: sender name -> tipster ("Winible" -> "ADP"). */
+  nbaTipsters: TipsterAlias[];
+  /** NBA: bookmaker codes ("FD" -> "Sportsbet"). */
+  nbaBookmakers: BookmakerAlias[];
   /** Whether this account has saved a Gemini key. The key itself is never sent to the browser. */
   geminiKeySource: "settings" | "none";
   /** Masked hint such as "…x7Qk" for a key saved in Settings. */

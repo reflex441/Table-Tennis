@@ -10,11 +10,13 @@ import { Avatar } from "./Avatar";
 import { Onboarding } from "./Onboarding";
 import { useNotifications } from "./NotificationProvider";
 import { DateTime } from "luxon";
+import { BasketballIcon } from "./nba/BasketballIcon";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/profit", label: "Profit", icon: TrendingUp },
+  { href: "/nba", label: "NBA", icon: BasketballIcon },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/tailing", label: "Tailing", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -65,13 +67,13 @@ export function AppShell({ children, dbError, user }: { children: React.ReactNod
       <Onboarding user={user} />
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
               <Link key={href} href={href} className={`flex min-w-0 flex-col items-center gap-0.5 py-2 text-[10px] ${active ? "text-accent" : "text-muted"}`}>
                 <Icon className="h-5 w-5" />
-                {label}
+                <span className="max-w-full truncate">{label}</span>
               </Link>
             );
           })}

@@ -27,6 +27,17 @@ Upload screenshots of upcoming table tennis matches, selections and statistics. 
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL · Prisma 7 (with `@prisma/adapter-pg`) · `@google/genai` (Gemini 3.5 Flash-Lite, with Gemini 3.8 Flash as automatic backup) · `web-push` (VAPID) · Zod 4 · Luxon · Vitest.
 
+## NBA (separate from table tennis)
+
+The **NBA** page tracks tipsters' NBA picks - no alarms, just profit:
+
+- **Scan picks:** screenshot a tipster's message (e.g. Discord). Gemini reads every bet in it: the pick, units ("1.5u"), odds, bookmaker and when it was posted. American odds are turned into decimal (+138 = 2.38). **Whose pick** comes from the sender: names listed in **Settings → NBA** are mapped (Winible → ADP); anyone else is tracked under the name they post with (Tyvan). **Bookmaker codes** are mapped the same way (FD → Sportsbet, "All on Sportsbet" applies to every bet; with several odds listed, the first bookmaker counts). Discord timestamps ("Yesterday at 6:52 PM", "6/13/2026 5:00 AM") are read in your timezone. Check the rows, then add them; the same pick from the same tipster at the same time isn't added twice.
+- **Add bet** types one in by hand; every bet can be edited or deleted.
+- **Settling:** Won / Lost / Void on each pending bet (and back to pending). Profit is in units with your unit size, like table tennis.
+- **Stats:** NBA, table tennis and **combined** totals at the top; each **tipster's** bets, record, win rate, ROI and profit (click one to see only their picks); running profit (NBA or combined), Daily P/L calendar and a by-bookmaker table.
+- Player props also store the player, stat, line and side (e.g. De'Aaron Fox, 3PM, 1.5, OVER), ready for grading from box scores.
+- NBA bets never appear on the table tennis Profit page, the leaderboard or Tailing.
+
 ## Accounts and leaderboard
 
 **Access code (optional):** set `ACCESS_CODE` (e.g. on Vercel → Environment Variables) and every visitor must enter it before they see anything, including the login page. Each device asks once (it's remembered for a year); changing the code makes everyone enter the new one. Codes ignore upper/lower case. The alarm checker (`/api/cron/dispatch`) keeps working without it.

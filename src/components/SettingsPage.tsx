@@ -19,6 +19,7 @@ import { Avatar } from "./Avatar";
 import { TUTORIAL_EVENT } from "./Onboarding";
 import type { SettingsUpdate } from "@/lib/validation/settings";
 import { useIsDesktopApp } from "@/lib/desktop-bridge";
+import { DEFAULT_BOOKMAKERS, DEFAULT_TIPSTERS, type BookmakerAlias, type TipsterAlias } from "@/lib/nba/aliases";
 
 interface Health {
   database: boolean;
@@ -253,6 +254,7 @@ export function SettingsPage() {
       </Section>
 
       <LeagueLinksSection />
+      <NbaSection />
 
       <UnitsSection />
 
@@ -1018,6 +1020,88 @@ function LeagueLinksSection() {
       <p className="mt-2 text-xs text-muted">
         League names are matched ignoring capitals and spaces, so &quot;TT Cup&quot; also matches &quot;TT CUP&quot;. Leagues without a link open the match details instead.
       </p>
+    </Section>
+  );
+}
+
+/** NBA: whose pick a sender is, and what bookmaker codes mean. */
+function NbaSection() {
+  const { settings, update } = useSettings();
+  const [tipsters, setTipsters] = useState<TipsterAlias[]>(settings.nbaTipsters);
+  const [books, setBooks] = useState<BookmakerAlias[]>(settings.nbaBookmakers);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const save = async () => {
+    const t = tipsters.map((r) => ({ match: r.match.trim(), name: r.name.trim() })).filter((r) => r.match && r.name);
+    const b = books.map((r) => ({ code: r.code.trim(), name: r.name.trim() })).filter((r) => r.code && r.name);
+    setBusy(true);
+    setMsg(null);
+    try {
+      await update({ nbaTipsters: t, nbaBookmakers: b });
+      setTipsters(t);
+      setBooks(b);
+      setMsg({ ok: true, text: "Saved." });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pairs = <T extends object>(rows: T[], set: (rows: T[]) => void, keys: [keyof T, keyof T], placeholders: [string, string], labels: [string, string], empty: T) => (
+    <div className="flex flex-col gap-1.5">
+      {rows.map((row, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            className="input min-w-0 flex-1"
+            placeholder={placeholders[0]}
+            value={String(row[keys[0]] ?? "")}
+            onChange={(e) => set(rows.map((r, j) => (j === i ? { ...r, [keys[0]]: e.target.value } : r)))}
+            aria-label={`${labels[0]} ${i + 1}`}
+          />
+          <span className="text-muted">→</span>
+          <input
+            className="input min-w-0 flex-1"
+            placeholder={placeholders[1]}
+            value={String(row[keys[1]] ?? "")}
+            onChange={(e) => set(rows.map((r, j) => (j === i ? { ...r, [keys[1]]: e.target.value } : r)))}
+            aria-label={`${labels[1]} ${i + 1}`}
+          />
+          <button type="button" className="btn-ghost px-2" onClick={() => set(rows.filter((_, j) => j !== i))} aria-label={`Remove ${labels[0].toLowerCase()} ${i + 1}`}>
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+      <button type="button" className="self-start text-[11px] text-accent hover:underline" onClick={() => set([...rows, empty])}>
+        + Add
+      </button>
+    </div>
+  );
+
+  return (
+    <Section title="NBA" description="Used when reading NBA pick screenshots. Anyone not listed is tracked under the name they post with (e.g. Tyvan).">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Tipsters · sender name contains → tipster</h3>
+      {pairs(tipsters, setTipsters, ["match", "name"], ["Winible", "ADP"], ["Sender", "Tipster"], { match: "", name: "" })}
+      <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Bookmakers · code → bookmaker</h3>
+      {pairs(books, setBooks, ["code", "name"], ["FD", "Sportsbet"], ["Code", "Bookmaker"], { code: "", name: "" })}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-primary" disabled={busy} onClick={() => void save()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => {
+            setTipsters(DEFAULT_TIPSTERS);
+            setBooks(DEFAULT_BOOKMAKERS);
+            setMsg({ ok: true, text: "Built-in lists restored - press Save to keep them." });
+          }}
+        >
+          Restore built-in lists
+        </button>
+        {msg && <span className={`text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</span>}
+      </div>
     </Section>
   );
 }

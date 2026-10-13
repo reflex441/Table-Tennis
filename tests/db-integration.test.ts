@@ -15,7 +15,7 @@ import { matchInputSchema } from "@/lib/validation/match";
 import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 import { createPastBet, deleteBet, updateBet } from "@/lib/bets/service";
 import { listBetRows } from "@/lib/bets/queries";
-import { summarize } from "@/lib/bets/profit";
+import { summarize, summarizeBy } from "@/lib/bets/profit";
 import { authenticate, registerUser, signInWithGoogle, updateDisplayName } from "@/lib/auth/accounts";
 import { getMatch, listMatches } from "@/lib/alarms/queries";
 import { deleteMatch } from "@/lib/alarms/service";
@@ -27,6 +27,7 @@ import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
 import { capitalizeStoredCompetitions, shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
 import { guessCompetition, ownerLeagueIndex } from "@/lib/bets/league-guess";
 import { getPublicProfile } from "@/lib/profiles";
+import { createNbaBet, deleteNbaBet, listNbaBets, updateNbaBet } from "@/lib/nba/service";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -648,6 +649,38 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // The same pick again is still a duplicate.
     await expect(createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 1, odds: 1.9, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("NBA bets: added, settled, edited and kept apart from table tennis", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { tipster: "ADP", market: "FUTURE" as const, game: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, placedAt: "2030-09-20T08:52:00Z" };
+    const knicks = await createNbaBet(prisma, userId, { ...base, pick: "Knicks to record 8+ consecutive wins", stake: 1.5, odds: 1.72, result: "PENDING" }, now);
+    const celtics = await createNbaBet(prisma, userId, { ...base, pick: "Celtics to record 8+ consecutive wins", stake: 1, odds: 1.62, result: "PENDING" }, now);
+    await createNbaBet(prisma, userId, { ...base, tipster: "Tyvan", market: "PLAYER_PROP", pick: "De'Aaron Fox Over 1.5 3PM", player: "De'Aaron Fox", stat: "3PM", line: 1.5, side: "OVER", bookmaker: "Sportsbet", stake: 0.5, odds: 2.38, result: "WON" }, now);
+    // The same pick again (e.g. the screenshot scanned twice) is refused.
+    await expect(createNbaBet(prisma, userId, { ...base, pick: "Knicks to record 8+ consecutive wins", stake: 1.5, odds: 1.72, result: "PENDING" }, now)).rejects.toMatchObject({ status: 409 });
+    expect(await updateNbaBet(prisma, userId, knicks.id, { result: "WON" }, now)).toMatchObject({ result: "WON", profit: 1.08, settledAt: now.toISOString() });
+    expect(await updateNbaBet(prisma, userId, celtics.id, { result: "LOST" }, now)).toMatchObject({ profit: -1 });
+    // Changing the units keeps the result and works the profit out again.
+    expect(await updateNbaBet(prisma, userId, knicks.id, { stake: 2 }, now)).toMatchObject({ result: "WON", stake: 2, profit: 1.44 });
+    const bets = await listNbaBets(prisma, userId);
+    expect(summarizeBy(bets, (b) => b.tipster).map((t) => [t.key, t.summary.won, t.summary.lost, t.summary.profit])).toEqual([
+      ["Tyvan", 1, 0, 0.69],
+      ["ADP", 1, 1, 0.44],
+    ]);
+    // Not on the table tennis Profit page or the leaderboard.
+    expect(await listBetRows(prisma, userId)).toEqual([]);
+    // Only the owner can change or delete it.
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    await expect(updateNbaBet(prisma, sam, knicks.id, { result: "LOST" }, now)).rejects.toMatchObject({ status: 404 });
+    await expect(deleteNbaBet(prisma, sam, knicks.id)).rejects.toMatchObject({ status: 404 });
+    expect(await listNbaBets(prisma, sam)).toEqual([]);
+    await deleteNbaBet(prisma, userId, celtics.id);
+    expect((await listNbaBets(prisma, userId)).map((b) => b.pick)).toEqual(["De'Aaron Fox Over 1.5 3PM", "Knicks to record 8+ consecutive wins"]);
+    // Tipster / bookmaker lists: built-in until edited.
+    expect((await getSettings(prisma, userId)).nbaTipsters).toEqual([{ match: "Winible", name: "ADP" }]);
+    await updateSettings(prisma, userId, { nbaTipsters: [{ match: "Winible", name: "ADP" }, { match: "Tyvan", name: "TY" }] });
+    expect((await getSettings(prisma, userId)).nbaTipsters).toHaveLength(2);
   });
 
   it("profit pages from the leaderboard: only for accounts shown on it", async () => {

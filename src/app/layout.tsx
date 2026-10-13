@@ -10,6 +10,7 @@ import { getSettings } from "@/lib/settings";
 import { getCurrentUser } from "@/lib/auth/current";
 import type { PublicUser } from "@/lib/auth/accounts";
 import type { SettingsDTO } from "@/lib/validation/settings";
+import { DEFAULT_BOOKMAKERS, DEFAULT_TIPSTERS } from "@/lib/nba/aliases";
 
 export const metadata: Metadata = {
   title: "TT Alarms - Table tennis match reminders",
@@ -50,6 +51,8 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   showOnLeaderboard: true,
   tailPlayType: null,
   leagueLinks: [],
+  nbaTipsters: DEFAULT_TIPSTERS,
+  nbaBookmakers: DEFAULT_BOOKMAKERS,
   geminiKeySource: "none",
   geminiKeyHint: null,
 };

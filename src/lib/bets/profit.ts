@@ -83,7 +83,10 @@ export interface ProfitSummary {
   missingOdds: number;
 }
 
-export function summarize(rows: BetRow[]): ProfitSummary {
+/** What the totals need from a bet (table tennis or NBA). */
+export type Settleable = Pick<BetRow, "stake" | "odds" | "result" | "profit">;
+
+export function summarize(rows: Settleable[]): ProfitSummary {
   let pending = 0, won = 0, lost = 0, voided = 0, staked = 0, profit = 0, missingOdds = 0, oddsSum = 0, oddsCount = 0;
   for (const r of rows) {
     if (r.odds) {
@@ -122,8 +125,8 @@ export function summarize(rows: BetRow[]): ProfitSummary {
 }
 
 /** Summaries per group (e.g. per competition), most profitable first. */
-export function summarizeBy(rows: BetRow[], key: (r: BetRow) => string): { key: string; summary: ProfitSummary }[] {
-  const groups = new Map<string, BetRow[]>();
+export function summarizeBy<T extends Settleable>(rows: T[], key: (r: T) => string): { key: string; summary: ProfitSummary }[] {
+  const groups = new Map<string, T[]>();
   for (const r of rows) {
     const k = key(r);
     groups.set(k, [...(groups.get(k) ?? []), r]);
