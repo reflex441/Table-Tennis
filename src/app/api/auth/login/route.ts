@@ -15,7 +15,7 @@ export const POST = handle(async (request: Request) => {
   }
   const prisma = db();
   const user = await authenticate(prisma, email, password);
-  if (!user) return jsonError(401, "invalid_credentials", "Wrong email or password. If you signed up with Google, use Continue with Google.");
+  if (!user) return jsonError(401, "invalid_credentials", "Wrong email or password. If you used to sign in with Google, ask the owner for an invite key and create an account with the same email - that sets a password and keeps all your bets.");
   const res = NextResponse.json({ user: toPublicUser(user) });
   res.cookies.set(SESSION_COOKIE, createSessionToken(user.id, await getSessionSecret(prisma)), sessionCookieOptions);
   return res;

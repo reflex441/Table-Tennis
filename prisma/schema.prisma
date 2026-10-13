@@ -96,6 +96,8 @@ model User {
   subscriptions PushSubscription[]
   notifications InAppNotification[]
   nbaBets       NbaBet[]
+  invitesMade   InviteKey[]         @relation("inviteCreator")
+  invitesUsed   InviteKey[]         @relation("inviteUser")
 }
 
 /// Server-generated secrets (e.g. the session signing key when SESSION_SECRET is not set).
@@ -449,4 +451,18 @@ model NbaBet {
 
   @@unique([userId, dedupeKey])
   @@index([userId, placedAt])
+}
+
+/// One-time key needed to create an account; made by the owner in Settings.
+model InviteKey {
+  id          String    @id @default(cuid())
+  /// e.g. "TT-7KQ2-M9XP-4HDR" (stored upper-case).
+  code        String    @unique
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  createdById String?
+  createdBy   User?     @relation("inviteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Set when an account is made with it; a used key can't be used again.
+  usedAt      DateTime? @db.Timestamptz(3)
+  usedById    String?
+  usedBy      User?     @relation("inviteUser", fields: [usedById], references: [id], onDelete: SetNull)
 }

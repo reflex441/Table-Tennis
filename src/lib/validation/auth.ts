@@ -11,6 +11,13 @@ export const registerSchema = z.object({
   name: displayNameSchema,
   email: emailSchema,
   password: passwordSchema,
+  /** One-time key from the owner (not needed for the very first account). */
+  inviteKey: z.string().trim().max(40).nullish(),
+});
+
+export const setPasswordSchema = z.object({
+  currentPassword: z.string().max(200).nullish(),
+  password: passwordSchema,
 });
 
 export const loginSchema = z.object({

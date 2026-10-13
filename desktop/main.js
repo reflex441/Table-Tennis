@@ -22,7 +22,7 @@ const RELOAD_AFTER_HIDDEN_MS = 30 * 60_000;
 app.setAppUserModelId(APP_ID); // Windows needs this for notifications
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required"); // alarm sound without a click
 nativeTheme.themeSource = "dark";
-// Look like regular Chrome (Google sign-in refuses embedded browsers).
+// Look like regular Chrome (some sites refuse embedded browsers).
 // Drops every product token except the standard ones (e.g. "Electron/44", "TTAlarms/1.0.0").
 app.userAgentFallback = app.userAgentFallback.replace(/\s(?!(?:AppleWebKit|Chrome|Safari|Mobile)\/)[\w.-]+\/\S+/g, "");
 
@@ -39,15 +39,6 @@ if (!app.requestSingleInstanceLock()) {
   const isAppUrl = (url) => {
     try {
       return APP_ORIGIN !== null && new URL(url).origin === APP_ORIGIN;
-    } catch {
-      return false;
-    }
-  };
-  // Google sign-in pages stay inside the app; every other site opens in the browser.
-  const isGoogleSignIn = (url) => {
-    try {
-      const { protocol, hostname } = new URL(url);
-      return protocol === "https:" && (hostname === "accounts.google.com" || hostname.endsWith(".accounts.google.com") || hostname === "accounts.youtube.com");
     } catch {
       return false;
     }
@@ -165,7 +156,7 @@ if (!app.requestSingleInstanceLock()) {
       return { action: "deny" };
     });
     win.webContents.on("will-navigate", (event, url) => {
-      if (isAppUrl(url) || isGoogleSignIn(url) || isLocalPage(url)) return;
+      if (isAppUrl(url) || isLocalPage(url)) return;
       event.preventDefault();
       if (/^https?:\/\//.test(url)) shell.openExternal(url);
     });

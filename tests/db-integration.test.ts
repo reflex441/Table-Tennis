@@ -16,7 +16,8 @@ import { getGeminiApiKey, getSettings, updateSettings } from "@/lib/settings";
 import { createPastBet, deleteBet, updateBet } from "@/lib/bets/service";
 import { listBetRows } from "@/lib/bets/queries";
 import { summarize, summarizeBy } from "@/lib/bets/profit";
-import { authenticate, registerUser, signInWithGoogle, updateDisplayName } from "@/lib/auth/accounts";
+import { authenticate, registerUser, setPassword, updateDisplayName } from "@/lib/auth/accounts";
+import { createInvite, deleteInvite, listInvites } from "@/lib/auth/invites";
 import { getMatch, listMatches } from "@/lib/alarms/queries";
 import { deleteMatch } from "@/lib/alarms/service";
 import { getLeaderboard } from "@/lib/leaderboard";
@@ -251,27 +252,62 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(first.email).toBe("will@example.com");
     expect((await prisma.match.findUnique({ where: { id: orphan.id } }))!.userId).toBe(first.id);
     expect((await getSettings(prisma, first.id)).unitSize).toBe(25);
-    const second = await registerUser(prisma, { email: "sam@example.com", name: "Sam", password: "another one" });
+    // Everyone after the first account needs an invite key from the owner.
+    const second = await registerUser(prisma, { email: "sam@example.com", name: "Sam", password: "another one", inviteKey: (await createInvite(prisma, first.id)).code });
     expect(await listMatches(prisma, second.id, null)).toEqual([]);
     expect((await getSettings(prisma, second.id)).unitSize).toBe(10);
     // Each account has its own Gemini key.
     await updateSettings(prisma, first.id, { geminiApiKey: "AIzaSyFirstUsersKey000000000000000" });
     expect(await getGeminiApiKey(prisma, second.id)).toBe("");
 
-    await expect(registerUser(prisma, { email: "WILL@example.com", name: "x", password: "whatever1" })).rejects.toMatchObject({ status: 409 });
+    await expect(registerUser(prisma, { email: "WILL@example.com", name: "x", password: "whatever1", inviteKey: (await createInvite(prisma, first.id)).code })).rejects.toMatchObject({ status: 409 });
     expect((await authenticate(prisma, "will@example.com", "correct horse"))?.id).toBe(first.id);
     expect(await authenticate(prisma, "will@example.com", "wrong")).toBeNull();
     expect(await authenticate(prisma, "nobody@example.com", "correct horse")).toBeNull();
   });
 
-  it("Google sign-in links to the account with the same verified email, or creates one", async () => {
-    const linked = await signInWithGoogle(prisma, { sub: "g-1", email: "OWNER@example.com", emailVerified: true, name: "Owner G" });
-    expect(linked.id).toBe(userId);
-    expect(linked.googleId).toBe("g-1");
-    expect((await signInWithGoogle(prisma, { sub: "g-1", email: "changed@example.com", emailVerified: true, name: null })).id).toBe(userId);
-    const fresh = await signInWithGoogle(prisma, { sub: "g-2", email: "new@example.com", emailVerified: true, name: "New Person" });
-    expect(fresh).toMatchObject({ email: "new@example.com", name: "New Person", passwordHash: null });
-    await expect(signInWithGoogle(prisma, { sub: "g-3", email: "x@example.com", emailVerified: false, name: null })).rejects.toMatchObject({ status: 403 });
+  it("new accounts need a one-time invite key from the owner", async () => {
+    // userId is the first account: the owner.
+    const reg = (email: string, inviteKey?: string) => registerUser(prisma, { email, name: email.split("@")[0], password: "password123", inviteKey });
+    await expect(reg("a@example.com")).rejects.toMatchObject({ status: 403, code: "invite_required" });
+    await expect(reg("a@example.com", "TT-AAAA-BBBB-CCCC")).rejects.toMatchObject({ status: 403, code: "invite_invalid" });
+
+    const key = await createInvite(prisma, userId);
+    expect(key.code).toMatch(/^TT-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
+    // Typed loosely (lower case, no dashes) still works - once.
+    const amy = await reg("amy@example.com", key.code.toLowerCase().replace(/-/g, " "));
+    await expect(reg("bob@example.com", key.code)).rejects.toMatchObject({ code: "invite_invalid" });
+    expect((await listInvites(prisma, userId)).find((k) => k.id === key.id)).toMatchObject({ usedBy: "amy", usedAt: expect.any(String) });
+
+    // A sign-up that fails (email taken) doesn't use the key up.
+    const spare = await createInvite(prisma, userId);
+    await expect(reg("AMY@example.com", spare.code)).rejects.toMatchObject({ status: 409 });
+    expect((await listInvites(prisma, userId)).find((k) => k.id === spare.id)?.usedAt).toBeNull();
+
+    // Two people with the same key at the same moment: only one gets in.
+    const race = await Promise.allSettled([reg("c1@example.com", spare.code), reg("c2@example.com", spare.code)]);
+    expect(race.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+
+    // Only the owner makes, sees or cancels keys; used keys can't be cancelled.
+    await expect(createInvite(prisma, amy.id)).rejects.toMatchObject({ status: 403 });
+    await expect(listInvites(prisma, amy.id)).rejects.toMatchObject({ status: 403 });
+    await expect(deleteInvite(prisma, userId, key.id)).rejects.toMatchObject({ status: 409 });
+    const unused = await createInvite(prisma, userId);
+    await deleteInvite(prisma, userId, unused.id);
+    await expect(reg("d@example.com", unused.code)).rejects.toMatchObject({ code: "invite_invalid" });
+
+    // An account from the old Google sign-in (no password) gets one with a key, keeping its data.
+    const google = await prisma.user.create({ data: { email: "g@example.com", name: "Gee", googleId: "g-1" } });
+    const back = await reg("G@example.com", (await createInvite(prisma, userId)).code);
+    expect(back).toMatchObject({ id: google.id, name: "Gee" });
+    expect((await authenticate(prisma, "g@example.com", "password123"))?.id).toBe(google.id);
+
+    // Setting / changing a password.
+    const nopass = await prisma.user.create({ data: { email: "n@example.com", name: "N" } });
+    await setPassword(prisma, nopass.id, { password: "first-pass" });
+    await expect(setPassword(prisma, nopass.id, { currentPassword: "wrong", password: "second-pass" })).rejects.toMatchObject({ status: 403 });
+    await setPassword(prisma, nopass.id, { currentPassword: "first-pass", password: "second-pass" });
+    expect((await authenticate(prisma, "n@example.com", "second-pass"))?.id).toBe(nopass.id);
   });
 
   it("keeps each account's matches, alarms and devices separate", async () => {

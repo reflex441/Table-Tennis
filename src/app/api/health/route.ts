@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { env, vapidKeyProblem } from "@/lib/env";
 import { getGeminiApiKey } from "@/lib/settings";
 import { getCurrentUser } from "@/lib/auth/current";
-import { googleConfigured } from "@/lib/auth/google";
 import { cronHealthy, lastCronRun } from "@/lib/scheduler/heartbeat";
 import { SCREENSHOT_KEEP_HOURS, storageUsage } from "@/lib/storage";
 
@@ -28,7 +27,6 @@ export async function GET() {
         ...(e.SCHEDULER_MODE === "external"
           ? await lastCronRun(db()).then((last) => ({ cronLastRunAt: last?.toISOString() ?? null, cronHealthy: cronHealthy(last) }))
           : {}),
-        googleSignIn: googleConfigured(),
         storage: { ...(await storageUsage(db()).catch(() => null)), screenshotKeepHours: SCREENSHOT_KEEP_HOURS },
       };
     }

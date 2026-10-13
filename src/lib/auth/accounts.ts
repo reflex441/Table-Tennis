@@ -2,13 +2,13 @@ import type { PrismaClient, User } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
 import { ServiceError } from "@/lib/alarms/service-error";
 import { dummyPasswordHash, hashPassword, verifyPassword } from "./password";
+import { normalizeInviteCode } from "./invite-code";
 
 export interface PublicUser {
   id: string;
   email: string;
   name: string;
   hasPassword: boolean;
-  hasGoogle: boolean;
   /** Profile picture URL (versioned), or null for initials. */
   avatarUrl: string | null;
   /** Finished (or skipped) the first-run tutorial. */
@@ -16,9 +16,9 @@ export interface PublicUser {
 }
 
 /** Fields needed for PublicUser (never loads the picture bytes). */
-export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, googleId: true, avatarUpdatedAt: true, onboardedAt: true } as const;
+export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, avatarUpdatedAt: true, onboardedAt: true } as const;
 
-type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "googleId" | "avatarUpdatedAt" | "onboardedAt">;
+type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "avatarUpdatedAt" | "onboardedAt">;
 
 export function avatarUrl(u: { id: string; avatarUpdatedAt: Date | null }): string | null {
   return u.avatarUpdatedAt ? `/api/users/${u.id}/avatar?v=${u.avatarUpdatedAt.getTime()}` : null;
@@ -30,7 +30,6 @@ export function toPublicUser(u: PublicUserSource): PublicUser {
     email: u.email,
     name: u.name,
     hasPassword: Boolean(u.passwordHash),
-    hasGoogle: Boolean(u.googleId),
     avatarUrl: avatarUrl(u),
     onboarded: Boolean(u.onboardedAt),
   };
@@ -69,12 +68,38 @@ async function claimOrphanData(prisma: PrismaClient, userId: string): Promise<vo
   ]);
 }
 
-export async function registerUser(prisma: PrismaClient, input: { email: string; name: string; password: string }, now = new Date()): Promise<User> {
+/**
+ * Create an account with email + password. Needs an unused invite key (except
+ * the very first account); the key is used up in the same step, so it can't
+ * be used twice and isn't lost if this fails. An account from the old Google
+ * sign-in (same email, no password yet) gets this password instead, keeping
+ * everything in it.
+ */
+export async function registerUser(
+  prisma: PrismaClient,
+  input: { email: string; name: string; password: string; inviteKey?: string | null },
+  now = new Date(),
+): Promise<User> {
   const email = normalizeEmail(input.email);
+  const code = input.inviteKey?.trim() ? normalizeInviteCode(input.inviteKey) : null;
+  const firstAccount = (await prisma.user.count()) === 0;
+  if (!firstAccount && !code) throw new ServiceError("Enter your invite key - ask the owner for one.", 403, "invite_required");
   const passwordHash = await hashPassword(input.password);
   let user: User;
   try {
-    user = await prisma.user.create({ data: { email, name: input.name.trim(), passwordHash, lastLoginAt: now } });
+    user = await prisma.$transaction(async (tx) => {
+      if (code) {
+        const claimed = await tx.inviteKey.updateMany({ where: { code, usedAt: null }, data: { usedAt: now } });
+        if (claimed.count !== 1) throw new ServiceError("That invite key isn't valid or has already been used.", 403, "invite_invalid");
+      }
+      const existing = await tx.user.findUnique({ where: { email } });
+      if (existing?.passwordHash) throw new ServiceError("An account with this email already exists. Sign in instead.", 409, "email_taken");
+      const made = existing
+        ? await tx.user.update({ where: { id: existing.id }, data: { passwordHash, lastLoginAt: now } })
+        : await tx.user.create({ data: { email, name: input.name.trim(), passwordHash, lastLoginAt: now } });
+      if (code) await tx.inviteKey.update({ where: { code }, data: { usedById: made.id } });
+      return made;
+    });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       throw new ServiceError("An account with this email already exists. Sign in instead.", 409, "email_taken");
@@ -94,25 +119,13 @@ export async function authenticate(prisma: PrismaClient, emailRaw: string, passw
 }
 
 /**
- * Sign in with Google: the account linked to this Google id, else the account
- * with the same (Google-verified) email, which gets linked; else a new account.
+ * Set or change the password: changing one needs the current password; an
+ * account without one (made with the old Google sign-in) just sets it.
  */
-export async function signInWithGoogle(
-  prisma: PrismaClient,
-  profile: { sub: string; email: string; emailVerified: boolean; name: string | null },
-  now = new Date(),
-): Promise<User> {
-  const linked = await prisma.user.findUnique({ where: { googleId: profile.sub } });
-  if (linked) return prisma.user.update({ where: { id: linked.id }, data: { lastLoginAt: now } });
-  if (!profile.emailVerified) throw new ServiceError("Your Google email address is not verified.", 403, "email_unverified");
-  const email = normalizeEmail(profile.email);
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return prisma.user.update({ where: { id: existing.id }, data: { googleId: profile.sub, lastLoginAt: now } });
+export async function setPassword(prisma: PrismaClient, userId: string, input: { currentPassword?: string | null; password: string }): Promise<void> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
+  if (user.passwordHash && !(await verifyPassword(input.currentPassword ?? "", user.passwordHash))) {
+    throw new ServiceError("Your current password is wrong.", 403, "wrong_password");
   }
-  const user = await prisma.user.create({
-    data: { email, name: (profile.name || email.split("@")[0]).slice(0, 40), googleId: profile.sub, lastLoginAt: now },
-  });
-  await claimOrphanData(prisma, user.id);
-  return user;
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(input.password) } });
 }

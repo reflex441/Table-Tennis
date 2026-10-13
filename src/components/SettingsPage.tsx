@@ -261,6 +261,7 @@ export function SettingsPage() {
       <AverageOddsSection />
 
       <AccountSection />
+      <InviteKeysSection />
 
       <Section title="Server status">
         {health ? (
@@ -862,7 +863,6 @@ function AccountSection() {
           <div className="min-w-0 flex-1">
             <p className="text-sm">
               Signed in as <b>{user.name}</b> <span className="text-muted">({user.email})</span>
-              {user.hasGoogle && <span className="ml-2 chip bg-line text-muted">Google</span>}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <label className="btn-ghost cursor-pointer py-1 text-xs">
@@ -907,6 +907,7 @@ function AccountSection() {
         </form>
       )}
       <p className="mt-1 text-xs text-muted">Shown in the app and on the leaderboard. Your email is never shown to others.</p>
+      {user && <PasswordForm hasPassword={user.hasPassword} onSaved={() => setUser({ ...user, hasPassword: true })} />}
       <Toggle
         label="Show me on the leaderboard"
         hint="Your display name and results are shown, and others can open your profit page (your bets) by clicking your name - never your email or screenshots. Turn off to hide both."
@@ -922,6 +923,198 @@ function AccountSection() {
         </button>
       </div>
       <p className="mt-1 text-xs text-muted">Signing out also stops this browser getting your alarm notifications.</p>
+    </Section>
+  );
+}
+
+/** Set a password (accounts from the old Google sign-in have none) or change it. */
+function PasswordForm({ hasPassword, onSaved }: { hasPassword: boolean; onSaved: () => void }) {
+  const [open, setOpen] = useState(!hasPassword);
+  const [current, setCurrent] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const save = async () => {
+    if (password !== confirm) return setMsg({ ok: false, text: "The new passwords don't match." });
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api("/api/auth/me/password", { method: "POST", json: { currentPassword: hasPassword ? current : null, password } });
+      setMsg({ ok: true, text: hasPassword ? "Password changed." : "Password set - you can now sign in with your email and this password." });
+      setCurrent("");
+      setPassword("");
+      setConfirm("");
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3">
+      {!hasPassword && (
+        <p className="mb-2 rounded-md border border-warn/40 bg-warn/10 px-2 py-1.5 text-xs text-warn">
+          Your account has no password (it was made with Google sign-in, which has been removed). Set one now so you can sign in again.
+        </p>
+      )}
+      {open ? (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          {hasPassword && (
+            <label className="min-w-[10rem] flex-1">
+              <span className="label">Current password</span>
+              <input type="password" className="input" aria-label="Current password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+            </label>
+          )}
+          <label className="min-w-[10rem] flex-1">
+            <span className="label">New password</span>
+            <input type="password" className="input" aria-label="New password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={8} required />
+          </label>
+          <label className="min-w-[10rem] flex-1">
+            <span className="label">Confirm new password</span>
+            <input type="password" className="input" aria-label="Confirm new password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
+          </label>
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {hasPassword ? "Change password" : "Set password"}
+          </button>
+          {hasPassword && (
+            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          )}
+        </form>
+      ) : (
+        <button type="button" className="btn-ghost text-xs" onClick={() => setOpen(true)}>
+          Change password
+        </button>
+      )}
+      {msg && <p className={`mt-1 text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
+interface Invite {
+  id: string;
+  code: string;
+  createdAt: string;
+  usedAt: string | null;
+  usedBy: string | null;
+}
+
+/** The owner's one-time invite keys (only shown to the owner). */
+function InviteKeysSection() {
+  const [invites, setInvites] = useState<Invite[] | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    // Not the owner (403): the section stays hidden.
+    void api<{ invites: Invite[] }>("/api/invites")
+      .then((r) => !cancelled && setInvites(r.invites))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!invites) return null;
+
+  const copy = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(code);
+    } catch {
+      setCopied(null);
+    }
+  };
+  const generate = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { invite } = await api<{ invite: Invite }>("/api/invites", { method: "POST" });
+      setInvites((prev) => [invite, ...(prev ?? [])]);
+      setFresh(invite.code);
+      void copy(invite.code);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (inv: Invite) => {
+    if (!window.confirm(`Cancel invite key ${inv.code}? It won't work any more.`)) return;
+    try {
+      await api(`/api/invites/${inv.id}`, { method: "DELETE" });
+      setInvites((prev) => (prev ?? []).filter((i) => i.id !== inv.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+  const unused = invites.filter((i) => !i.usedAt);
+  const used = invites.filter((i) => i.usedAt);
+  const day = (iso: string) => DateTime.fromISO(iso).toFormat("d LLL yyyy");
+
+  return (
+    <Section title="Invite keys" description="New accounts need a key from you. Each key works once - send it to the person, they enter it when they create their account.">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-primary" disabled={busy} onClick={() => void generate()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} Generate key
+        </button>
+        {fresh && (
+          <span className="flex items-center gap-2 rounded-md border border-over/40 bg-over/10 px-2 py-1">
+            <code className="font-mono text-sm tracking-wider text-text">{fresh}</code>
+            <button type="button" className="text-xs text-accent hover:underline" onClick={() => void copy(fresh)}>
+              {copied === fresh ? "Copied" : "Copy"}
+            </button>
+          </span>
+        )}
+      </div>
+      {error && <p className="mt-2 text-xs text-under">{error}</p>}
+      <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Not used yet ({unused.length})</h3>
+      {unused.length === 0 ? (
+        <p className="text-xs text-muted">None - generate one when someone needs an account.</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
+          {unused.map((i) => (
+            <li key={i.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+              <code className="font-mono tracking-wider">{i.code}</code>
+              <span className="text-[11px] text-muted">made {day(i.createdAt)}</span>
+              <span className="ml-auto flex gap-1">
+                <button type="button" className="btn-ghost px-2 py-0.5 text-xs" onClick={() => void copy(i.code)}>
+                  {copied === i.code ? "Copied" : "Copy"}
+                </button>
+                <button type="button" className="btn-ghost px-1.5 py-0.5 text-under hover:bg-under/10" onClick={() => void remove(i)} aria-label={`Cancel key ${i.code}`} title="Cancel this key">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {used.length > 0 && (
+        <>
+          <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Used ({used.length})</h3>
+          <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
+            {used.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center gap-2 px-2 py-1.5 text-sm text-muted">
+                <code className="font-mono tracking-wider line-through">{i.code}</code>
+                <span className="text-xs">
+                  used by <span className="text-text">{i.usedBy}</span> on {day(i.usedAt!)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </Section>
   );
 }

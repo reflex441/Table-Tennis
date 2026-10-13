@@ -45,7 +45,8 @@ The **NBA** page tracks tipsters' NBA picks - no alarms, just profit:
 
 **First-run tutorial:** after signing up, a short tutorial asks where your picks come from. **Upload** needs **Cage Capital** screenshots (plus a free Gemini key); without Cage Capital you can get the picks from **Tailing**. It then asks which bookmaker you use and fills in **League links** for you: **Ladbrokes** (recommended: you rarely get limited, and it has Czech Liga Pro) or **Sportsbet** (you get limited extremely fast; TT Cup and TT Elite only). Next you choose when the alarm goes off. Ladbrokes publishes Over/Under points lines 5 minutes before a match and Sportsbet 30 minutes before, so picking a bookmaker pre-selects that time. After that it covers notifications, unit size (1u should be 1-2% of your bankroll) and how alarms and profit tracking work. It also shows what to do when the alarm goes off: click the players' names to open the league on your bookmaker, then bet in the **Total** market (Over/Under). It can't be skipped the first time and shows once per account; replay it (and close it any time) from **Settings → Account → Show the tutorial again**.
 
-- **You need an account to use the app.** Sign up with a display name, email and password, or use **Continue with Google** (when the server has Google sign-in set up). A Google sign-in with the same email as an existing account signs into that account.
+- **You need an account to use the app.** Sign up with an **invite key**, a display name, email and password. The very first account (the owner) needs no key; after that every new account needs one, and each key works **once**. The owner makes keys in **Settings → Invite keys** (generate, copy, cancel unused ones, and see who used which). A key is used up in the same step that creates the account, so it can't be used twice (and isn't lost if the sign-up fails). Passwords can be changed in **Settings → Account**.
+- **Google sign-in has been removed.** Accounts made with it have no password: if still signed in, set one in **Settings → Account**; otherwise create an account with an invite key and the **same email** - that sets the password on the existing account and keeps everything in it.
 - **Each account is separate:** its own uploads, alarms, bets, Profit page, devices, settings and **Gemini API key** (Settings → Gemini API). Alarm notifications go only to the devices of the account that created the match. Signing out also stops that browser getting your notifications.
 - **Upgrading an existing install:** the first account created takes over all matches, bets and settings that existed before accounts were added.
 - **Leaderboard:** ranks accounts by **most units profited** (everyone with a settled bet) and **highest ROI** (only accounts with at least **100 settled bets**; until then the page shows how many more you need). Only settled bets count. Emails listed in `LEADERBOARD_ALWAYS_SHOW` (in `.env`, comma-separated) are ranked by ROI regardless of the minimum. You can filter to Bot or Personal plays. Only display names are shown, never emails. Click a name to open that account's profit page (read-only: its bets, graph, calendar and stats; the tailed account's name opens Tailing). Turn off **Settings → Account → Show me on the leaderboard** to hide yourself from both.
@@ -77,7 +78,6 @@ Placed the bet before the reminder? Click **Bet placed** on the card: the units 
 | VAPID key pair for Web Push | **Yes**, for background push | Run `npm run vapid` locally. No account is needed. | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | Cron secret | Only for `SCHEDULER_MODE=external` | `openssl rand -hex 32` | `CRON_SECRET` |
 | Session secret | Optional (one is generated and stored in the database if unset) | `openssl rand -hex 32` | `SESSION_SECRET` |
-| Google sign-in | Optional ("Continue with Google") | Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web application). Redirect URI: `<APP_URL>/api/auth/google/callback` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_URL` |
 | External cron service | Only on serverless hosts (Vercel etc.) | cron-job.org, Upstash QStash, Vercel Cron (Pro) | — |
 
 All secrets stay on the server. The browser only receives the VAPID **public** key, from `/api/push/config` at runtime. `.env` is git-ignored, and `.env.example` documents every variable.
@@ -93,7 +93,6 @@ npm install
 # 2. Configure environment
 cp .env.example .env
 #    - set DATABASE_URL
-#    - optional: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / APP_URL for "Continue with Google"
 #    - npm run vapid  -> paste both keys into VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
 
 # 3. Create the database schema
@@ -183,7 +182,6 @@ All three have free plans. Together they run the app 24/7 with your PC off.
    - Create a cron job that runs **every minute**.
    - URL: `https://<your-app>.vercel.app/api/cron/dispatch`.
    - Under **Advanced → Headers**, add `Authorization` = `Bearer <your CRON_SECRET>`.
-4. **Google sign-in (optional):** add `https://<your-app>.vercel.app/api/auth/google/callback` to the OAuth client's redirect URIs.
 
 **Free plan limits:**
 - Alarms are checked once a minute, so one can be up to about a minute late.
@@ -199,7 +197,7 @@ All three have free plans. Together they run the app 24/7 with your PC off.
 `desktop/` is a small Electron app: an installable Windows program that opens your hosted app in its own window.
 - It sits in the tray when closed, so alarms still ring and Windows notifications still show.
 - It starts with Windows (untick **Start with Windows** in the tray menu to stop that).
-- Bookmaker links open in your normal browser. Google sign-in works inside the app.
+- Bookmaker links open in your normal browser.
 
 App changes reach it automatically (it loads your server). You only need a new installer when `desktop/` itself changes.
 
@@ -224,7 +222,7 @@ Web Push isn't available inside Electron. The desktop app shows its own Windows 
 ### Docker Compose (Postgres + web + worker)
 
 ```bash
-cp .env.example .env     # fill in the VAPID keys (and Google sign-in, if wanted)
+cp .env.example .env     # fill in the VAPID keys
 docker compose up -d --build
 # open http://localhost:3000 (put it behind HTTPS for push - see below)
 ```
@@ -377,7 +375,6 @@ tests/                       # Vitest suites
 - **"Gemini is overloaded" / 503:** Google's servers are busy. The app tries the main model and then the backup model straight away, and repeats that up to 3 rounds. If all fail, wait a minute and press **Retry**, or pick a different model in **Settings → Gemini API**. You can enter several backup models separated by commas.
 - **"Gemini model not found" (404):** the model name is wrong for your key. Press **Test current key** in Settings: it lists the models your key can use. Click one to use it.
 - **Scan fails with `gemini_not_configured`:** add your Gemini API key in **Settings → Gemini API** (every account needs its own). With `gemini_unavailable` (429/5xx), wait and click *Rescan*.
-- **"Continue with Google" says it isn't set up:** set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and restart. **Google says `redirect_uri_mismatch`:** add exactly `<APP_URL>/api/auth/google/callback` to the OAuth client's Authorized redirect URIs, and set `APP_URL` to the address you open the app on.
 - **No push notifications:**
   - Check Settings → Server status (VAPID keys) and the permission state.
   - Use *Send test notification*.
