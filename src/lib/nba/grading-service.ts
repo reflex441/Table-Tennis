@@ -1,7 +1,8 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { computeProfit } from "@/lib/bets/profit";
 import { createEspnClient, type EspnClient } from "./espn";
-import { AUTO_MARKETS, gradeBet } from "./grade";
+import { DateTime } from "luxon";
+import { AUTO_MARKETS, RESULT_DELAY_MS, gradeBet, locateGame, type Gradable } from "./grade";
 
 /** A bet is checked at most this often (ESPN is only asked about games that could be over). */
 const RECHECK_MS = 20 * 60_000;
@@ -20,9 +21,11 @@ export interface GradeReport {
 
 /**
  * Check pending NBA bets against ESPN and settle the ones whose game is over.
- * Only bets on player props, moneylines, spreads and totals whose game date
- * has come are looked at; each is checked at most every 20 minutes (every
- * minute with `force`, the "Check results" button). Stops after `budgetMs`.
+ * Only player props, moneylines, spreads and totals are looked at. On its own
+ * (the cron), a bet's game is found once (its tip-off, from the scoreboard),
+ * then nothing more happens until about an hour after the game should be over
+ * (tip-off + 3½ hours); after that it's checked every 20 minutes until final.
+ * `force` (the "Check results" button) checks right away. Stops after `budgetMs`.
  */
 export async function gradePendingNbaBets(
   prisma: PrismaClient,
@@ -38,7 +41,11 @@ export async function gradePendingNbaBets(
       result: "PENDING",
       market: { in: AUTO_MARKETS },
       placedAt: { lte: new Date(now.getTime() + 24 * 3_600_000), gte: new Date(now.getTime() - (opts.force ? MAX_AGE_FORCED_MS : MAX_AGE_MS)) },
-      OR: [{ gradeCheckedAt: null }, { gradeCheckedAt: { lte: new Date(now.getTime() - recheck) } }],
+      AND: [
+        { OR: [{ gradeCheckedAt: null }, { gradeCheckedAt: { lte: new Date(now.getTime() - recheck) } }] },
+        // Not before an hour after the game should be over (unless the button is pressed).
+        ...(opts.force ? [] : [{ OR: [{ gameStartsAt: null }, { gameStartsAt: { lte: new Date(now.getTime() - RESULT_DELAY_MS) } }] }]),
+      ],
     },
     orderBy: { placedAt: "asc" },
     take: opts.limit ?? 60,
@@ -52,26 +59,49 @@ export async function gradePendingNbaBets(
     if (Date.now() - started > (opts.budgetMs ?? 20_000)) break;
     report.checked++;
     try {
-      const outcome = await gradeBet(
-        {
-          market: bet.market as never,
-          pick: bet.pick,
-          team: bet.team,
-          game: bet.game,
-          player: bet.player,
-          stat: bet.stat,
-          line: bet.line,
-          side: bet.side as never,
-          placedAt: bet.placedAt,
-          dateKind: bet.dateKind === "POSTED" ? "POSTED" : "GAME",
-          timezone: zones.get(bet.userId) ?? "Australia/Sydney",
-        },
-        espn,
-        now,
-      );
+      const timezone = zones.get(bet.userId) ?? "Australia/Sydney";
+      const gradable: Gradable = {
+        market: bet.market as never,
+        pick: bet.pick,
+        team: bet.team,
+        game: bet.game,
+        player: bet.player,
+        stat: bet.stat,
+        line: bet.line,
+        side: bet.side as never,
+        placedAt: bet.placedAt,
+        dateKind: bet.dateKind === "POSTED" ? "POSTED" : "GAME",
+        timezone,
+      };
+      // First time on its own: just find when the game is, and wait until it's been over an hour.
+      if (!opts.force && !bet.gameStartsAt) {
+        const found = await locateGame(gradable, espn);
+        if (found && now.getTime() < found.start.getTime() + RESULT_DELAY_MS) {
+          const from = DateTime.fromMillis(found.start.getTime() + RESULT_DELAY_MS, { zone: timezone }).toFormat("ccc h:mm a");
+          const note = `Result checked automatically from about ${from} (an hour after the game) - or press Check results.`;
+          report.notes.push({ pick: bet.pick, note, settled: false });
+          report.waiting++;
+          await prisma.nbaBet.update({
+            where: { id: bet.id },
+            data: {
+              gameStartsAt: found.start,
+              gradeNote: note,
+              gradeCheckedAt: now,
+              ...(found.exact ? { espnEventId: found.eventId } : {}),
+              // A posted time becomes the game's date once the game is known.
+              ...(found.exact && bet.dateKind === "POSTED" ? { placedAt: found.start, dateKind: "GAME" } : {}),
+            },
+          });
+          continue;
+        }
+      }
+      const outcome = await gradeBet(gradable, espn, now);
       report.notes.push({ pick: bet.pick, note: outcome.note, settled: outcome.kind === "settled" });
       // A posted time becomes the game's date once the game is known.
-      const gameDate = bet.dateKind === "POSTED" && outcome.kind !== "manual" && outcome.gameStart ? { placedAt: outcome.gameStart, dateKind: "GAME" } : {};
+      const gameDate = {
+        ...(outcome.kind !== "manual" && outcome.gameStart ? { gameStartsAt: outcome.gameStart } : {}),
+        ...(bet.dateKind === "POSTED" && outcome.kind !== "manual" && outcome.gameStart ? { placedAt: outcome.gameStart, dateKind: "GAME" } : {}),
+      };
       if (outcome.kind === "settled") {
         report.settled++;
         // Only if it's still pending (you may have settled it meanwhile).

@@ -687,7 +687,8 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   it("NBA bets are settled from ESPN once their game is final", async () => {
     const posted = new Date("2026-06-13T08:00:00Z");
-    const now = new Date("2026-06-14T04:00:00Z");
+    // An hour after the Knicks @ Spurs game (tip-off 00:40, so over by about 03:10).
+    const now = new Date("2026-06-14T04:15:00Z");
     const base = { tipster: "Tyvan", game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, odds: 2.38, stake: 0.5, result: "PENDING" as const, dateKind: "GAME" as const };
     const fox = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "De'Aaron Fox Over 1.5 3PM", player: "De'Aaron Fox", stat: "3PM", line: 1.5, side: "OVER", game: "New York Knicks @ San Antonio Spurs", placedAt: "2026-06-14T00:40:00Z" }, posted);
     const tatum = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "Tatum O25.5 pts", player: "Jayson Tatum", stat: "PTS", line: 25.5, side: "OVER", placedAt: "2026-06-14T02:00:00Z" }, posted);
@@ -701,7 +702,13 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await byId(fox.id)).toMatchObject({ result: "WON", profit: 0.69, autoGraded: true, gradeNote: "De'Aaron Fox: 3 threes (line 1.5).", espnEventId: "401" });
     // Posted the day before: once the game is found, the date becomes the game's.
     expect(await byId(knicks.id)).toMatchObject({ result: "LOST", profit: -1, autoGraded: true, dateKind: "GAME", placedAt: new Date("2026-06-14T00:40:00Z") });
-    expect(await byId(tatum.id)).toMatchObject({ result: "PENDING", autoGraded: false, gradeNote: expect.stringMatching(/Waiting for the final score/) });
+    // Tatum's game (tip-off 02:00) isn't over an hour yet: only its time is looked up.
+    expect(await byId(tatum.id)).toMatchObject({
+      result: "PENDING",
+      autoGraded: false,
+      gameStartsAt: new Date("2026-06-14T02:00:00Z"),
+      gradeNote: "Result checked automatically from about Sun 3:30 PM (an hour after the game) - or press Check results.",
+    });
     // Futures and games that haven't come yet aren't looked up.
     expect(await byId(future.id)).toMatchObject({ result: "PENDING", gradeNote: null });
     expect(await byId(later.id)).toMatchObject({ result: "PENDING", gradeNote: null });
@@ -710,7 +717,12 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const again = fakeEspn();
     expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date(now.getTime() + 5 * 60_000) })).toMatchObject({ checked: 0 });
     expect(again.calls).toEqual([]);
+    // "Check results" looks right away: the game is still on.
     expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date(now.getTime() + 2 * 60_000), force: true, userId })).toMatchObject({ checked: 1, waiting: 1 });
+    expect(await byId(tatum.id)).toMatchObject({ gradeNote: expect.stringMatching(/Waiting for the final score/) });
+    // On its own it isn't looked at again until an hour after the game (05:30).
+    expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date("2026-06-14T05:20:00Z") })).toMatchObject({ checked: 0 });
+    expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date("2026-06-14T05:31:00Z") })).toMatchObject({ checked: 1 });
 
     // Months later: only "Check results" still looks (e.g. testing it on a past game).
     const old = await createNbaBet(prisma, userId, { ...base, market: "MONEYLINE", pick: "Spurs ML", team: "Spurs", odds: 1.5, stake: 1, placedAt: "2026-06-14T05:00:00Z" }, posted);

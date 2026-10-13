@@ -442,6 +442,8 @@ model NbaBet {
   gradeCheckedAt DateTime? @db.Timestamptz(3)
   /// ESPN game id the bet was matched to.
   espnEventId    String?
+  /// Tip-off of that game: the automatic check waits until about an hour after it should be over.
+  gameStartsAt   DateTime? @db.Timestamptz(3)
   /// Tipster + pick + minute posted: the same pick isn't added twice.
   dedupeKey String
 

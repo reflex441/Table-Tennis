@@ -135,7 +135,7 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
             {settings.unitSize} · separate from table tennis
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
-            <Zap className="h-3 w-3 text-accent" /> Player props, moneylines, spreads and totals are settled automatically from ESPN once the game is final.
+            <Zap className="h-3 w-3 text-accent" /> Player props, moneylines, spreads and totals are settled automatically from ESPN about an hour after the game ends (or press Check results).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

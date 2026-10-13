@@ -133,6 +133,32 @@ function overUnder(value: number, line: number, side: "OVER" | "UNDER"): Exclude
   return (side === "OVER" ? value > line : value < line) ? "WON" : "LOST";
 }
 
+/** About how long an NBA game takes (2½ hours), plus the hour after it before results are looked up. */
+export const GAME_LENGTH_MS = 2.5 * HOUR;
+export const RESULT_DELAY_MS = GAME_LENGTH_MS + HOUR;
+
+/**
+ * When the bet's game tips off (scoreboard only, no box scores): the team's
+ * game, or for a player prop with no team, the last game of that day (theirs
+ * is over by the time that one is). `exact` = it's surely this bet's game.
+ */
+export async function locateGame(bet: Gradable, espn: EspnClient): Promise<{ start: Date; exact: boolean; eventId: string } | null> {
+  if (!AUTO_MARKETS.includes(bet.market)) return null;
+  const games = (await candidateGames(bet, espn)).filter((g) => !isOff(g));
+  if (!games.length) return null;
+  const teamText = (bet.market === "PLAYER_PROP" ? [bet.team, bet.game] : [bet.team, bet.game, bet.pick]).filter(Boolean).join(" | ");
+  if (teamText) {
+    const game = games.find((g) => g.teams.some((t) => mentionsTeam(teamText, t)));
+    if (game) return { start: game.startsAt, exact: true, eventId: game.id };
+    if (bet.market !== "PLAYER_PROP") return null;
+  }
+  // That day's games: from the first one to 12 hours after it.
+  const first = games[0].startsAt.getTime();
+  const sameDay = games.filter((g) => g.startsAt.getTime() <= first + 12 * HOUR);
+  const last = sameDay[sameDay.length - 1];
+  return { start: last.startsAt, exact: false, eventId: last.id };
+}
+
 /** Settle one bet from ESPN, or say why not yet (see candidateGames for which game). */
 export async function gradeBet(bet: Gradable, espn: EspnClient, now = new Date()): Promise<GradeOutcome> {
   if (!AUTO_MARKETS.includes(bet.market)) return { kind: "manual", note: "Futures, parlays and other bets are marked by you." };

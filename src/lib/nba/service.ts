@@ -139,6 +139,7 @@ export async function updateNbaBet(prisma: PrismaClient, userId: string, id: str
         // Settled by you: no longer marked as automatic.
         ...(input.result !== undefined ? { autoGraded: false } : {}),
         ...(regrade || input.result === "PENDING" ? { gradeCheckedAt: null, gradeNote: null } : {}),
+        ...(regrade ? { gameStartsAt: null, espnEventId: null } : {}),
       },
     });
     return toNbaBetDTO(updated);
