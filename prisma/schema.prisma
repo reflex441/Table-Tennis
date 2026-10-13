@@ -428,6 +428,8 @@ model NbaBet {
   placedAt  DateTime  @db.Timestamptz(3)
   /// Team the bet is on (moneyline / spread) or the player's team.
   team      String?
+  /// What placedAt is: GAME = the game's date (typed in, or read from a slip), POSTED = when the pick was posted (the game is the next one after it).
+  dateKind  String    @default("GAME")
   result    BetResult @default(PENDING)
   profit    Float?
   settledAt DateTime? @db.Timestamptz(3)

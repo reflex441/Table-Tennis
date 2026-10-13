@@ -21,6 +21,8 @@ export interface NbaDraft {
   odds: string;
   bookmaker: string;
   placedAtLocal: string;
+  /** POSTED until the date is changed by hand (then it's the game's date). */
+  dateKind: "GAME" | "POSTED";
   result: BetResult;
   /** For automatic results: team, player, stat code, line, side. */
   team: string;
@@ -44,6 +46,7 @@ export function draftFromBet(b: NbaBetDTO, tz: string): NbaDraft {
     odds: b.odds !== null ? String(b.odds) : "",
     bookmaker: b.bookmaker ?? "",
     placedAtLocal: toLocalInputValue(b.placedAt, tz),
+    dateKind: b.dateKind,
     result: b.result,
     team: b.team ?? "",
     player: b.player ?? "",
@@ -75,6 +78,7 @@ export function draftToJson(d: NbaDraft, tz: string): string | Record<string, un
     odds,
     bookmaker: d.bookmaker.trim() || null,
     placedAt,
+    dateKind: d.dateKind,
     result: d.result,
     team: d.team.trim() || null,
     player: d.player.trim() || null,
@@ -149,7 +153,7 @@ export function NbaFields({ d, onChange, compact = false }: { d: NbaDraft; onCha
         </label>
         <div>
           <span className="label">Game date</span>
-          <DateTimeInput value={d.placedAtLocal} onChange={(v) => onChange({ placedAtLocal: v })} label="Game date" compact={compact} />
+          <DateTimeInput value={d.placedAtLocal} onChange={(v) => onChange({ placedAtLocal: v, dateKind: "GAME" })} label="Game date" compact={compact} />
         </div>
         <label className="w-28">
           <span className="label">Result</span>
@@ -224,7 +228,9 @@ function GradingFields({ d, onChange, pad }: { d: NbaDraft; onChange: (patch: Pa
           </select>
         </label>
       )}
-      <span className="pb-1.5 text-[10px] text-muted">Used to mark it automatically from ESPN</span>
+      <span className="pb-1.5 text-[10px] text-muted">
+        Used to mark it automatically from ESPN. Game date = the day it&apos;s played where you are (the time doesn&apos;t matter).
+      </span>
     </div>
   );
 }
@@ -255,6 +261,7 @@ export function NbaBetForm({
           odds: "",
           bookmaker: "",
           placedAtLocal: DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"),
+          dateKind: "GAME",
           result: "PENDING",
           ...EMPTY_GRADING,
         },

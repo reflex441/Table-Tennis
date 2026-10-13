@@ -5,8 +5,9 @@ import { AUTO_MARKETS, gradeBet } from "./grade";
 
 /** A bet is checked at most this often (ESPN is only asked about games that could be over). */
 const RECHECK_MS = 20 * 60_000;
-/** Bets older than this are left for the user. */
+/** Bets older than this are only checked with "Check results" (which looks back a year, e.g. to test it on a past game). */
 const MAX_AGE_MS = 5 * 24 * 3_600_000;
+const MAX_AGE_FORCED_MS = 400 * 24 * 3_600_000;
 
 export interface GradeReport {
   checked: number;
@@ -34,19 +35,35 @@ export async function gradePendingNbaBets(
       ...(opts.userId ? { userId: opts.userId } : {}),
       result: "PENDING",
       market: { in: AUTO_MARKETS },
-      placedAt: { lte: now, gte: new Date(now.getTime() - MAX_AGE_MS) },
+      placedAt: { lte: new Date(now.getTime() + 24 * 3_600_000), gte: new Date(now.getTime() - (opts.force ? MAX_AGE_FORCED_MS : MAX_AGE_MS)) },
       OR: [{ gradeCheckedAt: null }, { gradeCheckedAt: { lte: new Date(now.getTime() - recheck) } }],
     },
     orderBy: { placedAt: "asc" },
     take: opts.limit ?? 60,
   });
   const report: GradeReport = { checked: 0, settled: 0, waiting: 0, failed: 0 };
+  // Each user's timezone: a typed-in game date is that day where they are.
+  const zones = new Map(
+    (await prisma.settings.findMany({ where: { userId: { in: [...new Set(bets.map((b) => b.userId))] } }, select: { userId: true, timezone: true } })).map((z) => [z.userId, z.timezone]),
+  );
   for (const bet of bets) {
     if (Date.now() - started > (opts.budgetMs ?? 20_000)) break;
     report.checked++;
     try {
       const outcome = await gradeBet(
-        { market: bet.market as never, pick: bet.pick, team: bet.team, game: bet.game, player: bet.player, stat: bet.stat, line: bet.line, side: bet.side as never, placedAt: bet.placedAt },
+        {
+          market: bet.market as never,
+          pick: bet.pick,
+          team: bet.team,
+          game: bet.game,
+          player: bet.player,
+          stat: bet.stat,
+          line: bet.line,
+          side: bet.side as never,
+          placedAt: bet.placedAt,
+          dateKind: bet.dateKind === "POSTED" ? "POSTED" : "GAME",
+          timezone: zones.get(bet.userId) ?? "Australia/Sydney",
+        },
         espn,
         now,
       );

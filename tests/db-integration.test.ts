@@ -655,7 +655,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   it("NBA bets: added, settled, edited and kept apart from table tennis", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
-    const base = { tipster: "ADP", market: "FUTURE" as const, game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, placedAt: "2030-09-20T08:52:00Z" };
+    const base = { tipster: "ADP", market: "FUTURE" as const, game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, placedAt: "2030-09-20T08:52:00Z", dateKind: "GAME" as const };
     const knicks = await createNbaBet(prisma, userId, { ...base, pick: "Knicks to record 8+ consecutive wins", stake: 1.5, odds: 1.72, result: "PENDING" }, now);
     const celtics = await createNbaBet(prisma, userId, { ...base, pick: "Celtics to record 8+ consecutive wins", stake: 1, odds: 1.62, result: "PENDING" }, now);
     await createNbaBet(prisma, userId, { ...base, tipster: "Tyvan", market: "PLAYER_PROP", pick: "De'Aaron Fox Over 1.5 3PM", player: "De'Aaron Fox", stat: "3PM", line: 1.5, side: "OVER", bookmaker: "Sportsbet", stake: 0.5, odds: 2.38, result: "WON" }, now);
@@ -688,10 +688,10 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
   it("NBA bets are settled from ESPN once their game is final", async () => {
     const posted = new Date("2026-06-13T08:00:00Z");
     const now = new Date("2026-06-14T04:00:00Z");
-    const base = { tipster: "Tyvan", game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, odds: 2.38, stake: 0.5, result: "PENDING" as const };
+    const base = { tipster: "Tyvan", game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, odds: 2.38, stake: 0.5, result: "PENDING" as const, dateKind: "GAME" as const };
     const fox = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "De'Aaron Fox Over 1.5 3PM", player: "De'Aaron Fox", stat: "3PM", line: 1.5, side: "OVER", game: "New York Knicks @ San Antonio Spurs", placedAt: "2026-06-14T00:40:00Z" }, posted);
     const tatum = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "Tatum O25.5 pts", player: "Jayson Tatum", stat: "PTS", line: 25.5, side: "OVER", placedAt: "2026-06-14T02:00:00Z" }, posted);
-    const knicks = await createNbaBet(prisma, userId, { ...base, tipster: "ADP", market: "MONEYLINE", pick: "Knicks ML", team: "Knicks", odds: 1.9, stake: 1, placedAt: posted.toISOString() }, posted);
+    const knicks = await createNbaBet(prisma, userId, { ...base, tipster: "ADP", market: "MONEYLINE", pick: "Knicks ML", team: "Knicks", odds: 1.9, stake: 1, placedAt: posted.toISOString(), dateKind: "POSTED" }, posted);
     const future = await createNbaBet(prisma, userId, { ...base, tipster: "ADP", market: "FUTURE", pick: "Knicks 8+ wins", placedAt: posted.toISOString() }, posted);
     const later = await createNbaBet(prisma, userId, { ...base, market: "PLAYER_PROP", pick: "Fox later", player: "De'Aaron Fox", stat: "PTS", line: 20.5, placedAt: "2026-06-20T00:00:00Z" }, posted);
 
@@ -710,6 +710,13 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date(now.getTime() + 5 * 60_000) })).toMatchObject({ checked: 0 });
     expect(again.calls).toEqual([]);
     expect(await gradePendingNbaBets(prisma, { espn: again, now: new Date(now.getTime() + 2 * 60_000), force: true, userId })).toMatchObject({ checked: 1, waiting: 1 });
+
+    // Months later: only "Check results" still looks (e.g. testing it on a past game).
+    const old = await createNbaBet(prisma, userId, { ...base, market: "MONEYLINE", pick: "Spurs ML", team: "Spurs", odds: 1.5, stake: 1, placedAt: "2026-06-14T05:00:00Z" }, posted);
+    const months = new Date("2026-10-13T00:00:00Z");
+    expect(await gradePendingNbaBets(prisma, { espn: fakeEspn(), now: months, userId })).toMatchObject({ checked: 0 });
+    expect(await gradePendingNbaBets(prisma, { espn: fakeEspn(), now: months, userId, force: true })).toMatchObject({ settled: 1 });
+    expect(await byId(old.id)).toMatchObject({ result: "WON", profit: 0.5, autoGraded: true });
 
     // Settling by hand turns "auto" off, and the auto check never overrides it.
     expect(await updateNbaBet(prisma, userId, fox.id, { result: "LOST" }, now)).toMatchObject({ result: "LOST", autoGraded: false });

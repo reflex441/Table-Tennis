@@ -56,7 +56,8 @@ export const POST = handle(async (request: Request) => {
         bookmaker: bookmakerFor(b.bookmakerText, settings.nbaBookmakers),
         odds: parseOdds(b.oddsText),
         placedAt: (gameAt ?? posted)?.toISOString() ?? null,
-        gameTimeKnown: Boolean(gameAt),
+        // A posted time means "the next game after this"; a game time is the game itself.
+        dateKind: gameAt || !posted ? "GAME" : "POSTED",
       };
     });
     return NextResponse.json({ bets });

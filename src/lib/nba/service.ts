@@ -21,6 +21,8 @@ export interface NbaBetDTO {
   odds: number | null;
   bookmaker: string | null;
   placedAt: string;
+  /** GAME = placedAt is the game's day; POSTED = when the pick was posted. */
+  dateKind: "GAME" | "POSTED";
   result: BetResult;
   profit: number | null;
   settledAt: string | null;
@@ -47,6 +49,7 @@ export function toNbaBetDTO(b: NbaBet): NbaBetDTO {
     odds: b.odds,
     bookmaker: b.bookmaker,
     placedAt: b.placedAt.toISOString(),
+    dateKind: b.dateKind === "POSTED" ? "POSTED" : "GAME",
     result: b.result as BetResult,
     profit: b.profit,
     settledAt: b.settledAt?.toISOString() ?? null,
@@ -86,6 +89,7 @@ export async function createNbaBet(prisma: PrismaClient, userId: string, input: 
       odds: input.odds,
       bookmaker: input.bookmaker,
       placedAt,
+      dateKind: input.dateKind,
       result,
       profit: computeProfit(stake, input.odds, result),
       settledAt: result === "PENDING" ? null : now,
@@ -115,6 +119,8 @@ export async function updateNbaBet(prisma: PrismaClient, userId: string, id: str
         tipster,
         pick,
         placedAt,
+        // A date changed by hand is the game's date.
+        ...(input.dateKind !== undefined ? { dateKind: input.dateKind } : input.placedAt && new Date(input.placedAt).getTime() !== bet.placedAt.getTime() ? { dateKind: "GAME" } : {}),
         stake,
         odds,
         result,

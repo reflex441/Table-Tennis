@@ -85,8 +85,22 @@ describe("NBA results from ESPN", () => {
     expect(await gradeBet(bet({ market: "MONEYLINE", pick: "Celtics ML", team: "Celtics" }), espn, after)).toMatchObject({ kind: "wait" });
     expect(await gradeBet(bet({ market: "MONEYLINE", pick: "Sixers ML", team: "76ers" }), espn, after)).toMatchObject({ kind: "manual", note: expect.stringMatching(/postponed/) });
     expect(await gradeBet(bet({ market: "FUTURE", pick: "Knicks to record 8+ consecutive wins" }), espn, after)).toMatchObject({ kind: "manual" });
-    // Posted the day before (Sydney time): still finds the next game.
-    expect(await gradeBet(bet({ market: "MONEYLINE", pick: "Spurs", team: "Spurs", placedAt: new Date("2026-06-12T19:00:00Z") }), espn, after)).toMatchObject({ result: "WON" });
+    // Posted the day before (Sydney time): the next game after the post.
+    expect(await gradeBet(bet({ market: "MONEYLINE", pick: "Spurs", team: "Spurs", placedAt: new Date("2026-06-12T19:00:00Z"), dateKind: "POSTED" }), espn, after)).toMatchObject({ result: "WON" });
+  });
+
+  it("finds the game from a typed-in game date (any time of day) or a posted time", async () => {
+    const espn = fakeEspn();
+    const knicksMl = { market: "MONEYLINE" as const, pick: "Knicks ML", team: "Knicks", timezone: "Australia/Sydney" };
+    // The game is Sun 14 Jun 10:40 AM in Sydney: typing that day with any time finds it...
+    expect(await gradeBet(bet({ ...knicksMl, placedAt: new Date("2026-06-14T05:00:00Z") }), espn, after)).toMatchObject({ result: "LOST" }); // 3 PM
+    expect(await gradeBet(bet({ ...knicksMl, placedAt: new Date("2026-06-14T13:30:00Z") }), espn, after)).toMatchObject({ result: "LOST" }); // 11:30 PM
+    // ...and so does the US date (Sat 13 Jun).
+    expect(await gradeBet(bet({ ...knicksMl, placedAt: new Date("2026-06-13T05:00:00Z") }), espn, after)).toMatchObject({ result: "LOST" });
+    // A pick posted after the game had started isn't on that game (back-to-backs).
+    expect(await gradeBet(bet({ ...knicksMl, dateKind: "POSTED", placedAt: new Date("2026-06-14T03:00:00Z") }), espn, after)).toMatchObject({ kind: "wait" });
+    // Posted that morning (US): the game that night.
+    expect(await gradeBet(bet({ ...knicksMl, dateKind: "POSTED", placedAt: new Date("2026-06-13T14:00:00Z") }), espn, after)).toMatchObject({ result: "LOST" });
   });
 
   it("reads the game time from a slip", () => {

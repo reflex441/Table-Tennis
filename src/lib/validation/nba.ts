@@ -25,12 +25,14 @@ const fields = {
   odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish().transform((v) => v ?? null),
   bookmaker: text(40),
   placedAt: isoDate,
+  /** GAME: placedAt is the game's day. POSTED: when the pick was posted (the game is the next one). */
+  dateKind: z.enum(["GAME", "POSTED"]),
   result: z.enum(["PENDING", "WON", "LOST", "VOID"]),
   notes: text(500),
 };
 
 /** An NBA bet (screenshot review or typed in). */
-export const nbaBetSchema = z.object({ ...fields, market: fields.market.default("OTHER"), result: fields.result.default("PENDING") });
+export const nbaBetSchema = z.object({ ...fields, market: fields.market.default("OTHER"), result: fields.result.default("PENDING"), dateKind: fields.dateKind.default("GAME") });
 
 export type NbaBetInput = z.infer<typeof nbaBetSchema>;
 

@@ -75,6 +75,37 @@ export interface Gradable {
   line: number | null;
   side: "OVER" | "UNDER" | null;
   placedAt: Date;
+  /** GAME: placedAt is the game's day (typed in, or from a slip). POSTED: when the pick was posted. */
+  dateKind?: "GAME" | "POSTED";
+  /** The user's timezone, for the day of a GAME date. */
+  timezone?: string;
+}
+
+const HOUR = 3_600_000;
+
+/**
+ * The games a bet can be on, best first. POSTED: the games in the day and a
+ * half after the pick was posted (never one already played before it, e.g. the
+ * night before on a back-to-back). GAME: the games on that day where you are
+ * (a 7 PM ET game is the next morning in Sydney), else on that date in the US.
+ */
+async function candidateGames(bet: Gradable, espn: EspnClient): Promise<EspnGame[]> {
+  const at = bet.placedAt.getTime();
+  const fetchDays = async (offsets: number[]) => {
+    const days = [...new Set(offsets.map((h) => espnDay(new Date(at + h * HOUR))))];
+    const games = (await Promise.all(days.map((d) => espn.scoreboard(d)))).flat();
+    const seen = new Set<string>();
+    return games.filter((g) => !seen.has(g.id) && seen.add(g.id)).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  };
+  if (bet.dateKind === "POSTED") {
+    return (await fetchDays([0, 24, 36])).filter((g) => g.startsAt.getTime() >= at - HOUR && g.startsAt.getTime() <= at + 36 * HOUR);
+  }
+  const zone = bet.timezone ?? "America/New_York";
+  const day = DateTime.fromJSDate(bet.placedAt, { zone }).toISODate();
+  const games = await fetchDays([-24, 0, 24]);
+  const localDay = games.filter((g) => DateTime.fromJSDate(g.startsAt, { zone }).toISODate() === day);
+  const usDay = games.filter((g) => !localDay.includes(g) && DateTime.fromJSDate(g.startsAt, { zone: "America/New_York" }).toISODate() === day);
+  return [...localDay, ...usDay];
 }
 
 export type GradeOutcome =
@@ -99,16 +130,10 @@ function overUnder(value: number, line: number, side: "OVER" | "UNDER"): Exclude
   return (side === "OVER" ? value > line : value < line) ? "WON" : "LOST";
 }
 
-/**
- * Settle one bet from ESPN, or say why not yet. Looks at games on the bet's
- * date and the day after (US time), from 3 hours before its time onwards.
- */
+/** Settle one bet from ESPN, or say why not yet (see candidateGames for which game). */
 export async function gradeBet(bet: Gradable, espn: EspnClient, now = new Date()): Promise<GradeOutcome> {
   if (!AUTO_MARKETS.includes(bet.market)) return { kind: "manual", note: "Futures, parlays and other bets are marked by you." };
-  const from = bet.placedAt.getTime() - 3 * 3_600_000;
-  const days = [...new Set([espnDay(bet.placedAt), espnDay(new Date(bet.placedAt.getTime() + 24 * 3_600_000))])];
-  const games = (await Promise.all(days.map((d) => espn.scoreboard(d)))).flat().filter((g) => g.startsAt.getTime() >= from);
-  games.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const games = await candidateGames(bet, espn);
   const stale = now.getTime() - bet.placedAt.getTime() > 2 * 24 * 3_600_000;
   const notFound = (what: string): GradeOutcome =>
     stale ? { kind: "manual", note: `Couldn't find ${what} on ESPN - mark it yourself.` } : { kind: "wait", note: `Looking for ${what} on ESPN.` };
