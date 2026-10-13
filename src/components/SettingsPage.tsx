@@ -1282,6 +1282,9 @@ function NbaSection() {
         <button type="button" className="btn-primary" disabled={busy} onClick={() => void save()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
         </button>
+        <a href="/nba?tutorial=1" className="btn-ghost">
+          Show the NBA tutorial
+        </a>
         <button
           type="button"
           className="btn-ghost"

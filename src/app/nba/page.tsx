@@ -13,5 +13,6 @@ export default async function Page() {
   const [bets, tt] = await Promise.all([listNbaBets(db(), user.id), listBetRows(db(), user.id)]);
   // Only what the combined totals need from the table tennis bets.
   const tableTennis = tt.map((r) => ({ stake: r.stake, odds: r.odds, result: r.result, profit: r.profit, startsAt: r.startsAt }));
-  return <NbaPage initial={bets} tableTennis={tableTennis} />;
+  // The NBA tutorial shows the first time (after the main tutorial is done).
+  return <NbaPage initial={bets} tableTennis={tableTennis} firstVisit={user.onboarded && !user.nbaOnboarded} />;
 }

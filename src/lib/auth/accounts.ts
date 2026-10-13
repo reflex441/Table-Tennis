@@ -13,12 +13,14 @@ export interface PublicUser {
   avatarUrl: string | null;
   /** Finished (or skipped) the first-run tutorial. */
   onboarded: boolean;
+  /** Finished the NBA page's tutorial. */
+  nbaOnboarded: boolean;
 }
 
 /** Fields needed for PublicUser (never loads the picture bytes). */
-export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, avatarUpdatedAt: true, onboardedAt: true } as const;
+export const publicUserSelect = { id: true, email: true, name: true, passwordHash: true, avatarUpdatedAt: true, onboardedAt: true, nbaOnboardedAt: true } as const;
 
-type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "avatarUpdatedAt" | "onboardedAt">;
+type PublicUserSource = Pick<User, "id" | "email" | "name" | "passwordHash" | "avatarUpdatedAt" | "onboardedAt" | "nbaOnboardedAt">;
 
 export function avatarUrl(u: { id: string; avatarUpdatedAt: Date | null }): string | null {
   return u.avatarUpdatedAt ? `/api/users/${u.id}/avatar?v=${u.avatarUpdatedAt.getTime()}` : null;
@@ -32,6 +34,7 @@ export function toPublicUser(u: PublicUserSource): PublicUser {
     hasPassword: Boolean(u.passwordHash),
     avatarUrl: avatarUrl(u),
     onboarded: Boolean(u.onboardedAt),
+    nbaOnboarded: Boolean(u.nbaOnboardedAt),
   };
 }
 

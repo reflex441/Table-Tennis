@@ -31,6 +31,8 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQ
 
 The **NBA** page tracks tipsters' NBA picks - no alarms, just profit:
 
+- **Tutorial:** the first time you open the NBA page (after the main tutorial), a short walkthrough explains scanning picks, tipsters and bookmaker codes, the game date and details, automatic results and the stats. Replay it with **How it works** on the NBA page or **Settings → NBA → Show the NBA tutorial**.
+
 - **Scan picks:** screenshot a tipster's message (e.g. Discord). Gemini reads every bet in it: the pick, units ("1.5u"), odds, bookmaker and when it was posted. American odds are turned into decimal (+138 = 2.38). **Whose pick** comes from the sender: names listed in **Settings → NBA** are mapped (Winible → ADP); anyone else is tracked under the name they post with (Tyvan). **Bookmaker codes** are mapped the same way (FD → Sportsbet, "All on Sportsbet" applies to every bet; with several odds listed, the first bookmaker counts). Discord timestamps ("Yesterday at 6:52 PM", "6/13/2026 5:00 AM") are read in your timezone. Check the rows, then add them; the same pick from the same tipster at the same time isn't added twice.
 - **Add bet** types one in by hand; every bet can be edited or deleted.
 - **Settling:** Won / Lost / Void on each pending bet (and back to pending). Profit is in units with your unit size, like table tennis.

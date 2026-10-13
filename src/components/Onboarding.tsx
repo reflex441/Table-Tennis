@@ -116,7 +116,7 @@ export function Onboarding({ user }: { user: PublicUser }) {
   );
 }
 
-function Title({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+export function Title({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <h2 id="tutorial-title" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">{icon}</span>

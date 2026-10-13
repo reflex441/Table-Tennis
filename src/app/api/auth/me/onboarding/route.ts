@@ -4,12 +4,13 @@ import { db } from "@/lib/db";
 import { handle, parseJson } from "@/lib/api";
 import { requireUserId } from "@/lib/auth/current";
 
-const schema = z.object({ done: z.boolean() });
+const schema = z.object({ done: z.boolean(), tutorial: z.enum(["main", "nba"]).default("main") });
 
-/** Mark the first-run tutorial as finished/skipped (or not, to show it again). */
+/** Mark the first-run tutorial (or the NBA page's) as finished/skipped, or not, to show it again. */
 export const POST = handle(async (request: Request) => {
   const userId = await requireUserId();
-  const { done } = await parseJson(request, schema);
-  await db().user.update({ where: { id: userId }, data: { onboardedAt: done ? new Date() : null } });
+  const { done, tutorial } = await parseJson(request, schema);
+  const at = done ? new Date() : null;
+  await db().user.update({ where: { id: userId }, data: tutorial === "nba" ? { nbaOnboardedAt: at } : { onboardedAt: at } });
   return NextResponse.json({ ok: true });
 });

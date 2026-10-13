@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Check, Loader2, Pencil, Plus, RefreshCw, RotateCcw, ScanText, Trash2, X, Zap } from "lucide-react";
+import { Suspense, useMemo, useState } from "react";
+import { Check, CircleHelp, Loader2, Pencil, Plus, RefreshCw, RotateCcw, ScanText, Trash2, X, Zap } from "lucide-react";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { formatDayLabel } from "@/lib/format";
@@ -20,6 +20,7 @@ import { useToday } from "../useNow";
 import { BasketballIcon } from "./BasketballIcon";
 import { NbaBetForm } from "./NbaBetForm";
 import { NbaScanner } from "./NbaScanner";
+import { NBA_TUTORIAL_EVENT, NbaTutorial } from "./NbaTutorial";
 import { SummaryStats, pct } from "../SummaryStats";
 
 /** Table tennis bets, for the combined totals. */
@@ -32,7 +33,7 @@ type Status = "ALL" | "PENDING" | "SETTLED";
  * units with no alarm. Separate from table tennis, with the two combined
  * at the top.
  */
-export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableTennis: TableTennisRow[] }) {
+export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial: NbaBetDTO[]; tableTennis: TableTennisRow[]; firstVisit?: boolean }) {
   const { settings } = useSettings();
   const { notify } = useNotifications();
   const tz = settings.timezone;
@@ -122,6 +123,9 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
 
   return (
     <div className="flex flex-col gap-5">
+      <Suspense>
+        <NbaTutorial firstTime={firstVisit} />
+      </Suspense>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
@@ -136,6 +140,9 @@ export function NbaPage({ initial, tableTennis }: { initial: NbaBetDTO[]; tableT
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button className="btn-ghost" onClick={() => window.dispatchEvent(new Event(NBA_TUTORIAL_EVENT))} title="The NBA tutorial">
+            <CircleHelp className="h-4 w-4" /> How it works
+          </button>
           <button className="btn-ghost" disabled={checking} onClick={() => void checkResults()} title="Look up pending bets on ESPN now">
             {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Check results
           </button>

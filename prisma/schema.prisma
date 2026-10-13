@@ -88,6 +88,8 @@ model User {
   avatarUpdatedAt DateTime? @db.Timestamptz(3)
   /// When the first-run tutorial was finished or skipped (null = show it).
   onboardedAt     DateTime? @db.Timestamptz(3)
+  /// When the NBA page's tutorial was finished (null = show it on the NBA page).
+  nbaOnboardedAt  DateTime? @db.Timestamptz(3)
 
   settings      Settings?
   matches       Match[]             @relation("owner")
