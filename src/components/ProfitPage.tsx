@@ -8,6 +8,9 @@ import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/b
 import { formatDayLabel, formatTime } from "@/lib/format";
 import { PlayTypeChip, ProfitAmount, ResultChip } from "./BetBits";
 import { useSettings } from "./SettingsProvider";
+import { useNotifications } from "./NotificationProvider";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/client-api";
 import { useToday } from "./useNow";
 import { ProfitChart } from "./ProfitChart";
 import { DailyCalendar } from "./DailyCalendar";
@@ -40,8 +43,38 @@ function pct(n: number | null): string {
  * `title` changes the heading (e.g. "Sam's profit" when tailing); `readOnly`
  * is for someone else's bets: no links to match pages you can't open.
  */
-export function ProfitPage({ initial, title = "Profit", readOnly = false }: { initial: BetRowWithMatch[]; title?: string; readOnly?: boolean }) {
+export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = false }: { initial: BetRowWithMatch[]; title?: string; readOnly?: boolean }) {
   const { settings } = useSettings();
+  const { notify } = useNotifications();
+  const router = useRouter();
+  // Local copy so a Bot / Personal change shows at once; replaced when the server sends fresh rows.
+  const [initial, setRows] = useState(fromServer);
+  const [seen, setSeen] = useState(fromServer);
+  if (seen !== fromServer) {
+    setSeen(fromServer);
+    setRows(fromServer);
+  }
+  const [switching, setSwitching] = useState<string | null>(null);
+  /** Bot <-> Personal for one row: the whole match, or just that pick of a split bet. */
+  const switchPlayType = async (row: BetRowWithMatch) => {
+    const next = row.playType === "BOT" ? "PERSONAL" : "BOT";
+    const before = initial;
+    setRows((rows) => rows.map((r) => (r.id === row.id ? { ...r, playType: next } : r)));
+    setSwitching(row.id);
+    try {
+      if (row.split) {
+        await api(`/api/matches/${row.matchId}/bet`, { method: "PUT", json: { leg: { index: row.split.index, playType: next } } });
+      } else {
+        await api(`/api/matches/${row.matchId}`, { method: "PATCH", json: { playType: next } });
+      }
+      router.refresh();
+    } catch (err) {
+      setRows(before);
+      notify("Couldn't change the play type", err instanceof Error ? err.message : String(err));
+    } finally {
+      setSwitching(null);
+    }
+  };
   const tz = settings.timezone;
   const [period, setPeriod] = useState<{ id: Period; fromDay: string | null }>({ id: "all", fromDay: null });
   const [type, setType] = useState<TypeFilter>("ALL");
@@ -390,7 +423,19 @@ export function ProfitPage({ initial, title = "Profit", readOnly = false }: { in
                       </span>
                     </td>
                     <td className="px-3 py-1.5">
-                      <PlayTypeChip playType={r.playType} />
+                      {readOnly ? (
+                        <PlayTypeChip playType={r.playType} />
+                      ) : (
+                        <button
+                          className="rounded-full transition-opacity hover:opacity-80 disabled:opacity-50"
+                          disabled={switching === r.id}
+                          onClick={() => void switchPlayType(r)}
+                          title={`Click to make this a ${r.playType === "BOT" ? "personal" : "bot"} play`}
+                          aria-label={`${r.playType === "BOT" ? "Bot" : "Personal"} play - change to ${r.playType === "BOT" ? "personal" : "bot"}`}
+                        >
+                          <PlayTypeChip playType={r.playType} />
+                        </button>
+                      )}
                     </td>
                     <td className="px-3 py-1.5 text-right tabular">{formatUnits(r.stake, false)}</td>
                     <td className="px-3 py-1.5 text-right tabular">{r.odds ? r.odds.toFixed(2) : "–"}</td>
