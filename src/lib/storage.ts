@@ -39,7 +39,7 @@ export async function deleteOldScreenshotsIfDue(prisma: PrismaClient, now = new 
   }
 }
 
-export interface StorageUsage {
+interface StorageUsage {
   /** Whole database, as Postgres reports it. */
   usedBytes: number;
   /** The plan's limit (STORAGE_LIMIT_MB, default 500 MB - Supabase's free plan). */

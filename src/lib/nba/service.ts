@@ -33,7 +33,7 @@ export interface NbaBetDTO {
   gradeNote: string | null;
 }
 
-export function toNbaBetDTO(b: NbaBet): NbaBetDTO {
+function toNbaBetDTO(b: NbaBet): NbaBetDTO {
   return {
     id: b.id,
     tipster: b.tipster,

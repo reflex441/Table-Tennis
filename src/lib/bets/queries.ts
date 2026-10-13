@@ -20,14 +20,9 @@ export interface BetRowWithMatch extends BetRow {
  * A split bet becomes one row per pick (its own pick, stake, odds and
  * result), so per-pick stats count each part; the rows add up to the bet.
  */
-export async function listBetRows(prisma: PrismaClient, userId: string, opts: { since?: Date; playType?: PlayType } = {}): Promise<BetRowWithMatch[]> {
+export async function listBetRows(prisma: PrismaClient, userId: string, opts: { playType?: PlayType } = {}): Promise<BetRowWithMatch[]> {
   const rows = await prisma.bet.findMany({
-    where: {
-      match: {
-        userId,
-        ...(opts.since ? { startsAt: { gte: opts.since } } : {}),
-      },
-    },
+    where: { match: { userId } },
     include: { match: { include: { statistics: true } }, legs: { orderBy: { position: "asc" } } },
     orderBy: { match: { startsAt: "desc" } },
     take: 5000,

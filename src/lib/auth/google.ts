@@ -53,7 +53,7 @@ export function googleAuthUrl(opts: { redirectUri: string; state: string; challe
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-export interface GoogleProfile {
+interface GoogleProfile {
   sub: string;
   email: string;
   emailVerified: boolean;

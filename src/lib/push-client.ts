@@ -2,7 +2,7 @@
 
 import { api } from "@/lib/client-api";
 
-export interface PushSupport {
+interface PushSupport {
   serviceWorker: boolean;
   pushManager: boolean;
   notification: boolean;
@@ -11,7 +11,7 @@ export interface PushSupport {
   secureContext: boolean;
 }
 
-export function detectPushSupport(): PushSupport {
+function detectPushSupport(): PushSupport {
   if (typeof window === "undefined") {
     return { serviceWorker: false, pushManager: false, notification: false, iosNeedsInstall: false, secureContext: false };
   }

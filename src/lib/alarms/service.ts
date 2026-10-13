@@ -17,16 +17,16 @@ export const matchInclude = {
   copiedFrom: { select: { id: true, name: true } },
 } satisfies Prisma.MatchInclude;
 
-export type MatchWithRelations = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
+type MatchWithRelations = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
 
-export type CreateOutcome =
+type CreateOutcome =
   | { status: "created"; match: MatchWithRelations; immediate: boolean }
   | { status: "duplicate"; existingId: string; message: string }
   | { status: "similar"; existingId: string; message: string }
   | { status: "invalid"; message: string };
 
 /** Same players within this window counts as the same match. */
-export const SIMILAR_WINDOW_MS = 3 * 60 * 60_000;
+const SIMILAR_WINDOW_MS = 3 * 60 * 60_000;
 
 /** Create one match with its statistics and alarm, refusing duplicates. */
 export async function createMatchWithAlarm(

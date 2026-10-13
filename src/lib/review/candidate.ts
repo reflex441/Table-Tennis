@@ -57,7 +57,7 @@ export interface ScreenshotContext {
 const numStr = (n: number | null) => (n === null || n === undefined ? "" : String(n));
 
 let counter = 0;
-export function newCandidateId(): string {
+function newCandidateId(): string {
   counter += 1;
   return `c${Date.now().toString(36)}${counter}`;
 }
@@ -163,7 +163,7 @@ export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Ca
 }
 
 /** (Re)compute the proposed start time from the screenshot's time text. */
-export function applyTimeResolution(c: Candidate, shot: ScreenshotContext | null, settings: SettingsDTO, now?: Date, notBefore?: string | null): Candidate {
+function applyTimeResolution(c: Candidate, shot: ScreenshotContext | null, settings: SettingsDTO, now?: Date, notBefore?: string | null): Candidate {
   if (c.timeStatus === "manual") return c;
   const corroborated =
     shot?.capturedAtSource === "FILE_MODIFIED" && isCaptureCorroborated(shot.capturedAt, shot.visibleClock, settings.timezone);

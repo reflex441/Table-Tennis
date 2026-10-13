@@ -103,7 +103,7 @@ const short = (name: string | null) => (name ? shortPlayerName(name) : null);
  * (winning 3-0), other handicaps up to 2.5 are set spreads ("(+1.5)"), and
  * bigger ones points spreads ("(-4.5)"). Null for Over/Under and the rest.
  */
-export function handicapPick(text: string | null | undefined): { selection: Selection; line: number | null } | null {
+function handicapPick(text: string | null | undefined): { selection: Selection; line: number | null } | null {
   const t = (text ?? "").replace(/[\u2212\u2013]/g, "-");
   if (!t || /\b(over|under)\b/i.test(t)) return null;
   const m = t.match(/\(\s*([+-]?\s?\d+(?:\.\d+)?)\s*\)/) ?? t.match(/(?:^|\s)([+-]\s?\d+(?:\.\d+)?)(?!\S)/);

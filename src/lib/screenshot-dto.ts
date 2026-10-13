@@ -15,7 +15,7 @@ export const screenshotSelect = {
   extractions: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, model: true, result: true, warnings: true, createdAt: true } },
 } satisfies Prisma.ScreenshotSelect;
 
-export type ScreenshotRow = Prisma.ScreenshotGetPayload<{ select: typeof screenshotSelect }>;
+type ScreenshotRow = Prisma.ScreenshotGetPayload<{ select: typeof screenshotSelect }>;
 
 export function toScreenshotDTO(s: ScreenshotRow, duplicate = false): ScreenshotDTO {
   const ex = s.extractions[0];

@@ -4,7 +4,7 @@ export function computeFireAt(startsAt: Date, reminderMinutes: number): Date {
   return new Date(startsAt.getTime() - reminderMinutes * 60_000);
 }
 
-export type ScheduleCheck =
+type ScheduleCheck =
   | { ok: true; fireAt: Date; immediate: boolean }
   | { ok: false; reason: string };
 
@@ -28,7 +28,7 @@ export function checkSchedule(startsAt: Date, reminderMinutes: number, now: Date
 export const SECTIONS = ["upcoming", "triggered", "pending", "completed"] as const;
 export type Section = (typeof SECTIONS)[number];
 
-export interface SectionInput {
+interface SectionInput {
   alarm: { status: string; ackAction?: string | null } | null;
   bet: { result: string } | null;
 }

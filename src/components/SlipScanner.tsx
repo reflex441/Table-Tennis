@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, ImagePlus, Loader2, TriangleAlert, X } from "lucide-react";
-import { api, uploadWithProgress } from "@/lib/client-api";
+import { Check, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
+import { api } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
-import { prepareUpload } from "@/lib/shrink-image";
 import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
@@ -13,6 +12,7 @@ import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
 import { LeagueSelect } from "./LeagueSelect";
+import { ChooseScreenshots, ScanErrors, useScreenshotScan } from "./ScreenshotScan";
 
 interface Row {
   key: string;
@@ -48,10 +48,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
   const { notify } = useNotifications();
   const router = useRouter();
   const tz = settings.timezone;
-  const input = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[]>([]);
-  const [scanning, setScanning] = useState(0);
-  const [errors, setErrors] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [playType, setPlayType] = useState<"BOT" | "PERSONAL">("BOT");
 
@@ -76,25 +73,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
     status: null,
   });
 
-  const scan = async (files: FileList | null) => {
-    if (!files?.length) return;
-    setErrors([]);
-    for (const original of Array.from(files)) {
-      setScanning((n) => n + 1);
-      try {
-        const { file } = await prepareUpload(original);
-        const form = new FormData();
-        form.append("file", file);
-        const res = await uploadWithProgress<{ bets: ScannedBet[] }>("/api/bets/scan", form, () => {});
-        if (!res.bets.length) setErrors((e) => [...e, `${original.name}: no bets found.`]);
-        setRows((prev) => [...prev, ...res.bets.map(toRow)]);
-      } catch (err) {
-        setErrors((e) => [...e, `${original.name}: ${err instanceof Error ? err.message : String(err)}`]);
-      } finally {
-        setScanning((n) => n - 1);
-      }
-    }
-  };
+  const { scanning, errors, scan } = useScreenshotScan<ScannedBet>("/api/bets/scan", "no bets found.", (bets) => setRows((prev) => [...prev, ...bets.map(toRow)]));
 
   const validate = (r: Row): string | null => {
     if (!r.player1.trim() || !r.player2.trim()) return "Enter both players.";
@@ -166,11 +145,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" multiple hidden onChange={(e) => void scan(e.target.files).then(() => (e.target.value = ""))} />
-        <button className="btn-primary" onClick={() => input.current?.click()} disabled={scanning > 0}>
-          {scanning > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-          {scanning > 0 ? `Reading ${scanning} screenshot${scanning === 1 ? "" : "s"}…` : "Choose screenshots"}
-        </button>
+        <ChooseScreenshots scanning={scanning} onFiles={scan} />
         <span className="ml-auto flex items-center gap-2 text-xs text-muted">
           These bets are
           <span className="flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Play type for new rows">
@@ -193,11 +168,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         </span>
       </div>
 
-      {errors.map((e) => (
-        <p key={e} className="mt-2 flex items-start gap-1.5 text-xs text-under">
-          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {e}
-        </p>
-      ))}
+      <ScanErrors errors={errors} />
 
 
       {rows.length > 0 && (

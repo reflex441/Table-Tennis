@@ -6,7 +6,7 @@ import { useSyncExternalStore } from "react";
  * and alarms are shown as native Windows notifications through this bridge.
  * In a normal browser it is absent and everything works as before.
  */
-export interface DesktopBridge {
+interface DesktopBridge {
   /** A native notification; clicking it opens `url` in the app. */
   notify(n: { title: string; body: string; url?: string | null }): void;
   /** An alarm: native notification and the app window brought to the front. */

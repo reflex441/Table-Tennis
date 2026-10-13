@@ -7,7 +7,6 @@ export const MATCHUP_BUCKETS = ["LT10", "10TO20", "GT20"] as const;
 export type MatchupBucket = (typeof MATCHUP_BUCKETS)[number];
 
 export const MATCHUP_LABEL: Record<MatchupBucket, string> = { LT10: "Under 10", "10TO20": "10–20", GT20: "Over 20" };
-export const MATCHUP_HINT: Record<MatchupBucket, string> = { LT10: "0–9 matchups", "10TO20": "10 to 20 matchups", GT20: "21+ matchups" };
 
 /** "11/3" -> 14; null when there's no O/U record. */
 export function matchupCount(ouStats: string | null | undefined): number | null {

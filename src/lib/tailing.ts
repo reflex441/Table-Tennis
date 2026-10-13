@@ -122,7 +122,7 @@ export async function getTailProfile(prisma: PrismaClient, viewerId: string, now
   };
 }
 
-export interface CopyResult {
+interface CopyResult {
   copied: number;
   skipped: { id: string; reason: string }[];
 }

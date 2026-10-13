@@ -29,7 +29,7 @@ export interface AlarmDTO {
 }
 
 /** One pick of a split bet (e.g. 0.5u UNDER of 0.5u UNDER + 0.5u SWEEP). */
-export interface BetLegDTO {
+interface BetLegDTO {
   selection: Selection;
   stake: number;
   odds: number | null;
@@ -103,8 +103,4 @@ export interface InAppNotificationDTO {
   url: string;
   matchId: string | null;
   readAt: string | null;
-}
-
-export interface ApiErrorBody {
-  error: { code: string; message: string; details?: unknown };
 }

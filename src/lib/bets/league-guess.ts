@@ -9,7 +9,7 @@ import { getTailedAccount } from "@/lib/tailing";
  * matched exactly ("Kovtanyuk D.") or by surname ("Dmytro Kovtanyuk").
  */
 
-export interface LeagueHistoryRow {
+interface LeagueHistoryRow {
   player1: string;
   player2: string;
   competition: string | null;
@@ -21,7 +21,7 @@ interface Tally {
   last: number;
 }
 
-export interface LeagueIndex {
+interface LeagueIndex {
   names: Map<string, Map<Competition, Tally>>;
   tokens: Map<string, Map<Competition, Tally>>;
 }
@@ -77,7 +77,7 @@ export function guessCompetition(player1: string | null, player2: string | null,
 }
 
 /** The matches of these accounts (most recent first). */
-export async function loadLeagueIndex(prisma: PrismaClient, userIds: string[]): Promise<LeagueIndex> {
+async function loadLeagueIndex(prisma: PrismaClient, userIds: string[]): Promise<LeagueIndex> {
   const rows = await prisma.match.findMany({
     where: { userId: { in: [...new Set(userIds)] }, competition: { not: null } },
     select: { player1: true, player2: true, competition: true, startsAt: true },

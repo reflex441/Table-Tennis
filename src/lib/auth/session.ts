@@ -8,7 +8,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
  */
 
 export const SESSION_COOKIE = "tt_session";
-export const SESSION_MAX_AGE_S = 60 * 60 * 24 * 30;
+const SESSION_MAX_AGE_S = 60 * 60 * 24 * 30;
 
 function sign(value: string, secret: string): string {
   return createHmac("sha256", secret).update(value).digest("base64url");

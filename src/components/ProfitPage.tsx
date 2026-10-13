@@ -22,6 +22,7 @@ import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 import { AddPastBet } from "./AddPastBet";
 import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
 import { tidyCompetition } from "@/lib/leagues";
+import { SummaryStats, pct } from "./SummaryStats";
 
 type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
@@ -34,10 +35,6 @@ const PERIODS: { id: Period; label: string; days: number | null }[] = [
   { id: "90d", label: "90D", days: 90 },
   { id: "all", label: "All", days: null },
 ];
-
-function pct(n: number | null): string {
-  return n === null ? "–" : `${n > 0 ? "+" : ""}${n}%`;
-}
 
 /**
  * `title` changes the heading (e.g. "Sam's profit" when tailing); `readOnly`
@@ -512,27 +509,7 @@ function PlayTypeCard({
       <div className="mt-2">
         <ProfitAmount units={summary.profit} size="lg" />
       </div>
-      <dl className="mt-2 grid grid-cols-4 gap-2 text-xs">
-        <div>
-          <dt className="text-muted">ROI</dt>
-          <dd className={`tabular font-semibold ${summary.roi === null ? "" : summary.roi >= 0 ? "text-over" : "text-under"}`}>{pct(summary.roi)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Win rate</dt>
-          <dd className="tabular font-semibold">{summary.winRate === null ? "–" : `${summary.winRate}%`}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Record</dt>
-          <dd className="tabular font-semibold">
-            {summary.won}-{summary.lost}
-            {summary.void ? `-${summary.void}` : ""}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted">Staked</dt>
-          <dd className="tabular font-semibold">{formatUnits(summary.staked, false)}</dd>
-        </div>
-      </dl>
+      <SummaryStats summary={summary} />
       <p className="mt-1 text-[11px] text-muted">
         {summary.bets} bets · {summary.pending} pending{summary.avgOdds ? ` · avg odds ${summary.avgOdds.toFixed(2)}` : ""}
       </p>

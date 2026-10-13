@@ -25,7 +25,7 @@ export function matchDedupeKey(player1: string, player2: string, startsAt: Date)
   return `${playersKey(player1, player2)}@${minute}`;
 }
 
-export type NameSimilarity = "same" | "similar" | "different";
+type NameSimilarity = "same" | "similar" | "different";
 
 /**
  * Compare two player names. "Varcl J" vs "Varcl J." is "same";
@@ -42,7 +42,7 @@ export function compareNames(a: string | null, b: string | null): NameSimilarity
   return ta.some((t) => tb.has(t)) ? "similar" : "different";
 }
 
-export interface PlayerPair {
+interface PlayerPair {
   player1: string | null;
   player2: string | null;
 }
@@ -56,14 +56,14 @@ export function comparePlayers(a: PlayerPair, b: PlayerPair): NameSimilarity {
   return best === 2 ? "same" : best === 1 ? "similar" : "different";
 }
 
-export interface MergeSuggestion {
+interface MergeSuggestion {
   /** Candidate ids that appear to describe the same match. */
   ids: [string, string];
   similarity: "same" | "similar";
   reason: string;
 }
 
-export interface CandidateLike extends PlayerPair {
+interface CandidateLike extends PlayerPair {
   id: string;
   sourceId: string;
   startsAt?: string | null;
@@ -96,7 +96,7 @@ export function suggestMerges(candidates: CandidateLike[], toleranceMinutes = 10
   return out;
 }
 
-export interface MergeConflict<K extends string = string> {
+interface MergeConflict<K extends string = string> {
   field: K;
   primary: unknown;
   secondary: unknown;

@@ -4,8 +4,8 @@ import { shortPlayerName } from "@/lib/matching/player-names";
 import { tidyCompetition } from "@/lib/leagues";
 
 export const REMINDER_PRESETS = [1, 3, 5, 10, 15, 30] as const;
-export const MIN_REMINDER_MINUTES = 0;
-export const MAX_REMINDER_MINUTES = 24 * 60;
+const MIN_REMINDER_MINUTES = 0;
+const MAX_REMINDER_MINUTES = 24 * 60;
 
 export const reminderMinutesSchema = z
   .number({ error: "Reminder must be a number of minutes" })
@@ -25,7 +25,7 @@ const optionalText = (max: number) =>
 /** "TT Cup" / "tt elite series" -> "TT CUP" / "TT ELITE", so a league is always spelt one way. */
 const competitionSchema = optionalText(120).transform(tidyCompetition);
 
-export const statisticsSchema = z.object({
+const statisticsSchema = z.object({
   selection: z.enum(SELECTIONS).nullish().transform((v) => v ?? null),
   pointsLine: z.number().min(-500).max(500).nullish().transform((v) => v ?? null),
   ouStats: z
@@ -41,7 +41,7 @@ export const statisticsSchema = z.object({
 
 const isoDate = z.iso.datetime({ offset: true, error: "Start time must be an ISO date-time" });
 
-export const playTypeSchema = z.enum(["BOT", "PERSONAL"]);
+const playTypeSchema = z.enum(["BOT", "PERSONAL"]);
 
 /** Record / edit a placed bet. Stake in units; decimal odds. */
 const betResultSchema = z.enum(["PENDING", "WON", "LOST", "VOID"]);
@@ -57,7 +57,7 @@ export const betLegSchema = z.object({
 });
 
 /** 2-3 picks on one play, e.g. 0.5u UNDER + 0.5u SWEEP; null turns a split bet back into one bet. */
-export const betLegsSchema = z.array(betLegSchema).min(2, "A split bet needs at least 2 picks").max(3, "At most 3 picks");
+const betLegsSchema = z.array(betLegSchema).min(2, "A split bet needs at least 2 picks").max(3, "At most 3 picks");
 
 export const betInputSchema = z.object({
   stake: z.number().positive("Stake must be more than 0").max(1000, "At most 1000 units").optional(),

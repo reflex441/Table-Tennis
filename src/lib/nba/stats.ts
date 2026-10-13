@@ -3,7 +3,7 @@ import type { EspnPlayerLine } from "./espn";
 /** Player prop stats and how to read them from a box score. Client-safe. */
 
 export const STAT_CODES = ["PTS", "REB", "AST", "3PM", "STL", "BLK", "TO", "PRA", "PR", "PA", "RA", "SB"] as const;
-export type StatCode = (typeof STAT_CODES)[number];
+type StatCode = (typeof STAT_CODES)[number];
 
 export const STAT_LABEL: Record<StatCode, string> = {
   PTS: "points",

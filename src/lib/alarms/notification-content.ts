@@ -33,7 +33,7 @@ export function formatClock(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
-export function formatPercent(n: number): string {
+function formatPercent(n: number): string {
   return `${Number.isInteger(n) ? n : n.toFixed(1)}%`;
 }
 
@@ -49,7 +49,7 @@ export function statsLine(stats: NotificationMatch["statistics"]): string | null
   return parts.length ? parts.join(" | ") : null;
 }
 
-export function minutesUntil(startsAt: Date, now: Date): number {
+function minutesUntil(startsAt: Date, now: Date): number {
   return Math.max(0, Math.round((startsAt.getTime() - now.getTime()) / 60_000));
 }
 

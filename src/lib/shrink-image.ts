@@ -6,11 +6,11 @@
  */
 
 /** Files at or below this size are uploaded untouched. */
-export const UPLOAD_SAFE_BYTES = 3_800_000;
+const UPLOAD_SAFE_BYTES = 3_800_000;
 /** Leading bytes of the original kept for EXIF (capture time). */
-export const EXIF_HEAD_BYTES = 128 * 1024;
+const EXIF_HEAD_BYTES = 128 * 1024;
 
-export interface PreparedUpload {
+interface PreparedUpload {
   file: File;
   /** Start of the original file when `file` was re-encoded, else null. */
   exifHead: Blob | null;

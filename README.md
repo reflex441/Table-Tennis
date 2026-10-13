@@ -276,7 +276,7 @@ Each device that enables notifications is marked as a **computer** or a **phone*
   - a breakdown per competition;
   - a sortable bet list (date / stake / odds / profit);
   - period and play-type filters at the top that apply to the whole page.
-- **API:** `PUT/DELETE /api/matches/:id/bet` (`{stake, odds, result}`), and `GET /api/stats?days=30&type=BOT`.
+- **API:** `PUT/DELETE /api/matches/:id/bet` (`{stake, odds, result}`).
 
 ## Notifications: what browsers and phones can and cannot do
 

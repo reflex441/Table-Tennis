@@ -5,7 +5,7 @@ import { avatarUrl } from "@/lib/auth/accounts";
 import { getTailedAccount } from "@/lib/tailing";
 
 /** Accounts need this many settled bets to be ranked by ROI (the units ranking has no minimum). */
-export const LEADERBOARD_MIN_BETS = 100;
+const LEADERBOARD_MIN_BETS = 100;
 
 export interface LeaderboardRow {
   userId: string;
@@ -34,7 +34,7 @@ export interface Leaderboard {
 }
 
 /** Emails always ranked by ROI, even below the minimum (LEADERBOARD_ALWAYS_SHOW, comma-separated). */
-export function alwaysShownEmails(): Set<string> {
+function alwaysShownEmails(): Set<string> {
   return new Set(
     (process.env.LEADERBOARD_ALWAYS_SHOW ?? "")
       .split(",")

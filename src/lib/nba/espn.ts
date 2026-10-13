@@ -7,9 +7,9 @@ import { DateTime } from "luxon";
  * "couldn't check", never a wrong result).
  */
 
-export const ESPN_NBA_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+const ESPN_NBA_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 /** Second address serving the same data, tried when the first fails. */
-export const ESPN_NBA_BASE_2 = "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba";
+const ESPN_NBA_BASE_2 = "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba";
 
 /** Asked like a browser would (some sites turn away unknown programs). */
 const HEADERS = {

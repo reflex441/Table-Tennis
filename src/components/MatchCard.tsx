@@ -180,7 +180,7 @@ export function MatchCard({ match, timezone, actions, highlight }: { match: Matc
 }
 
 /** "Bet placed" / "Skipped" once confirmed; "Ringing" while waiting for confirmation. */
-export function AckBadge({ match, now }: { match: MatchDTO; now: number }) {
+function AckBadge({ match, now }: { match: MatchDTO; now: number }) {
   const alarm = match.alarm;
   if (!alarm) return null;
   if (alarm.ackAction === "placed") return <span className="chip bg-over/15 text-over">Bet placed ✓</span>;

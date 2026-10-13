@@ -17,7 +17,7 @@ export class GeminiRequestError extends Error {
   }
 }
 
-export interface ExtractOptions {
+interface ExtractOptions {
   apiKey: string;
   model: string;
   /**
@@ -80,7 +80,7 @@ async function listGeminiModels(client: Pick<GoogleGenAI, "models">): Promise<st
   }
 }
 
-export interface ExtractOutput {
+interface ExtractOutput {
   raw: unknown;
   result: ExtractionResult;
   warnings: string[];

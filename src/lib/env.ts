@@ -45,7 +45,7 @@ const schema = z.object({
   TAILING_ACCOUNT_EMAIL: z.string().optional().default(""),
 });
 
-export type ServerEnv = z.infer<typeof schema>;
+type ServerEnv = z.infer<typeof schema>;
 
 let cached: ServerEnv | null = null;
 
@@ -77,9 +77,4 @@ export function vapidKeyProblem(publicKey: string, privateKey: string): string |
   if (pub.length !== 87 || !pub.startsWith("B")) return "The server's VAPID_PUBLIC_KEY is not a valid public key (it should be 87 characters starting with B). Re-paste it, or generate a new pair with npm run vapid.";
   if (priv.length !== 43) return "The server's VAPID_PRIVATE_KEY is not a valid private key (it should be 43 characters). Re-paste it, or generate a new pair with npm run vapid.";
   return null;
-}
-
-export function isPushConfigured(): boolean {
-  const e = env();
-  return Boolean(e.VAPID_PUBLIC_KEY && e.VAPID_PRIVATE_KEY);
 }

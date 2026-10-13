@@ -4,7 +4,7 @@ import { isSafeUrl, type LeagueLink } from "@/lib/leagues";
 import { ALARM_SOUNDS, type AlarmSound } from "@/lib/alarm-sounds";
 import { reminderMinutesSchema } from "./match";
 
-export function isValidTimeZone(tz: string): boolean {
+function isValidTimeZone(tz: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
     return true;
@@ -37,9 +37,9 @@ const modelId = z
   .transform((v) => v.replace(/^models\//, ""))
   .pipe(z.string().min(1, "Enter a model name").max(80).regex(/^[a-z0-9][a-z0-9._-]*$/i, 'Use a model name like "gemini-3.5-flash-lite"'));
 
-export const geminiModelSchema = modelId;
+const geminiModelSchema = modelId;
 /** Comma-separated backup models, or "" to turn the backup off. */
-export const geminiFallbackSchema = z
+const geminiFallbackSchema = z
   .string()
   .trim()
   .max(200)

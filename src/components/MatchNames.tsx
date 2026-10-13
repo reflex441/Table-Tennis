@@ -7,7 +7,7 @@ import { findLeagueUrl } from "@/lib/leagues";
 import { useSettings } from "./SettingsProvider";
 
 /** The bookmaker link for this match's league (Settings → League links), if set. */
-export function useLeagueUrl(competition: string | null): string | null {
+function useLeagueUrl(competition: string | null): string | null {
   const { settings } = useSettings();
   return findLeagueUrl(competition, settings.leagueLinks);
 }

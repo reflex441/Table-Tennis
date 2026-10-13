@@ -1,16 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Check, CheckCircle2, ImagePlus, Loader2, TriangleAlert, X } from "lucide-react";
+import { useState } from "react";
+import { Check, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
 import { DateTime } from "luxon";
-import { api, uploadWithProgress } from "@/lib/client-api";
+import { api } from "@/lib/client-api";
 import { toLocalInputValue } from "@/lib/format";
-import { prepareUpload } from "@/lib/shrink-image";
 import type { ScannedPick } from "@/lib/gemini/nba";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { useSettings } from "../SettingsProvider";
 import { NbaDatalists, NbaFields, draftToJson, type NbaDraft } from "./NbaBetForm";
 import { statCode } from "@/lib/nba/stats";
+import { ChooseScreenshots, ScanErrors, useScreenshotScan } from "../ScreenshotScan";
 
 type Scanned = ScannedPick & { tipster: string | null; bookmaker: string | null; odds: number | null; placedAt: string | null; dateKind?: "GAME" | "POSTED" };
 
@@ -32,10 +32,7 @@ let counter = 0;
 export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[]; onAdded: (bets: NbaBetDTO[]) => void; onClose: () => void }) {
   const { settings } = useSettings();
   const tz = settings.timezone;
-  const input = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[]>([]);
-  const [scanning, setScanning] = useState(0);
-  const [errors, setErrors] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
 
   const patch = (key: string, p: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)));
@@ -72,25 +69,7 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
     status: null,
   });
 
-  const scan = async (files: FileList | null) => {
-    if (!files?.length) return;
-    setErrors([]);
-    for (const original of Array.from(files)) {
-      setScanning((n) => n + 1);
-      try {
-        const { file } = await prepareUpload(original);
-        const form = new FormData();
-        form.append("file", file);
-        const res = await uploadWithProgress<{ bets: Scanned[] }>("/api/nba/scan", form, () => {});
-        if (!res.bets.length) setErrors((e) => [...e, `${original.name}: no picks found.`]);
-        setRows((prev) => [...prev, ...res.bets.map(toRow)]);
-      } catch (err) {
-        setErrors((e) => [...e, `${original.name}: ${err instanceof Error ? err.message : String(err)}`]);
-      } finally {
-        setScanning((n) => n - 1);
-      }
-    }
-  };
+  const { scanning, errors, scan } = useScreenshotScan<Scanned>("/api/nba/scan", "no picks found.", (bets) => setRows((prev) => [...prev, ...bets.map(toRow)]));
 
   const addAll = async () => {
     const todo = rows.filter((r) => r.include && !r.status?.ok);
@@ -131,18 +110,10 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
       <NbaDatalists tipsters={tipsters} />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" multiple hidden onChange={(e) => void scan(e.target.files).then(() => (e.target.value = ""))} />
-        <button className="btn-primary" onClick={() => input.current?.click()} disabled={scanning > 0}>
-          {scanning > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-          {scanning > 0 ? `Reading ${scanning} screenshot${scanning === 1 ? "" : "s"}…` : "Choose screenshots"}
-        </button>
+        <ChooseScreenshots scanning={scanning} onFiles={scan} />
       </div>
 
-      {errors.map((e) => (
-        <p key={e} className="mt-2 flex items-start gap-1.5 text-xs text-under">
-          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {e}
-        </p>
-      ))}
+      <ScanErrors errors={errors} />
 
       {rows.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">

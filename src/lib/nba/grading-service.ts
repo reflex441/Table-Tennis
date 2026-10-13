@@ -10,7 +10,7 @@ const RECHECK_MS = 20 * 60_000;
 const MAX_AGE_MS = 5 * 24 * 3_600_000;
 const MAX_AGE_FORCED_MS = 400 * 24 * 3_600_000;
 
-export interface GradeReport {
+interface GradeReport {
   checked: number;
   settled: number;
   waiting: number;

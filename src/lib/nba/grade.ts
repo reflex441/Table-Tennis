@@ -4,8 +4,6 @@ import { espnDay, type EspnClient, type EspnGame, type EspnPlayerLine, type Espn
 import type { NbaMarket } from "./parse";
 import { STAT_LABEL, statCode, statValue } from "./stats";
 
-export { STAT_CODES, STAT_LABEL, statCode, statValue, type StatCode } from "./stats";
-
 /**
  * Grading NBA bets from ESPN: player props from the box score, moneylines,
  * spreads and totals from the final score. Futures, parlays and anything
@@ -108,7 +106,7 @@ async function candidateGames(bet: Gradable, espn: EspnClient): Promise<EspnGame
   return [...localDay, ...usDay];
 }
 
-export type GradeOutcome =
+type GradeOutcome =
   | { kind: "settled"; result: Exclude<BetResult, "PENDING">; note: string; eventId: string; gameStart: Date }
   | { kind: "wait"; note: string; eventId?: string; gameStart?: Date }
   | { kind: "manual"; note: string };
@@ -134,7 +132,7 @@ function overUnder(value: number, line: number, side: "OVER" | "UNDER"): Exclude
 }
 
 /** About how long an NBA game takes (2½ hours), plus the hour after it before results are looked up. */
-export const GAME_LENGTH_MS = 2.5 * HOUR;
+const GAME_LENGTH_MS = 2.5 * HOUR;
 export const RESULT_DELAY_MS = GAME_LENGTH_MS + HOUR;
 
 /**

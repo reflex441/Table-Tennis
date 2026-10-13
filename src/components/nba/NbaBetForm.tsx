@@ -32,11 +32,11 @@ export interface NbaDraft {
   side: "" | "OVER" | "UNDER";
 }
 
-export const EMPTY_GRADING = { team: "", player: "", stat: "", line: "", side: "" as const };
+const EMPTY_GRADING = { team: "", player: "", stat: "", line: "", side: "" as const };
 
-export const RESULT_LABEL: Record<BetResult, string> = { PENDING: "Pending", WON: "Won", LOST: "Lost", VOID: "Void" };
+const RESULT_LABEL: Record<BetResult, string> = { PENDING: "Pending", WON: "Won", LOST: "Lost", VOID: "Void" };
 
-export function draftFromBet(b: NbaBetDTO, tz: string): NbaDraft {
+function draftFromBet(b: NbaBetDTO, tz: string): NbaDraft {
   return {
     tipster: b.tipster,
     pick: b.pick,

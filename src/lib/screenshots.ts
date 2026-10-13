@@ -27,7 +27,7 @@ export function sha256(buf: Buffer): string {
  * time; we use OffsetTimeOriginal when present, otherwise interpret it in
  * the user's timezone.
  */
-export async function readExifCaptureTime(buf: Buffer, timezone: string): Promise<Date | null> {
+async function readExifCaptureTime(buf: Buffer, timezone: string): Promise<Date | null> {
   try {
     const exifr = (await import("exifr")).default;
     const data = (await exifr.parse(buf, {

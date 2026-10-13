@@ -20,15 +20,12 @@ import { useToday } from "../useNow";
 import { BasketballIcon } from "./BasketballIcon";
 import { NbaBetForm } from "./NbaBetForm";
 import { NbaScanner } from "./NbaScanner";
+import { SummaryStats, pct } from "../SummaryStats";
 
 /** Table tennis bets, for the combined totals. */
-export type TableTennisRow = Settleable & { startsAt: string };
+type TableTennisRow = Settleable & { startsAt: string };
 
 type Status = "ALL" | "PENDING" | "SETTLED";
-
-function pct(n: number | null): string {
-  return n === null ? "–" : `${n > 0 ? "+" : ""}${n}%`;
-}
 
 /**
  * NBA: tipsters' picks (scanned from screenshots or typed in), tracked in
@@ -389,27 +386,7 @@ function SummaryCard({ title, icon, summary, action }: { title: string; icon: Re
       <div className="mt-2">
         <ProfitAmount units={summary.profit} size="lg" />
       </div>
-      <dl className="mt-2 grid grid-cols-4 gap-2 text-xs">
-        <div>
-          <dt className="text-muted">ROI</dt>
-          <dd className={`tabular font-semibold ${summary.roi === null ? "" : summary.roi >= 0 ? "text-over" : "text-under"}`}>{pct(summary.roi)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Win rate</dt>
-          <dd className="tabular font-semibold">{summary.winRate === null ? "–" : `${summary.winRate}%`}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Record</dt>
-          <dd className="tabular font-semibold">
-            {summary.won}-{summary.lost}
-            {summary.void ? `-${summary.void}` : ""}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted">Staked</dt>
-          <dd className="tabular font-semibold">{formatUnits(summary.staked, false)}</dd>
-        </div>
-      </dl>
+      <SummaryStats summary={summary} />
       <p className="mt-1.5 text-[11px] text-muted">
         {summary.bets} bet{summary.bets === 1 ? "" : "s"} · {summary.pending} pending
       </p>

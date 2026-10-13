@@ -105,7 +105,7 @@ export interface DispatchReport {
   repeated: number;
 }
 
-export function retryDelayMs(attempt: number): number {
+function retryDelayMs(attempt: number): number {
   return Math.min(5 * 60_000, 15_000 * 2 ** Math.max(0, attempt - 1));
 }
 

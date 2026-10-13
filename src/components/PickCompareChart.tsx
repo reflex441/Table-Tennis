@@ -22,7 +22,7 @@ export const PICK_SERIES: Record<Selection, { color: string; dash?: string }> = 
   SET_SPREAD: { color: "#f59e0b", dash: "1 3" },
 };
 
-export interface PickSeries {
+interface PickSeries {
   pick: Selection;
   points: CumulativePoint[];
 }

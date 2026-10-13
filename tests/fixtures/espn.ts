@@ -41,11 +41,11 @@ const event = (id: string, date: string, state: "pre" | "in" | "post", statusNam
 });
 
 export const KNICKS = team("New York Knicks", "Knicks", "NY", "New York");
-export const SPURS = team("San Antonio Spurs", "Spurs", "SA", "San Antonio");
-export const CELTICS = team("Boston Celtics", "Celtics", "BOS", "Boston");
-export const LAKERS = team("Los Angeles Lakers", "Lakers", "LAL", "Los Angeles");
+const SPURS = team("San Antonio Spurs", "Spurs", "SA", "San Antonio");
+const CELTICS = team("Boston Celtics", "Celtics", "BOS", "Boston");
+const LAKERS = team("Los Angeles Lakers", "Lakers", "LAL", "Los Angeles");
 export const SIXERS = team("Philadelphia 76ers", "76ers", "PHI", "Philadelphia");
-export const HEAT = team("Miami Heat", "Heat", "MIA", "Miami");
+const HEAT = team("Miami Heat", "Heat", "MIA", "Miami");
 
 /** Sat 13 Jun 2026 (US): Knicks @ Spurs final 108-112, Lakers @ Celtics in progress, 76ers @ Heat postponed. */
 export const SCOREBOARD_20260613 = {
@@ -118,8 +118,8 @@ export const SUMMARY_402 = {
   },
 };
 
-export const MAGIC = team("Orlando Magic", "Magic", "ORL", "Orlando");
-export const CAVS = team("Cleveland Cavaliers", "Cavaliers", "CLE", "Cleveland");
+const MAGIC = team("Orlando Magic", "Magic", "ORL", "Orlando");
+const CAVS = team("Cleveland Cavaliers", "Cavaliers", "CLE", "Cleveland");
 
 /** Preseason, Mon 12 Oct 2026 (US): Magic 105 @ Cavaliers 119 (the user's test game). */
 export const PRESEASON_20261012 = {

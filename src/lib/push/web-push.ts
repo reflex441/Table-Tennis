@@ -29,7 +29,7 @@ export function createWebPushSender(): PushSender | null {
 }
 
 /** 404/410: subscription expired. 400/403/413: request will never succeed. */
-export function classifyPushError(err: unknown): PushResult {
+function classifyPushError(err: unknown): PushResult {
   if (err instanceof WebPushError) {
     const permanent = [400, 403, 404, 410, 413].includes(err.statusCode);
     return { ok: false, permanent, statusCode: err.statusCode, error: err.body?.slice(0, 300) || err.message };

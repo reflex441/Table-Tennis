@@ -27,7 +27,7 @@ export function computeProfit(stake: number, odds: number | null | undefined, re
   }
 }
 
-export interface LegLike {
+interface LegLike {
   stake: number;
   odds: number | null;
   result: BetResult;

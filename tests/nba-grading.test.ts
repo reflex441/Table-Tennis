@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEspnClient, espnDay, parseBoxScore, parseScoreboard } from "@/lib/nba/espn";
-import { findPlayer, gameTimeFromText, gradeBet, mentionsTeam, statCode, type Gradable } from "@/lib/nba/grade";
+import { findPlayer, gameTimeFromText, gradeBet, mentionsTeam, type Gradable } from "@/lib/nba/grade";
+import { statCode } from "@/lib/nba/stats";
 import { KNICKS, PRESEASON_20261012, SCOREBOARD_20260613, SIXERS, SUMMARY_401, SUMMARY_402, SUMMARY_501, fakeEspn } from "./fixtures/espn";
 
 const tipOff = new Date("2026-06-14T00:40:00Z"); // Sat 8:40 PM ET

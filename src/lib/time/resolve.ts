@@ -54,7 +54,7 @@ export interface ResolveInput {
 
 export type ResolveStatus = "resolved" | "needs_confirmation" | "missing";
 
-export type ResolveKind =
+type ResolveKind =
   | "none"
   | "absolute"
   | "relative-day"
@@ -65,7 +65,7 @@ export type ResolveKind =
   | "live"
   | "unparsed";
 
-export interface ResolveResult {
+interface ResolveResult {
   /** Proposed start time (ISO, UTC) or null when it cannot be determined. */
   startsAt: string | null;
   status: ResolveStatus;
