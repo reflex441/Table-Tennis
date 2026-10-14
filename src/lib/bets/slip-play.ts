@@ -1,4 +1,4 @@
-import type { Selection } from "@/lib/selection";
+import { canBeBot, type Selection } from "@/lib/selection";
 
 /** The match a scanned bet slip lines up with (see findSlipReferences). */
 export interface SlipReference {
@@ -15,7 +15,10 @@ export interface SlipReference {
   ouStats: string | null;
 }
 
-/** Bot if the bot's pick was bet; a different pick, or no bot play at that time, is your own: personal. */
+/**
+ * Bot if the bot's pick was bet; a different pick, no bot play at that time,
+ * or a sweep / spread (bot plays are Over / Under only) is your own: personal.
+ */
 export function slipPlayType(ref: Pick<SlipReference, "playType" | "selection"> | null, slipSelection: Selection | null): "BOT" | "PERSONAL" {
-  return ref?.playType === "BOT" && (!ref.selection || !slipSelection || ref.selection === slipSelection) ? "BOT" : "PERSONAL";
+  return ref?.playType === "BOT" && canBeBot(slipSelection) && (!ref.selection || !slipSelection || ref.selection === slipSelection) ? "BOT" : "PERSONAL";
 }

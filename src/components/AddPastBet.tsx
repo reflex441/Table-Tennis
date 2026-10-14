@@ -7,7 +7,7 @@ import { SlipScanner } from "./SlipScanner";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue } from "@/lib/format";
-import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
+import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
@@ -104,7 +104,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const seg = <T extends string>(value: T, options: readonly (readonly [T, string])[], onChange: (v: T) => void, label: string) => (
+  const seg = <T extends string>(value: T, options: readonly (readonly [T, string])[], onChange: (v: T) => void, label: string, off?: (v: T) => string | null) => (
     <div className="flex rounded-lg border border-line p-0.5 text-xs" role="radiogroup" aria-label={label}>
       {options.map(([v, text]) => (
         <button
@@ -112,7 +112,9 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
           type="button"
           role="radio"
           aria-checked={value === v}
-          className={`rounded-md px-2.5 py-1 ${value === v ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
+          disabled={Boolean(off?.(v))}
+          title={off?.(v) ?? undefined}
+          className={`rounded-md px-2.5 py-1 disabled:opacity-40 ${value === v ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
           onClick={() => onChange(v)}
         >
           {text}
@@ -150,11 +152,21 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <div>
           <span className="label">Play</span>
-          {seg(f.playType, [["BOT", "Bot"], ["PERSONAL", "Personal"]] as const, (v) => set({ playType: v }), "Play type")}
+          {seg(f.playType, [["BOT", "Bot"], ["PERSONAL", "Personal"]] as const, (v) => set({ playType: v }), "Play type", (v) =>
+            v === "BOT" && !canBeBot(f.selection || null) ? BOT_IS_OVER_UNDER : null,
+          )}
         </div>
         <label className="w-40">
           <span className="label">Pick</span>
-          <select className="input py-1.5" value={f.selection} onChange={(e) => set({ selection: e.target.value as "" | Selection })} aria-label="Pick">
+          <select
+            className="input py-1.5"
+            value={f.selection}
+            onChange={(e) => {
+              const selection = e.target.value as "" | Selection;
+              set({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL" as const }) });
+            }}
+            aria-label="Pick"
+          >
             <option value="">—</option>
             {SELECTIONS.map((s) => (
               <option key={s} value={s}>

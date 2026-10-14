@@ -7,6 +7,7 @@ import { ReminderPicker } from "@/components/ReminderPicker";
 import { fromLocalInputValue, formatDayLabel, formatTime } from "@/lib/format";
 import { DateTimeInput } from "@/components/DateTimeInput";
 import { LeagueSelect } from "@/components/LeagueSelect";
+import { BOT_IS_OVER_UNDER, canBeBot } from "@/lib/selection";
 
 interface Props {
   candidate: Candidate;
@@ -162,7 +163,9 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
               type="button"
               role="radio"
               aria-checked={c.playType === t}
-              className={`rounded-md px-2 py-0.5 ${c.playType === t ? (t === "BOT" ? "bg-violet-500/20 font-semibold text-violet-300" : "bg-amber-500/15 font-semibold text-amber-300") : "text-muted hover:text-text"}`}
+              disabled={t === "BOT" && !canBeBot(c.selection || null)}
+              title={t === "BOT" && !canBeBot(c.selection || null) ? BOT_IS_OVER_UNDER : undefined}
+              className={`rounded-md px-2 py-0.5 disabled:opacity-40 ${c.playType === t ? (t === "BOT" ? "bg-violet-500/20 font-semibold text-violet-300" : "bg-amber-500/15 font-semibold text-amber-300") : "text-muted hover:text-text"}`}
               onClick={() => onChange({ playType: t })}
             >
               {t === "BOT" ? "Bot play" : "Personal play"}
@@ -200,7 +203,10 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
             className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : c.selection === "SWEEP" ? "text-violet-300" : c.selection === "POINTS_SPREAD" ? "text-sky-300" : c.selection === "SET_SPREAD" ? "text-amber-300" : ""}`}
             value={c.selection}
             // Changing the pick never changes Bot / Personal (that has its own switch).
-            onChange={(e) => onChange({ selection: e.target.value as Candidate["selection"] })}
+            onChange={(e) => {
+              const selection = e.target.value as Candidate["selection"];
+              onChange({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL" }) });
+            }}
           >
             <option value="">—</option>
             <option value="OVER">OVER</option>

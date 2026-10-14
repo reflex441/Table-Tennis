@@ -14,6 +14,18 @@ export const SELECTION_LABEL: Record<Selection, string> = {
   SET_SPREAD: "Set spread",
 };
 
+/** Bot plays are Over / Under picks only: a sweep or spread is always your own pick, a personal play. */
+export function canBeBot(s: Selection | null | undefined): boolean {
+  return !s || s === "OVER" || s === "UNDER";
+}
+
+export const BOT_IS_OVER_UNDER = "Sweeps and spreads are personal plays - bot plays are Over / Under only";
+
+/** The play type a pick can have: "BOT" on a sweep or spread becomes "PERSONAL". */
+export function playTypeFor(s: Selection | null | undefined, playType: "BOT" | "PERSONAL"): "BOT" | "PERSONAL" {
+  return playType === "BOT" && !canBeBot(s) ? "PERSONAL" : playType;
+}
+
 /** Handicap picks: their line is a spread ("-4.5", "+1.5"), not a points total. */
 export function isSpread(s: Selection | null | undefined): boolean {
   return s === "POINTS_SPREAD" || s === "SET_SPREAD";

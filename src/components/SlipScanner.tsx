@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
-import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
+import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { slipPlayType, type SlipReference } from "@/lib/bets/slip-play";
@@ -143,7 +143,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
     leagueGuessed: Boolean(b.competitionGuessed && b.competition),
     startsAtLocal: b.startsAt ? toLocalInputValue(b.startsAt, tz) : "",
     // Bot when it lines up with an uploaded bot play; others follow the switch above.
-    playType: b.reference ? (b.playType ?? "PERSONAL") : playType,
+    playType: b.reference ? (b.playType ?? "PERSONAL") : playTypeFor(b.selection, playType),
     ref: b.reference ?? null,
     selection: b.selection ?? "",
     pointsLine: b.pointsLine !== null ? String(b.pointsLine) : "",
@@ -256,7 +256,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 onClick={() => {
                   setPlayType(t);
                   // Only bets that didn't line up with an uploaded match.
-                  setRows((prev) => prev.map((r) => (r.status?.ok || r.ref ? r : { ...r, playType: t })));
+                  setRows((prev) => prev.map((r) => (r.status?.ok || r.ref ? r : { ...r, playType: playTypeFor(r.selection || null, t) })));
                 }}
               >
                 {t === "BOT" ? "Bot plays" : "Personal plays"}
@@ -299,7 +299,9 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 <label className="w-24">
                   <span className="label">Play</span>
                   <select className="input py-1" value={r.playType} onChange={(e) => patch(r.key, { playType: e.target.value as Row["playType"] })} aria-label="Play type">
-                    <option value="BOT">Bot</option>
+                    <option value="BOT" disabled={!canBeBot(r.selection || null)} title={canBeBot(r.selection || null) ? undefined : BOT_IS_OVER_UNDER}>
+                      Bot
+                    </option>
                     <option value="PERSONAL">Personal</option>
                   </select>
                 </label>
@@ -311,7 +313,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                     onChange={(e) => {
                       const selection = e.target.value as Row["selection"];
                       // A different pick than the bot's is a personal play.
-                      patch(r.key, { selection, ...(r.ref ? { playType: slipPlayType(r.ref, selection || null) } : {}) });
+                      patch(r.key, { selection, playType: r.ref ? slipPlayType(r.ref, selection || null) : playTypeFor(selection || null, playType) });
                     }}
                     aria-label="Pick"
                   >

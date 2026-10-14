@@ -4,7 +4,8 @@ import { checkSchedule, computeFireAt } from "./schedule";
 import { matchDedupeKey, playersKey } from "@/lib/matching/dedupe";
 import type { BetLegInput, MatchInput, UpdateMatchInput } from "@/lib/validation/match";
 import type { MatchDTO } from "@/lib/types";
-import { placeBet } from "@/lib/bets/service";
+import { personalSweepsAndSpreads, placeBet } from "@/lib/bets/service";
+import { playTypeFor } from "@/lib/selection";
 
 export { ServiceError } from "./service-error";
 import { ServiceError } from "./service-error";
@@ -79,7 +80,7 @@ export async function createMatchWithAlarm(
         dedupeKey,
         userId,
         copiedFromUserId: opts.copiedFromUserId ?? null,
-        playType: input.playType ?? (input.selection ? "BOT" : "PERSONAL"),
+        playType: playTypeFor(input.selection, input.playType ?? (input.selection ? "BOT" : "PERSONAL")),
         stakeUnits: input.stakeUnits,
         odds: input.odds,
         statistics: {
@@ -186,12 +187,15 @@ export async function updateMatch(prisma: PrismaClient, userId: string, id: stri
     }
   }
 
+  // Bot plays are Over / Under only: a sweep or spread pick makes it a personal play.
+  const playType = playTypeFor(input.selection !== undefined ? input.selection : existing.statistics?.selection, input.playType ?? existing.playType);
+
   const statsFields = ["selection", "pointsLine", "ouStats", "ouHitRate", "edge"] as const;
   const statsUpdate: Record<string, unknown> = {};
   for (const f of statsFields) if (input[f] !== undefined) statsUpdate[f] = input[f];
 
   try {
-    return await prisma.match.update({
+    const updated = await prisma.match.update({
       where: { id },
       data: {
         player1,
@@ -201,7 +205,7 @@ export async function updateMatch(prisma: PrismaClient, userId: string, id: stri
         ...(input.competition !== undefined ? { competition: input.competition } : {}),
         ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        ...(input.playType !== undefined ? { playType: input.playType } : {}),
+        ...(playType !== existing.playType ? { playType } : {}),
         ...(Object.keys(statsUpdate).length
           ? { statistics: { upsert: { create: statsUpdate, update: statsUpdate } } }
           : {}),
@@ -209,6 +213,10 @@ export async function updateMatch(prisma: PrismaClient, userId: string, id: stri
       },
       include: matchInclude,
     });
+    if (playType !== "BOT") return updated;
+    // Its sweep / spread picks stay personal plays.
+    await personalSweepsAndSpreads(prisma, id);
+    return (await prisma.match.findUnique({ where: { id }, include: matchInclude }))!;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       throw new ServiceError("Another alarm already exists for these players at this time.", 409, "duplicate");

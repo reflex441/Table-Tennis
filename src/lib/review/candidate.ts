@@ -3,7 +3,7 @@ import { isCaptureCorroborated, resolveMatchTime, type CaptureSource, type Resol
 import { mergeRecords } from "@/lib/matching/dedupe";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import type { SettingsDTO } from "@/lib/validation/settings";
-import { personalPick, type Selection } from "@/lib/selection";
+import { canBeBot, personalPick, type Selection } from "@/lib/selection";
 
 /**
  * A match detected in one or more screenshots, as edited in the review UI.
@@ -113,8 +113,9 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     ouStats: m.ouStats ?? "",
     ouHitRate: numStr(m.ouHitRate),
     edge: numStr(m.edge),
-    // A SWEEP read with a badge stake ("1U SWEEP") is still a bot play.
-    playType: m.selection && (m.selection !== "SWEEP" || m.stakeUnits !== null) ? "BOT" : "PERSONAL",
+    // A SWEEP read with a badge stake ("1U SWEEP") is still a bot play (its
+    // pick comes from the O/U % above); a spread is never one (bot plays are Over / Under).
+    playType: m.selection && (m.selection === "SWEEP" ? m.stakeUnits !== null : canBeBot(m.selection)) ? "BOT" : "PERSONAL",
     ...defaultBet(settings),
     // The badge's units, e.g. "1.5U OVER (...)" -> 1.5u (otherwise 1u).
     ...(m.stakeUnits && m.stakeUnits > 0 ? { stakeUnits: String(m.stakeUnits) } : {}),

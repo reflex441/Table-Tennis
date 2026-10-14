@@ -7,7 +7,7 @@ import { defaultStake, formatMoney, formatUnits, round2 } from "@/lib/bets/profi
 import { api } from "@/lib/client-api";
 import { useSettings } from "./SettingsProvider";
 import { SelectionBadge } from "./MatchBits";
-import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
+import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, selectionName, type Selection } from "@/lib/selection";
 import { parseLegs, splitLegs, type LegDraft } from "@/lib/bets/split";
 
 export { parseLegs, splitLegs, type LegDraft };
@@ -161,7 +161,7 @@ export function LegsEditor({ legs, onChange }: { legs: LegDraft[]; onChange: (le
 type PlayType = "BOT" | "PERSONAL";
 
 /** Bot / Personal switch for one pick of a split bet. */
-function LegPlayType({ value, busy, label, onChange }: { value: PlayType; busy: boolean; label: string; onChange: (t: PlayType) => void }) {
+function LegPlayType({ value, busy, botAllowed, label, onChange }: { value: PlayType; busy: boolean; botAllowed: boolean; label: string; onChange: (t: PlayType) => void }) {
   return (
     <span className="inline-flex rounded-md border border-line p-px text-[10px]" role="radiogroup" aria-label={`${label}: bot or personal play`}>
       {(["BOT", "PERSONAL"] as const).map((t) => (
@@ -170,12 +170,12 @@ function LegPlayType({ value, busy, label, onChange }: { value: PlayType; busy: 
           type="button"
           role="radio"
           aria-checked={value === t}
-          disabled={busy}
-          className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-semibold ${
+          disabled={busy || (t === "BOT" && !botAllowed)}
+          className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-semibold disabled:opacity-40 ${
             value === t ? (t === "BOT" ? "bg-violet-500/20 text-violet-300" : "bg-amber-500/15 text-amber-300") : "text-muted hover:text-text"
           }`}
           onClick={() => value !== t && onChange(t)}
-          title={t === "BOT" ? "Count this pick as a bot play" : "Count this pick as a personal play"}
+          title={t === "BOT" ? (botAllowed ? "Count this pick as a bot play" : BOT_IS_OVER_UNDER) : "Count this pick as a personal play"}
         >
           {t === "BOT" ? <Bot className="h-3 w-3" /> : <User className="h-3 w-3" />}
           {t === "BOT" ? "Bot" : "Personal"}
@@ -353,6 +353,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
               <LegPlayType
                 value={l.playType ?? match.playType}
                 busy={busy}
+                botAllowed={canBeBot(l.selection)}
                 label={`Pick ${i + 1}`}
                 // Same as the match: follow it (null), so changing the match changes this pick too.
                 onChange={(t) => void send({ leg: { index: i, playType: t === match.playType ? null : t } })}

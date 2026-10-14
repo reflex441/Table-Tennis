@@ -64,3 +64,17 @@ describe("combining bets on the same pick from bet slips", () => {
     expect(pastBetSchema.safeParse({ ...base, selection: null, legs }).success).toBe(false);
   });
 });
+
+describe("bot plays are Over / Under only", () => {
+  it("a sweep or spread is always a personal play", async () => {
+    const { canBeBot, playTypeFor } = await import("@/lib/selection");
+    const { slipPlayType } = await import("@/lib/bets/slip-play");
+    expect([canBeBot("OVER"), canBeBot("UNDER"), canBeBot(null), canBeBot("SWEEP"), canBeBot("POINTS_SPREAD"), canBeBot("SET_SPREAD")]).toEqual([true, true, true, false, false, false]);
+    expect(playTypeFor("SWEEP", "BOT")).toBe("PERSONAL");
+    expect(playTypeFor("OVER", "BOT")).toBe("BOT");
+    expect(playTypeFor("SWEEP", "PERSONAL")).toBe("PERSONAL");
+    // A slip's sweep on a bot match without a pick is still personal.
+    expect(slipPlayType({ playType: "BOT", selection: null }, "SWEEP")).toBe("PERSONAL");
+    expect(slipPlayType({ playType: "BOT", selection: null }, "OVER")).toBe("BOT");
+  });
+});

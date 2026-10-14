@@ -3,7 +3,7 @@ import { ServiceError } from "@/lib/alarms/service-error";
 import { combineLegs, computeProfit, defaultStake, round2, type BetResult } from "./profit";
 import type { BetInput, BetLegInput, PastBetInput } from "@/lib/validation/match";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
-import type { Selection } from "@/lib/selection";
+import { canBeBot, playTypeFor, type Selection } from "@/lib/selection";
 
 interface Leg {
   selection: Selection;
@@ -15,6 +15,19 @@ interface Leg {
 }
 
 type PlayType = "BOT" | "PERSONAL";
+
+/** Bot plays are Over / Under only: a sweep or spread pick of a bot play counts as a personal play. */
+function overUnderOnlyBot(legs: Leg[], matchPlayType: PlayType): Leg[] {
+  return legs.map((l) => (!canBeBot(l.selection) && (l.playType ?? matchPlayType) === "BOT" ? { ...l, playType: "PERSONAL" } : l));
+}
+
+/** After a match became a bot play: its sweep / spread picks that follow it are made personal plays. */
+export async function personalSweepsAndSpreads(prisma: PrismaClient, matchId: string): Promise<void> {
+  await prisma.betLeg.updateMany({
+    where: { bet: { matchId, match: { playType: "BOT" } }, playType: null, selection: { notIn: ["OVER", "UNDER"] } },
+    data: { playType: "PERSONAL" },
+  });
+}
 
 /**
  * Record that a bet was placed on a match (idempotent: an existing bet is
@@ -28,13 +41,13 @@ export async function placeBet(
   input: { stake?: number; odds?: number | null; legs?: BetLegInput[] },
   now = new Date(),
 ): Promise<Bet> {
-  const match = await prisma.match.findFirst({ where: { id: matchId, userId }, select: { stakeUnits: true, odds: true, bet: true } });
+  const match = await prisma.match.findFirst({ where: { id: matchId, userId }, select: { stakeUnits: true, odds: true, playType: true, bet: true } });
   if (!match) throw new ServiceError("Match not found.", 404, "not_found");
   if (match.bet) {
     return updateBet(prisma, userId, matchId, { stake: input.stake, odds: input.odds, legs: input.legs });
   }
   if (input.legs?.length) {
-    const legs = toLegs(input.legs, []);
+    const legs = overUnderOnlyBot(toLegs(input.legs, []), match.playType);
     const totals = combineLegs(legs);
     return prisma.bet.create({
       data: {
@@ -61,7 +74,7 @@ export async function placeBet(
  * Any change confirms an auto-filled bet.
  */
 export async function updateBet(prisma: PrismaClient, userId: string, matchId: string, input: BetInput, now = new Date()): Promise<Bet> {
-  const owned = await prisma.match.count({ where: { id: matchId, userId } });
+  const owned = await prisma.match.findFirst({ where: { id: matchId, userId }, select: { playType: true } });
   if (!owned) throw new ServiceError("Match not found.", 404, "not_found");
   const bet = await prisma.bet.findUnique({ where: { matchId }, include: { legs: { orderBy: { position: "asc" } } } });
   if (!bet) {
@@ -82,6 +95,7 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
   } else if (input.result && !input.legs) {
     legs = legs.map((l) => ({ ...l, result: input.result! }));
   }
+  legs = overUnderOnlyBot(legs, owned.playType);
 
   if (legs.length) {
     const totals = combineLegs(legs);
@@ -175,7 +189,7 @@ export async function createPastBet(
       startsAt,
       timezone: input.timezone,
       dedupeKey,
-      playType: input.playType,
+      playType: playTypeFor(input.selection, input.playType),
       stakeUnits: totals?.stake ?? input.stake,
       odds: totals ? null : input.odds,
       statistics: { create: { selection: input.selection, pointsLine: input.pointsLine, ouStats: input.ouStats ?? null } },
@@ -252,12 +266,13 @@ async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: str
     await prisma.match.update({
       where: { id: matchId },
       data: {
-        playType: input.playType,
+        playType: playTypeFor(pick ?? (match.statistics?.selection as Selection | null) ?? null, input.playType),
         // You bet something else than the match's pick: the bet's pick (and line) is what counts.
         ...(otherPick ? { statistics: { update: { selection: pick, pointsLine: input.pointsLine } } } : {}),
         ...(!match.statistics && pick ? { statistics: { create: { selection: pick, pointsLine: input.pointsLine, ouStats: input.ouStats ?? null } } } : {}),
       },
     });
+    await personalSweepsAndSpreads(prisma, matchId);
     await alarmDone();
     return true;
   }
