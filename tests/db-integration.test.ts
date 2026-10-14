@@ -194,9 +194,9 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(won.profit).toBe(1.8);
     expect(won.settledAt).not.toBeNull();
 
-    // Settling a match without a recorded bet records it with 1 unit.
+    // Settling a match without a recorded bet records it with the default stake: 0.75u for a personal play.
     const lost = await updateBet(prisma, userId, personalRes.match.id, { result: "LOST" }, now);
-    expect(lost).toMatchObject({ stake: 1, profit: -1 });
+    expect(lost).toMatchObject({ stake: 0.75, profit: -0.75 });
 
     // Skipping does not record a bet.
     const skipRes = await createMatchWithAlarm(prisma, userId, input({ player1: "X", player2: "Y", startsAt: "2030-09-21T20:00:00Z" }), now);
@@ -207,7 +207,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // Existing bets get their matchups from the stored O/U record (20/9 -> 29).
     expect(rows.every((r) => r.matchups === 29)).toBe(true);
     expect(summarize(rows.filter((r) => r.playType === "BOT")).profit).toBe(1.8);
-    expect(summarize(rows.filter((r) => r.playType === "PERSONAL")).profit).toBe(-1);
+    expect(summarize(rows.filter((r) => r.playType === "PERSONAL")).profit).toBe(-0.75);
     expect((await listBetRows(prisma, userId, { playType: "PERSONAL" })).map((r) => r.matchId)).toEqual([personalRes.match.id]);
 
     // Re-classifying a match moves its bet to the other group.

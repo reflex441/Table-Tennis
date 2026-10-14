@@ -136,9 +136,19 @@ export function summarizeBy<T extends Settleable>(rows: T[], key: (r: T) => stri
     .sort((a, b) => b.summary.profit - a.summary.profit);
 }
 
-/** Default stake in units: what was set when the match was uploaded, else 1u. */
-export function defaultStake(stakeUnits: number | null | undefined): number {
-  return stakeUnits && stakeUnits > 0 ? stakeUnits : 1;
+/** Stake in units when nothing else says: 1u for a bot play, 0.75u for a personal play. */
+export function defaultUnits(playType: PlayType): number {
+  return playType === "PERSONAL" ? 0.75 : 1;
+}
+
+/** Default stake in units: what was set when the match was uploaded (e.g. the badge's 1.5U), else defaultUnits. */
+export function defaultStake(stakeUnits: number | null | undefined, playType: PlayType): number {
+  return stakeUnits && stakeUnits > 0 ? stakeUnits : defaultUnits(playType);
+}
+
+/** Switching Bot <-> Personal: a stake still at the old default moves to the new one; one you typed stays. */
+export function restake(units: string, from: PlayType, to: PlayType): string {
+  return Number(units) === defaultUnits(from) ? String(defaultUnits(to)) : units;
 }
 
 /** "+2.35u" style unit amount. */

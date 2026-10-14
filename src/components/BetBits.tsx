@@ -49,9 +49,9 @@ export function ResultChip({ result }: { result: Result }) {
   return <span className={`chip ${RESULT_STYLE[result]}`}>{result === "PENDING" ? "Pending" : result === "WON" ? "Won" : result === "LOST" ? "Lost" : "Void"}</span>;
 }
 
-/** Units of the play: the recorded bet's stake, else what was set at upload (badge units), else 1u. */
-export function playUnits(match: Pick<MatchDTO, "bet" | "stakeUnits">): number {
-  return match.bet?.stake ?? defaultStake(match.stakeUnits);
+/** Units of the play: the recorded bet's stake, else what was set at upload (badge units), else 1u (personal: 0.75u). */
+export function playUnits(match: Pick<MatchDTO, "bet" | "stakeUnits" | "playType">): number {
+  return match.bet?.stake ?? defaultStake(match.stakeUnits, match.playType);
 }
 
 /**
@@ -232,7 +232,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
   };
 
   const openEditor = () => {
-    setStake(String(bet?.stake ?? defaultStake(match.stakeUnits)));
+    setStake(String(bet?.stake ?? defaultStake(match.stakeUnits, match.playType)));
     // Odds filled in at upload (e.g. the average odds) are the default.
     const o = bet ? bet.odds : match.odds;
     setOdds(o ? String(o) : "");
@@ -242,7 +242,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
   };
 
   const startSplit = () => {
-    const total = Number(stake) > 0 ? Number(stake) : defaultStake(match.stakeUnits);
+    const total = Number(stake) > 0 ? Number(stake) : defaultStake(match.stakeUnits, match.playType);
     setLegs(splitLegs(total, match.statistics.selection ?? "UNDER", odds));
   };
   const stopSplit = () => {

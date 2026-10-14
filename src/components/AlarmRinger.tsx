@@ -332,7 +332,7 @@ export function AlarmRinger() {
             <button
               className="col-span-2 justify-self-start text-xs text-accent hover:underline"
               onClick={() =>
-                setBetInput({ ...input, legs: splitLegs(stakeNum > 0 ? stakeNum : defaultStake(match.stakeUnits), match.statistics.selection ?? "UNDER", input.odds) })
+                setBetInput({ ...input, legs: splitLegs(stakeNum > 0 ? stakeNum : defaultStake(match.stakeUnits, match.playType), match.statistics.selection ?? "UNDER", input.odds) })
               }
             >
               Split between picks (e.g. half Under, half Sweep)

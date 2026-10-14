@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeProfit, defaultStake, formatMoney, formatUnits, summarize, summarizeBy, type BetRow } from "@/lib/bets/profit";
+import { computeProfit, defaultStake, formatMoney, formatUnits, restake, summarize, summarizeBy, type BetRow } from "@/lib/bets/profit";
 import { ackSchema, betInputSchema, matchInputSchema } from "@/lib/validation/match";
 import { settingsUpdateSchema, type SettingsDTO } from "@/lib/validation/settings";
 import { candidateFromExtraction, candidateToPayload, mergeCandidates, type ScreenshotContext } from "@/lib/review/candidate";
@@ -69,10 +69,16 @@ describe("profit maths (units)", () => {
     ]);
   });
 
-  it("defaults the stake to what was set at upload, else 1u", () => {
-    expect(defaultStake(2)).toBe(2);
-    expect(defaultStake(null)).toBe(1);
-    expect(defaultStake(0)).toBe(1);
+  it("defaults the stake to what was set at upload, else 1u for a bot play and 0.75u for a personal play", () => {
+    expect(defaultStake(2, "BOT")).toBe(2);
+    expect(defaultStake(2, "PERSONAL")).toBe(2);
+    expect(defaultStake(null, "BOT")).toBe(1);
+    expect(defaultStake(0, "BOT")).toBe(1);
+    expect(defaultStake(null, "PERSONAL")).toBe(0.75);
+    // Switching Bot <-> Personal moves a default stake along, not one you typed.
+    expect(restake("1", "BOT", "PERSONAL")).toBe("0.75");
+    expect(restake("0.75", "PERSONAL", "BOT")).toBe("1");
+    expect(restake("2", "BOT", "PERSONAL")).toBe("2");
   });
 
   it("formats units with the money amount from the unit size", () => {
@@ -173,7 +179,7 @@ describe("bot vs personal classification", () => {
   it("a row without a pick is a personal play", () => {
     const c = candidateFromExtraction(m({}), shot, settings, now);
     expect(c.playType).toBe("PERSONAL");
-    expect(candidateToPayload(c, settings.timezone).stakeUnits).toBe(1);
+    expect(candidateToPayload(c, settings.timezone).stakeUnits).toBe(0.75); // personal plays start at 0.75u
   });
 
   it("new uploads use the badge's units (else 1u) and the average odds when ticked", () => {

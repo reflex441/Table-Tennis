@@ -21,13 +21,13 @@ export async function autoFillBets(prisma: PrismaClient, now = new Date()): Prom
       alarm: { is: { ackAt: null, status: { in: ["TRIGGERED", "COMPLETED", "FAILED"] } } },
       user: { is: { OR: [{ settings: { is: null } }, { settings: { is: { autoRecordBets: true } } }] } },
     },
-    select: { id: true, startsAt: true, stakeUnits: true, odds: true },
+    select: { id: true, startsAt: true, stakeUnits: true, odds: true, playType: true },
     take: 500,
   });
   if (!matches.length) return 0;
   // skipDuplicates: a bet recorded meanwhile is kept.
   const created = await prisma.bet.createMany({
-    data: matches.map((m) => ({ matchId: m.id, stake: defaultStake(m.stakeUnits), odds: m.odds, placedAt: m.startsAt, autoFilled: true })),
+    data: matches.map((m) => ({ matchId: m.id, stake: defaultStake(m.stakeUnits, m.playType), odds: m.odds, placedAt: m.startsAt, autoFilled: true })),
     skipDuplicates: true,
   });
   await prisma.alarm.updateMany({

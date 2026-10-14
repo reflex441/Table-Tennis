@@ -8,7 +8,7 @@ import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue } from "@/lib/format";
 import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, selectionName, type Selection } from "@/lib/selection";
-import { round2 } from "@/lib/bets/profit";
+import { restake, round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
@@ -152,7 +152,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <div>
           <span className="label">Play</span>
-          {seg(f.playType, [["BOT", "Bot"], ["PERSONAL", "Personal"]] as const, (v) => set({ playType: v }), "Play type", (v) =>
+          {seg(f.playType, [["BOT", "Bot"], ["PERSONAL", "Personal"]] as const, (v) => set({ playType: v, stake: restake(f.stake, f.playType, v) }), "Play type", (v) =>
             v === "BOT" && !canBeBot(f.selection || null) ? BOT_IS_OVER_UNDER : null,
           )}
         </div>
@@ -163,7 +163,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
             value={f.selection}
             onChange={(e) => {
               const selection = e.target.value as "" | Selection;
-              set({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL" as const }) });
+              set({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL" as const, stake: restake(f.stake, f.playType, "PERSONAL") }) });
             }}
             aria-label="Pick"
           >

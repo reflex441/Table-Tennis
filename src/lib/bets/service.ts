@@ -63,7 +63,7 @@ export async function placeBet(
     });
   }
   // Defaults are the stake (units) and odds filled in when the match was uploaded.
-  const stake = input.stake ?? defaultStake(match.stakeUnits);
+  const stake = input.stake ?? defaultStake(match.stakeUnits, match.playType);
   const odds = input.odds !== undefined ? input.odds : match.odds;
   return prisma.bet.create({ data: { matchId, stake, odds: odds ?? null, placedAt: now } });
 }

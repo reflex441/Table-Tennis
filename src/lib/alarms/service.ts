@@ -6,6 +6,7 @@ import type { BetLegInput, MatchInput, UpdateMatchInput } from "@/lib/validation
 import type { MatchDTO } from "@/lib/types";
 import { personalSweepsAndSpreads, placeBet } from "@/lib/bets/service";
 import { playTypeFor } from "@/lib/selection";
+import { defaultUnits } from "@/lib/bets/profit";
 
 export { ServiceError } from "./service-error";
 import { ServiceError } from "./service-error";
@@ -67,6 +68,7 @@ export async function createMatchWithAlarm(
     ? (await prisma.screenshot.findMany({ where: { id: { in: input.screenshotIds }, userId }, select: { id: true } })).map((s) => s.id)
     : [];
 
+  const playType = playTypeFor(input.selection, input.playType ?? (input.selection ? "BOT" : "PERSONAL"));
   try {
     const match = await prisma.match.create({
       data: {
@@ -80,8 +82,9 @@ export async function createMatchWithAlarm(
         dedupeKey,
         userId,
         copiedFromUserId: opts.copiedFromUserId ?? null,
-        playType: playTypeFor(input.selection, input.playType ?? (input.selection ? "BOT" : "PERSONAL")),
-        stakeUnits: input.stakeUnits,
+        playType,
+        // No units given (e.g. added by hand): 1u for a bot play, 0.75u for a personal play.
+        stakeUnits: input.stakeUnits ?? defaultUnits(playType),
         odds: input.odds,
         statistics: {
           create: {

@@ -18,8 +18,9 @@ export function NewMatch() {
   const { notify } = useNotifications();
   const router = useRouter();
 
-  // Same defaults as uploads: 1u, plus the average odds when that setting is ticked.
-  const newBetDefaults = { stakeUnits: 1, odds: settings.useAverageOdds ? settings.averageOdds : null };
+  // Same defaults as uploads: 1u for a bot play, 0.75u for a personal one (set by the server, which
+  // decides which it is from the pick), plus the average odds when that setting is ticked.
+  const newBetDefaults = { stakeUnits: null, odds: settings.useAverageOdds ? settings.averageOdds : null };
   const submit = async (v: MatchFormValues) => {
     const send = (allowSimilar: boolean) =>
       api<CreateResponse>("/api/matches", { method: "POST", json: { matches: [{ ...v, screenshotIds: [], allowSimilar, ...newBetDefaults }] } });

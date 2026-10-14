@@ -4,6 +4,7 @@ import { mergeRecords } from "@/lib/matching/dedupe";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import type { SettingsDTO } from "@/lib/validation/settings";
 import { canBeBot, personalPick, type Selection } from "@/lib/selection";
+import { defaultUnits } from "@/lib/bets/profit";
 
 /**
  * A match detected in one or more screenshots, as edited in the review UI.
@@ -90,6 +91,9 @@ export function resolveShotTimes(cands: Candidate[], shot: ScreenshotContext | n
 }
 
 function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: SettingsDTO): Candidate {
+  // A SWEEP read with a badge stake ("1U SWEEP") is still a bot play (its
+  // pick comes from the O/U % below); a spread is never one (bot plays are Over / Under).
+  const playType = m.selection && (m.selection === "SWEEP" ? m.stakeUnits !== null : canBeBot(m.selection)) ? "BOT" : "PERSONAL";
   return {
     id: newCandidateId(),
     screenshotIds: [shot.id],
@@ -113,11 +117,9 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
     ouStats: m.ouStats ?? "",
     ouHitRate: numStr(m.ouHitRate),
     edge: numStr(m.edge),
-    // A SWEEP read with a badge stake ("1U SWEEP") is still a bot play (its
-    // pick comes from the O/U % above); a spread is never one (bot plays are Over / Under).
-    playType: m.selection && (m.selection === "SWEEP" ? m.stakeUnits !== null : canBeBot(m.selection)) ? "BOT" : "PERSONAL",
-    ...defaultBet(settings),
-    // The badge's units, e.g. "1.5U OVER (...)" -> 1.5u (otherwise 1u).
+    playType,
+    ...defaultBet(settings, playType),
+    // The badge's units, e.g. "1.5U OVER (...)" -> 1.5u (otherwise 1u, or 0.75u for a personal play).
     ...(m.stakeUnits && m.stakeUnits > 0 ? { stakeUnits: String(m.stakeUnits) } : {}),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: m.confidence,
@@ -127,9 +129,9 @@ function baseCandidate(m: ExtractedMatch, shot: ScreenshotContext, settings: Set
   };
 }
 
-/** Every new match starts at 1u, with the average odds when that setting is ticked. */
-function defaultBet(settings: SettingsDTO): { stakeUnits: string; odds: string } {
-  return { stakeUnits: "1", odds: settings.useAverageOdds ? String(settings.averageOdds) : "" };
+/** Every new match starts at 1u (a personal play at 0.75u), with the average odds when that setting is ticked. */
+function defaultBet(settings: SettingsDTO, playType: "BOT" | "PERSONAL"): { stakeUnits: string; odds: string } {
+  return { stakeUnits: String(defaultUnits(playType)), odds: settings.useAverageOdds ? String(settings.averageOdds) : "" };
 }
 
 export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Candidate {
@@ -154,7 +156,7 @@ export function emptyCandidate(shotId: string | null, settings: SettingsDTO): Ca
     ouHitRate: "",
     edge: "",
     playType: "PERSONAL",
-    ...defaultBet(settings),
+    ...defaultBet(settings, "PERSONAL"),
     reminderMinutes: settings.defaultReminderMinutes,
     confidence: null,
     conflicts: [],
@@ -227,8 +229,8 @@ export function mergeCandidates(primary: Candidate, secondary: Candidate): Candi
     ouHitRate: (merged.ouHitRate as string | null) ?? "",
     edge: (merged.edge as string | null) ?? "",
     playType: primary.playType === "BOT" || secondary.playType === "BOT" ? "BOT" : "PERSONAL",
-    // A bot play's badge units beat the 1u default of a personal play.
-    stakeUnits: (botPickFromSecondary ? sec.stakeUnits : primary.stakeUnits) || secondary.stakeUnits,
+    // A bot play's units (badge, or 1u) beat the 0.75u default of a personal play.
+    stakeUnits: (primary.playType === "PERSONAL" && sec.playType === "BOT" ? sec.stakeUnits : primary.stakeUnits) || secondary.stakeUnits,
     odds: primary.odds || secondary.odds,
     screenshotIds: Array.from(new Set([...primary.screenshotIds, ...secondary.screenshotIds])),
     timeSourceId: timeFromPrimary ? primary.timeSourceId : sec.timeSourceId,

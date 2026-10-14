@@ -8,6 +8,7 @@ import { fromLocalInputValue, formatDayLabel, formatTime } from "@/lib/format";
 import { DateTimeInput } from "@/components/DateTimeInput";
 import { LeagueSelect } from "@/components/LeagueSelect";
 import { BOT_IS_OVER_UNDER, canBeBot } from "@/lib/selection";
+import { restake } from "@/lib/bets/profit";
 
 interface Props {
   candidate: Candidate;
@@ -166,7 +167,7 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
               disabled={t === "BOT" && !canBeBot(c.selection || null)}
               title={t === "BOT" && !canBeBot(c.selection || null) ? BOT_IS_OVER_UNDER : undefined}
               className={`rounded-md px-2 py-0.5 disabled:opacity-40 ${c.playType === t ? (t === "BOT" ? "bg-violet-500/20 font-semibold text-violet-300" : "bg-amber-500/15 font-semibold text-amber-300") : "text-muted hover:text-text"}`}
-              onClick={() => onChange({ playType: t })}
+              onClick={() => t !== c.playType && onChange({ playType: t, stakeUnits: restake(c.stakeUnits, c.playType, t) })}
             >
               {t === "BOT" ? "Bot play" : "Personal play"}
             </button>
@@ -205,7 +206,7 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
             // Changing the pick never changes Bot / Personal (that has its own switch).
             onChange={(e) => {
               const selection = e.target.value as Candidate["selection"];
-              onChange({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL" }) });
+              onChange({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL", stakeUnits: restake(c.stakeUnits, c.playType, "PERSONAL") }) });
             }}
           >
             <option value="">—</option>

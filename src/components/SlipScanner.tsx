@@ -6,7 +6,7 @@ import { Check, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
-import { round2 } from "@/lib/bets/profit";
+import { defaultUnits, restake, round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { slipPlayType, type SlipReference } from "@/lib/bets/slip-play";
 import { combineSlipParts, sameSlipPick, type SlipPart } from "@/lib/bets/slip-combine";
@@ -134,29 +134,36 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
 
   const patch = (key: string, p: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
-  const toRow = (b: ScannedBet, batch: number): Row => ({
-    key: `slip${++counter}`,
-    include: true,
-    player1: b.player1 ?? "",
-    player2: b.player2 ?? "",
-    competition: b.competition ?? "",
-    leagueGuessed: Boolean(b.competitionGuessed && b.competition),
-    startsAtLocal: b.startsAt ? toLocalInputValue(b.startsAt, tz) : "",
+  const toRow = (b: ScannedBet, batch: number): Row => {
     // Bot when it lines up with an uploaded bot play; others follow the switch above.
-    playType: b.reference ? (b.playType ?? "PERSONAL") : playTypeFor(b.selection, playType),
-    ref: b.reference ?? null,
-    selection: b.selection ?? "",
-    pointsLine: b.pointsLine !== null ? String(b.pointsLine) : "",
-    // Stake in money -> units with your unit size.
-    units: b.stake !== null && settings.unitSize > 0 ? String(round2(b.stake / settings.unitSize)) : "1",
-    odds: b.odds !== null ? String(b.odds) : "",
-    result: b.result,
-    resultText: b.resultText,
-    parts: b.stake !== null && b.stake > 0 ? [{ stake: b.stake, odds: b.odds, result: b.result, pointsLine: b.pointsLine, batch }] : [],
-    legs: null,
-    repeats: 0,
-    status: null,
-  });
+    const type = b.reference ? (b.playType ?? "PERSONAL") : playTypeFor(b.selection, playType);
+    return {
+      key: `slip${++counter}`,
+      include: true,
+      player1: b.player1 ?? "",
+      player2: b.player2 ?? "",
+      competition: b.competition ?? "",
+      leagueGuessed: Boolean(b.competitionGuessed && b.competition),
+      startsAtLocal: b.startsAt ? toLocalInputValue(b.startsAt, tz) : "",
+      playType: type,
+      ref: b.reference ?? null,
+      selection: b.selection ?? "",
+      pointsLine: b.pointsLine !== null ? String(b.pointsLine) : "",
+      // Stake in money -> units with your unit size.
+      // (No stake on the slip: 1u, or 0.75u for a personal play.)
+      units: b.stake !== null && settings.unitSize > 0 ? String(round2(b.stake / settings.unitSize)) : String(defaultUnits(type)),
+      odds: b.odds !== null ? String(b.odds) : "",
+      result: b.result,
+      resultText: b.resultText,
+      parts: b.stake !== null && b.stake > 0 ? [{ stake: b.stake, odds: b.odds, result: b.result, pointsLine: b.pointsLine, batch }] : [],
+      legs: null,
+      repeats: 0,
+      status: null,
+    };
+  };
+
+  /** Bot <-> Personal for a row; with no stake read from the slip, a default stake moves along (1u <-> 0.75u). */
+  const typed = (r: Row, t: Row["playType"]): Row => ({ ...r, playType: t, units: r.parts.length ? r.units : restake(r.units, r.playType, t) });
 
   const { scanning, errors, scan } = useScreenshotScan<ScannedBet>("/api/bets/scan", "no bets found.", (bets) => {
     const batch = ++batches;
@@ -256,7 +263,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 onClick={() => {
                   setPlayType(t);
                   // Only bets that didn't line up with an uploaded match.
-                  setRows((prev) => prev.map((r) => (r.status?.ok || r.ref ? r : { ...r, playType: playTypeFor(r.selection || null, t) })));
+                  setRows((prev) => prev.map((r) => (r.status?.ok || r.ref ? r : typed(r, playTypeFor(r.selection || null, t)))));
                 }}
               >
                 {t === "BOT" ? "Bot plays" : "Personal plays"}
@@ -298,7 +305,12 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
               <div className="mt-1.5 flex flex-wrap items-end gap-2 text-xs">
                 <label className="w-24">
                   <span className="label">Play</span>
-                  <select className="input py-1" value={r.playType} onChange={(e) => patch(r.key, { playType: e.target.value as Row["playType"] })} aria-label="Play type">
+                  <select
+                    className="input py-1"
+                    value={r.playType}
+                    onChange={(e) => setRows((prev) => prev.map((x) => (x.key === r.key ? typed(x, e.target.value as Row["playType"]) : x)))}
+                    aria-label="Play type"
+                  >
                     <option value="BOT" disabled={!canBeBot(r.selection || null)} title={canBeBot(r.selection || null) ? undefined : BOT_IS_OVER_UNDER}>
                       Bot
                     </option>
@@ -313,7 +325,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                     onChange={(e) => {
                       const selection = e.target.value as Row["selection"];
                       // A different pick than the bot's is a personal play.
-                      patch(r.key, { selection, playType: r.ref ? slipPlayType(r.ref, selection || null) : playTypeFor(selection || null, playType) });
+                      setRows((prev) => prev.map((x) => (x.key === r.key ? typed({ ...x, selection }, r.ref ? slipPlayType(r.ref, selection || null) : playTypeFor(selection || null, playType)) : x)));
                     }}
                     aria-label="Pick"
                   >
