@@ -9,6 +9,8 @@ import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { slipPlayType, type SlipReference } from "@/lib/bets/slip-play";
+import { combineSlipParts, sameSlipPick, type SlipPart } from "@/lib/bets/slip-combine";
+import { playersKey } from "@/lib/matching/dedupe";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
@@ -33,6 +35,12 @@ interface Row {
   resultText: string | null;
   /** The same match on your dashboard or the owner's uploads (where Bot / Personal comes from). */
   ref: SlipReference | null;
+  /** The bets on the slips that make up this one (same match and pick), stake in money; `batch` = which screenshot. */
+  parts: (SlipPart & { batch: number })[];
+  /** The combined bets settled differently: one pick per result (a split bet), stake in money. */
+  legs: { stake: number; odds: number | null; result: SlipResult }[] | null;
+  /** The same bet seen again on another (overlapping) screenshot, not counted twice. */
+  repeats: number;
   status: null | { ok: boolean; message: string };
 }
 
@@ -51,6 +59,64 @@ function matchNote(r: Row): { text: string; known: boolean } {
 }
 
 let counter = 0;
+let batches = 0;
+
+const sameMatch = (a: Row, b: Row) => Boolean(a.startsAtLocal) && a.startsAtLocal === b.startsAtLocal && playersKey(a.player1, a.player2) === playersKey(b.player1, b.player2);
+const samePart = (a: SlipPart, b: SlipPart) => a.stake === b.stake && a.odds === b.odds && a.pointsLine === b.pointsLine && a.result === b.result;
+
+/**
+ * Adds scanned bets to the list. Bets on the same match and pick (e.g. Over
+ * 75.5 and Over 74.5) are combined into one (see combineSlipParts); the same
+ * bet on a second screenshot is a repeat (screenshots of a long list
+ * overlap), so it isn't counted twice.
+ */
+function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
+  const out = [...rows];
+  for (const r of incoming) {
+    const part = r.parts[0];
+    const i = part
+      ? out.findIndex((t) => !t.status?.ok && t.parts.length > 0 && sameMatch(t, r) && sameSlipPick({ selection: t.selection || null, pointsLine: t.parts[0].pointsLine }, { selection: r.selection || null, pointsLine: part.pointsLine }))
+      : -1;
+    if (i < 0) {
+      out.push(r);
+      continue;
+    }
+    const t = out[i];
+    if (t.parts.some((p) => p.batch !== part.batch && samePart(p, part))) {
+      out[i] = { ...t, repeats: t.repeats + 1 };
+      continue;
+    }
+    const parts = [...t.parts, part];
+    const c = combineSlipParts(parts);
+    out[i] = {
+      ...t,
+      parts,
+      legs: c.legs,
+      units: unitSize > 0 ? String(round2(c.stake / unitSize)) : t.units,
+      odds: c.odds !== null ? String(c.odds) : "",
+      result: c.result,
+      pointsLine: c.pointsLine !== null ? String(c.pointsLine) : "",
+      resultText: c.legs ? null : t.resultText,
+    };
+  }
+  return out;
+}
+
+/** "2 bets combined: $250 @ 1.80 (75.5) + $200 @ 1.73 (74.5)" for a row made of several bets. */
+function combinedNote(r: Row, currency: string): string | null {
+  const repeats = r.repeats ? ` (${r.repeats} repeat${r.repeats === 1 ? "" : "s"} from another screenshot not counted)` : "";
+  if (r.parts.length < 2) return repeats ? repeats.slice(2, -1) : null;
+  const money = (n: number) => `${currency}${n % 1 ? n.toFixed(2) : n}`;
+  const list = r.parts.map((p) => `${money(p.stake)}${p.odds ? ` @ ${p.odds.toFixed(2)}` : ""}${p.pointsLine !== null ? ` (${p.pointsLine})` : ""}`).join(" + ");
+  if (r.legs) {
+    const legs = r.legs.map((l) => `${RESULT_LABEL[l.result].toLowerCase()} ${money(l.stake)}${l.odds ? ` @ ${l.odds.toFixed(2)}` : ""}`).join(" + ");
+    return `${r.parts.length} bets on this pick: ${list}. They settled differently, so it's added as a split bet: ${legs}.${repeats}`;
+  }
+  const total = r.parts.reduce((sum, p) => sum + p.stake, 0);
+  const won = r.result === "WON" && r.parts.every((p) => p.odds);
+  const paid = won ? ` - the odds are what the ${money(total)} paid out (${money(round2(r.parts.reduce((sum, p) => sum + p.stake * p.odds!, 0)))})` : "";
+  return `${r.parts.length} bets combined into one: ${list}${paid}.${repeats}`;
+}
 
 /**
  * Upload bookmaker bet-slip screenshots ("Win" / "No Return"), check the
@@ -68,7 +134,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
 
   const patch = (key: string, p: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
-  const toRow = (b: ScannedBet): Row => ({
+  const toRow = (b: ScannedBet, batch: number): Row => ({
     key: `slip${++counter}`,
     include: true,
     player1: b.player1 ?? "",
@@ -86,16 +152,23 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
     odds: b.odds !== null ? String(b.odds) : "",
     result: b.result,
     resultText: b.resultText,
+    parts: b.stake !== null && b.stake > 0 ? [{ stake: b.stake, odds: b.odds, result: b.result, pointsLine: b.pointsLine, batch }] : [],
+    legs: null,
+    repeats: 0,
     status: null,
   });
 
-  const { scanning, errors, scan } = useScreenshotScan<ScannedBet>("/api/bets/scan", "no bets found.", (bets) => setRows((prev) => [...prev, ...bets.map(toRow)]));
+  const { scanning, errors, scan } = useScreenshotScan<ScannedBet>("/api/bets/scan", "no bets found.", (bets) => {
+    const batch = ++batches;
+    setRows((prev) => addScanned(prev, bets.map((b) => toRow(b, batch)), settings.unitSize));
+  });
 
   const validate = (r: Row): string | null => {
     if (!r.player1.trim() || !r.player2.trim()) return "Enter both players.";
     const iso = fromLocalInputValue(r.startsAtLocal, tz);
     if (!iso) return "Enter the date and time.";
     if (new Date(iso).getTime() > Date.now()) return "Date is in the future.";
+    if (r.legs) return r.legs.some((l) => l.result === "WON" && !l.odds) ? "Enter the odds of the win." : null;
     const units = Number(r.units);
     if (!Number.isFinite(units) || units <= 0) return "Units must be above 0.";
     const odds = r.odds.trim() ? Number(r.odds) : null;
@@ -117,6 +190,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
       try {
         // On your dashboard: same players and time as that match, so the bet is added to it (no copy).
         const own = r.ref?.source === "yours" ? r.ref : null;
+        // Settled differently on two lines: one pick per result, stakes in units.
+        const legs = r.legs?.map((l) => ({ stake: round2(l.stake / settings.unitSize), odds: l.odds, result: l.result }));
         const res = await api<{ combined: boolean }>("/api/bets/past", {
           method: "POST",
           json: {
@@ -129,9 +204,10 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
             playType: r.playType,
             selection: r.selection || null,
             pointsLine: r.pointsLine.trim() ? Number(r.pointsLine) : null,
-            stake: round2(Number(r.units)),
-            odds: r.odds.trim() ? Number(r.odds) : null,
+            stake: legs ? round2(legs.reduce((sum, l) => sum + l.stake, 0)) : round2(Number(r.units)),
+            odds: legs ? null : r.odds.trim() ? Number(r.odds) : null,
             result: r.result,
+            ...(legs ? { legs } : {}),
           },
         });
         added++;
@@ -253,15 +329,15 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 </label>
                 <label className="w-20">
                   <span className="label">Units</span>
-                  <input className="input py-1 tabular" inputMode="decimal" value={r.units} onChange={(e) => patch(r.key, { units: e.target.value })} aria-label="Units" />
+                  <input className="input py-1 tabular" inputMode="decimal" value={r.units} disabled={Boolean(r.legs)} onChange={(e) => patch(r.key, { units: e.target.value })} aria-label="Units" />
                 </label>
                 <label className="w-20">
                   <span className="label">Odds</span>
-                  <input className="input py-1 tabular" inputMode="decimal" value={r.odds} onChange={(e) => patch(r.key, { odds: e.target.value })} aria-label="Odds" />
+                  <input className="input py-1 tabular" inputMode="decimal" value={r.odds} placeholder={r.legs ? "split" : undefined} disabled={Boolean(r.legs)} onChange={(e) => patch(r.key, { odds: e.target.value })} aria-label="Odds" />
                 </label>
                 <label className="w-28">
                   <span className="label">Result</span>
-                  <select className="input py-1" value={r.result} onChange={(e) => patch(r.key, { result: e.target.value as SlipResult })} aria-label="Result">
+                  <select className="input py-1" value={r.result} disabled={Boolean(r.legs)} onChange={(e) => patch(r.key, { result: e.target.value as SlipResult })} aria-label="Result">
                     {(Object.keys(RESULT_LABEL) as SlipResult[]).map((k) => (
                       <option key={k} value={k}>
                         {RESULT_LABEL[k]}
@@ -270,6 +346,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                   </select>
                 </label>
                 {r.resultText && <span className="self-center text-[11px] text-muted">Slip says &quot;{r.resultText}&quot;</span>}
+                {combinedNote(r, settings.currency) && <span className="w-full text-[11px] text-accent">{combinedNote(r, settings.currency)}</span>}
                 <span className={`w-full text-[11px] ${matchNote(r).known ? "text-muted" : "text-warn"}`}>{matchNote(r).text}</span>
                 {r.status && (
                   <span className={`ml-auto flex items-center gap-1 self-center text-[11px] ${r.status.ok ? "text-over" : "text-under"}`}>

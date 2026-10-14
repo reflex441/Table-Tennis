@@ -810,6 +810,32 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await prisma.bet.count()).toBe(3);
   });
 
+  it("past bets: one pick settled differently on two lines is a split bet by result", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { player1: "Heczko D.", player2: "Byrtus S.", competition: null, timezone: "Australia/Sydney", playType: "PERSONAL" as const, selection: "OVER" as const, pointsLine: 75.5, odds: null, result: "LOST" as const };
+    const legs = [{ stake: 1, odds: 1.73, result: "WON" as const }, { stake: 1.25, odds: 1.8, result: "LOST" as const }];
+    const fresh = await createPastBet(prisma, userId, { ...base, startsAt: "2030-09-20T15:30:00Z", stake: 2.25, legs }, now);
+    const bet = await prisma.bet.findUniqueOrThrow({ where: { matchId: fresh.matchId }, include: { legs: { orderBy: { position: "asc" } } } });
+    expect(bet).toMatchObject({ stake: 2.25, odds: null, result: "LOST", profit: -0.52 });
+    expect(bet.legs.map((l) => [l.selection, l.stake, l.odds, l.result, l.profit])).toEqual([
+      ["OVER", 1, 1.73, "WON", 0.73],
+      ["OVER", 1.25, 1.8, "LOST", -1.25],
+    ]);
+
+    // Onto a match with an auto-filled bet: replaces it.
+    const startsAt = new Date("2030-09-21T10:00:00Z");
+    const m = await prisma.match.create({
+      data: {
+        userId, player1: "Heczko D.", player2: "Byrtus S.", startsAt, timezone: "UTC", dedupeKey: matchDedupeKey("Heczko D.", "Byrtus S.", startsAt), playType: "BOT",
+        statistics: { create: { selection: "OVER", pointsLine: 74.5 } },
+        alarm: { create: { reminderMinutes: 5, fireAt: startsAt, nextAttemptAt: startsAt, status: "COMPLETED", ackAt: startsAt, ackAction: "placed" } },
+        bet: { create: { stake: 1.5, autoFilled: true } },
+      },
+    });
+    expect(await createPastBet(prisma, userId, { ...base, playType: "BOT", startsAt: startsAt.toISOString(), stake: 2.25, legs }, now)).toEqual({ matchId: m.id, combined: true });
+    expect((await getMatch(prisma, userId, m.id))?.bet).toMatchObject({ stake: 2.25, result: "LOST", profit: -0.52, autoFilled: false, legs: [{ result: "WON", playType: null }, { result: "LOST", playType: null }] });
+  });
+
   it("past bets: a different pick on the same match becomes a split bet", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const base = { player1: "Warpas B.", player2: "Krcil F.", competition: "TT Elite", timezone: "Australia/Sydney", playType: "PERSONAL" as const, pointsLine: 73.5, startsAt: "2030-09-20T06:55:00Z" };

@@ -153,6 +153,16 @@ export const pastBetSchema = z.object({
   result: z.enum(["PENDING", "WON", "LOST", "VOID"]),
   /** O/U record of the players from the matching Cage Capital match (for the matchups stats). */
   ouStats: statisticsSchema.shape.ouStats.optional(),
-});
+  /**
+   * Several bets on this pick that settled differently (e.g. Over 74.5 won,
+   * Over 75.5 lost): a split bet, one pick per result. Stake / odds / result
+   * above are then ignored.
+   */
+  legs: z
+    .array(betLegSchema.pick({ stake: true, odds: true }).extend({ result: betResultSchema }))
+    .min(2)
+    .max(3)
+    .optional(),
+}).refine((b) => !b.legs || b.selection, { message: "Choose the pick of the split bet", path: ["selection"] });
 
 export type PastBetInput = z.infer<typeof pastBetSchema>;
