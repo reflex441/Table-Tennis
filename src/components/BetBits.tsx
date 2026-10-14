@@ -394,7 +394,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
           <Pencil className="h-3 w-3" />
         </button>
         {bet.autoFilled && (
-          <span className="rounded border border-line px-1 text-[10px] text-muted" title="Filled in from the pick when the match started. Scanning the bet slip replaces it with your real bet; delete it if you didn't bet.">
+          <span className="rounded border border-line px-1 text-[10px] text-muted" title="Filled in from the pick when the match started. Scanning the bet slip replaces it with your real bet. If it's never confirmed it's deleted 3 days after the game.">
             Auto-filled
           </span>
         )}

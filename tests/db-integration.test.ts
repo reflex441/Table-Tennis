@@ -772,32 +772,42 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await getMatch(prisma, userId, removed.id))?.bet).toBeNull();
   });
 
-  it("finished matches with no bet are deleted a day after they started", async () => {
+  it("finished matches with no bet registered are deleted 3 days after they started", async () => {
     const now = new Date();
     const ago = (h: number) => new Date(now.getTime() - h * 3_600_000);
-    const mk = (player1: string, startsAt: Date, status: "COMPLETED" | "CANCELLED" | "TRIGGERED", bet = false) =>
+    type BetKind = "none" | "registered" | "auto" | "autoSettled";
+    const bets: Record<BetKind, object | null> = {
+      none: null,
+      registered: { stake: 1, result: "WON", odds: 1.9, profit: 0.9 },
+      auto: { stake: 1.5, autoFilled: true },
+      // An auto-filled bet you then marked won is yours (autoFilled is cleared on any change).
+      autoSettled: { stake: 1.5, odds: 1.9, result: "WON", profit: 1.35 },
+    };
+    const mk = (player1: string, startsAt: Date, status: "COMPLETED" | "CANCELLED" | "TRIGGERED", bet: BetKind = "none") =>
       prisma.match.create({
         data: {
           userId, player1, player2: "Minda M.", startsAt, timezone: "UTC", dedupeKey: matchDedupeKey(player1, "Minda M.", startsAt),
           alarm: { create: { reminderMinutes: 5, fireAt: startsAt, nextAttemptAt: startsAt, status } },
-          ...(bet ? { bet: { create: { stake: 1, result: "WON", odds: 1.9, profit: 0.9 } } } : {}),
+          ...(bets[bet] ? { bet: { create: bets[bet] as { stake: number } } } : {}),
         },
       });
-    await mk("Idle I.", ago(30), "COMPLETED");
-    await mk("Cancel C.", ago(30), "CANCELLED");
-    const withBet = await mk("Bet B.", ago(30), "COMPLETED", true);
-    const today = await mk("Today T.", ago(2), "COMPLETED");
-    const ringing = await mk("Ring R.", ago(30), "TRIGGERED");
-    // Nothing changed on them for a day...
-    await prisma.$executeRaw`UPDATE "Match" SET "updatedAt" = ${ago(25)}`;
-    await prisma.$executeRaw`UPDATE "Alarm" SET "updatedAt" = ${ago(25)}`;
+    await mk("Idle I.", ago(80), "COMPLETED");
+    await mk("Cancel C.", ago(80), "CANCELLED");
+    await mk("Auto A.", ago(80), "COMPLETED", "auto"); // filled in, never confirmed: no bet registered
+    const withBet = await mk("Bet B.", ago(80), "COMPLETED", "registered");
+    const settled = await mk("Settled S.", ago(80), "COMPLETED", "autoSettled");
+    const recent = await mk("Recent R.", ago(30), "COMPLETED", "auto"); // still time to scan the slip
+    const ringing = await mk("Ring R.", ago(80), "TRIGGERED");
+    // Nothing changed on them for 3 days...
+    await prisma.$executeRaw`UPDATE "Match" SET "updatedAt" = ${ago(75)}`;
+    await prisma.$executeRaw`UPDATE "Alarm" SET "updatedAt" = ${ago(75)}`;
     // ...except this one, edited an hour ago.
-    const edited = await mk("Edited E.", ago(30), "COMPLETED");
+    const edited = await mk("Edited E.", ago(80), "COMPLETED");
 
-    expect(await deleteIdleMatches(prisma, now)).toBe(2);
+    expect(await deleteIdleMatches(prisma, now)).toBe(3);
     const left = (await prisma.match.findMany({ select: { id: true } })).map((m) => m.id).sort();
-    expect(left).toEqual([withBet.id, today.id, ringing.id, edited.id].sort());
-    expect(await prisma.bet.count()).toBe(1);
+    expect(left).toEqual([withBet.id, settled.id, recent.id, ringing.id, edited.id].sort());
+    expect(await prisma.bet.count()).toBe(3);
   });
 
   it("past bets: a different pick on the same match becomes a split bet", async () => {

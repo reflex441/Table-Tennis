@@ -262,7 +262,7 @@ export function SettingsPage() {
 
       <Section
         title="Bets you don't record"
-        description="Scanning the bet slips later replaces the filled-in bet with what you actually bet (units, odds and result). Delete the bet on the match if you didn't place it."
+        description="Scanning the bet slip later replaces the filled-in bet with what you actually bet (units, odds and result); marking it won or lost confirms it too. An auto-filled bet doesn't count towards your profit until then, and if it's never confirmed it's deleted with its match 3 days after the game - so a bot play you didn't bet on just disappears."
       >
         <Toggle
           label="Fill in the bet when the match starts"
