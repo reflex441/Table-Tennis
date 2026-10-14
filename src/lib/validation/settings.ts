@@ -60,6 +60,7 @@ export const settingsUpdateSchema = z
     screenshotsAreToday: z.boolean(),
     screenshotTimesAreLocal: z.boolean(),
     ringUntilAck: z.boolean(),
+    autoRecordBets: z.boolean(),
     repeatSeconds: z.number().int().min(15, "At least 15 seconds").max(300, "At most 5 minutes"),
     alarmVolume: z.number().int().min(1, "At least 1%").max(100, "At most 100%"),
     alarmSound: z.enum(ALARM_SOUNDS),
@@ -109,6 +110,8 @@ export interface SettingsDTO {
   screenshotTimesAreLocal: boolean;
   /** Keep alerting until the user confirms the bet. */
   ringUntilAck: boolean;
+  /** A started match with a pick and no bet recorded gets the pick as its bet. */
+  autoRecordBets: boolean;
   /** Seconds between repeated push notifications while ringing. */
   repeatSeconds: number;
   /** Alarm and chime loudness, 1-100. */

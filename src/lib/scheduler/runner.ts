@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { deleteOldScreenshotsIfDue } from "@/lib/storage";
 import { shortenStoredPlayerNamesIfDue } from "@/lib/matching/tidy-names";
 import { gradeNbaBetsIfDue } from "@/lib/nba/grading-service";
+import { autoFillBetsIfDue } from "@/lib/bets/auto-fill";
+import { deleteIdleMatchesIfDue } from "@/lib/alarms/idle-matches";
 
 /**
  * Run one dispatch pass against the database. Used by the in-process loop,
@@ -12,8 +14,11 @@ import { gradeNbaBetsIfDue } from "@/lib/nba/grading-service";
  */
 export async function runDispatchOnce(log?: (msg: string) => void): Promise<DispatchReport> {
   const report = await dispatchDueAlarms({ store: createPrismaStore(db()), push: createWebPushSender(), log });
-  // Housekeeping on the same schedule (hourly): old screenshots, full player names.
+  // Started matches with a pick and no bet recorded: the pick becomes the bet (every minute).
+  await autoFillBetsIfDue(db());
+  // Housekeeping on the same schedule (hourly): old screenshots, finished matches with no bet, full player names.
   await deleteOldScreenshotsIfDue(db());
+  await deleteIdleMatchesIfDue(db());
   await shortenStoredPlayerNamesIfDue(db());
   // NBA results from ESPN (every 10 minutes), after the alarms so they're never delayed.
   await gradeNbaBetsIfDue(db());

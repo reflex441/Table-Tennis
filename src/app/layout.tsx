@@ -39,6 +39,7 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   screenshotsAreToday: true,
   screenshotTimesAreLocal: true,
   ringUntilAck: true,
+  autoRecordBets: true,
   repeatSeconds: 30,
   alarmVolume: 15,
   alarmSound: "siren",

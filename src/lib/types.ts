@@ -49,6 +49,8 @@ export interface BetDTO {
   settledAt: string | null;
   /** Picks of a split bet; empty for a normal bet. Stake/profit/result above are the totals. */
   legs: BetLegDTO[];
+  /** Filled in from the match's pick when it started (not recorded by you yet). */
+  autoFilled: boolean;
 }
 
 export interface MatchDTO {

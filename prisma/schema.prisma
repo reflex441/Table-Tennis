@@ -267,6 +267,9 @@ model Bet {
   /// A split bet (e.g. 0.5u UNDER + 0.5u SWEEP): one leg per pick. The Bet row
   /// then holds the totals: stake = sum, profit = sum, result from the net.
   legs      BetLeg[]
+  /// Filled in from the match's pick when it started with no bet recorded; any
+  /// change to it (or a scanned slip of the match) makes it a confirmed bet.
+  autoFilled Boolean   @default(false)
 
   @@index([result])
 }
@@ -386,6 +389,8 @@ model Settings {
   alarmVolume                Int      @default(15)
   /// siren | classic | chime | pulse | rising
   alarmSound                 String   @default("siren")
+  /// When a match with a pick starts and no bet was recorded, record the pick as the bet.
+  autoRecordBets             Boolean  @default(true)
   /// Money per unit (a "1U" bot play stakes this amount).
   unitSize                   Float    @default(10)
   /// Currency symbol shown next to stakes and profit.

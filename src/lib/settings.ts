@@ -50,6 +50,7 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
     screenshotsAreToday: s.screenshotsAreToday,
     screenshotTimesAreLocal: s.screenshotTimesAreLocal,
     ringUntilAck: s.ringUntilAck,
+    autoRecordBets: s.autoRecordBets,
     repeatSeconds: s.repeatSeconds,
     alarmVolume: s.alarmVolume,
     alarmSound: isAlarmSound(s.alarmSound) ? s.alarmSound : "siren",

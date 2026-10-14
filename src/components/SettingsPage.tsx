@@ -260,6 +260,18 @@ export function SettingsPage() {
 
       <AverageOddsSection />
 
+      <Section
+        title="Bets you don't record"
+        description="Scanning the bet slips later replaces the filled-in bet with what you actually bet (units, odds and result). Delete the bet on the match if you didn't place it."
+      >
+        <Toggle
+          label="Fill in the bet when the match starts"
+          hint="A match with a pick (e.g. 1.5U OVER) that starts with no bet recorded gets that pick as its bet, with the match's units and odds, and moves to Pending. Not when you skipped or cancelled the alarm."
+          checked={settings.autoRecordBets}
+          onChange={(v) => void save({ autoRecordBets: v }, "autobets")}
+        />
+      </Section>
+
       <AccountSection />
       <InviteKeysSection />
 

@@ -58,6 +58,7 @@ export async function placeBet(
 /**
  * Edit stake/odds, split or unsplit the bet, or settle it (or one pick of a
  * split bet). Profit and, for split bets, the totals are recomputed every time.
+ * Any change confirms an auto-filled bet.
  */
 export async function updateBet(prisma: PrismaClient, userId: string, matchId: string, input: BetInput, now = new Date()): Promise<Bet> {
   const owned = await prisma.match.count({ where: { id: matchId, userId } });
@@ -97,6 +98,7 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
           result: totals.result,
           profit: totals.profit,
           settledAt: totals.result === "PENDING" ? null : bet.settledAt ?? now,
+          autoFilled: false,
         },
       });
     });
@@ -117,6 +119,8 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
         result,
         profit: computeProfit(stake, odds, result),
         settledAt: result === "PENDING" ? null : bet.settledAt ?? now,
+        // Changed by you: no longer just the auto-filled pick.
+        autoFilled: false,
       },
     });
   });
@@ -171,7 +175,7 @@ export async function createPastBet(
       playType: input.playType,
       stakeUnits: input.stake,
       odds: input.odds,
-      statistics: { create: { selection: input.selection, pointsLine: input.pointsLine } },
+      statistics: { create: { selection: input.selection, pointsLine: input.pointsLine, ouStats: input.ouStats ?? null } },
       // A finished alarm, already confirmed as placed: never rings.
       alarm: {
         create: { reminderMinutes: 0, fireAt: startsAt, nextAttemptAt: startsAt, status: "COMPLETED", completedAt: now, ackAt: now, ackAction: "placed" },
@@ -193,23 +197,44 @@ export async function createPastBet(
 }
 
 /**
- * A second bet on a match you already have, on a different pick (e.g. an
- * UNDER and a SWEEP on the same game): both become picks of one split bet,
- * each with its own units, odds and result. The same pick twice is refused.
+ * A bet on a match you already have. With no bet yet (e.g. uploaded from Cage
+ * Capital but the alarm was ignored) or only the auto-filled pick, it becomes
+ * this match's bet; a bet on a different pick than the match's makes it a
+ * personal play on that pick.
+ * With a bet already, a different pick (e.g. an UNDER and a SWEEP) makes it a
+ * split bet; the same pick twice is refused. Either way the alarm is done.
  */
 async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: string, input: PastBetInput, now: Date): Promise<true> {
   const match = await prisma.match.findFirstOrThrow({
     where: { id: matchId, userId },
-    select: { playType: true, statistics: { select: { selection: true } }, bet: { select: { stake: true, odds: true, result: true, legs: { orderBy: { position: "asc" } } } } },
+    select: {
+      playType: true,
+      statistics: { select: { selection: true } },
+      bet: { select: { stake: true, odds: true, result: true, autoFilled: true, legs: { orderBy: { position: "asc" } } } },
+    },
   });
+  // Bet on: the alarm is done (it stops ringing, like "Bet placed").
+  const alarmDone = () =>
+    prisma.alarm.updateMany({ where: { matchId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED", completedAt: now, ackAt: now, ackAction: "placed" } });
   const pick = input.selection;
   const duplicate = () => new ServiceError("You already have this bet (same match, same pick).", 409, "duplicate", { existingId: matchId });
   // Its own Bot / Personal when that differs from the match (e.g. a bot UNDER plus a personal SWEEP).
   const newLeg = { selection: pick!, stake: input.stake, odds: input.odds, result: input.result as BetResult, playType: input.playType === match.playType ? null : input.playType };
 
-  if (!match.bet) {
-    // The match is there (e.g. added for an alarm) but has no bet yet.
+  if (!match.bet || match.bet.autoFilled) {
+    // The match is there (e.g. added for an alarm) but has no bet yet, or only the pick filled in when it started.
     await updateBet(prisma, userId, matchId, { stake: input.stake, odds: input.odds, result: input.result as BetResult }, now);
+    const otherPick = Boolean(pick && match.statistics?.selection && pick !== match.statistics.selection);
+    await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        playType: input.playType,
+        // You bet something else than the match's pick: the bet's pick (and line) is what counts.
+        ...(otherPick ? { statistics: { update: { selection: pick, pointsLine: input.pointsLine } } } : {}),
+        ...(!match.statistics && pick ? { statistics: { create: { selection: pick, pointsLine: input.pointsLine, ouStats: input.ouStats ?? null } } } : {}),
+      },
+    });
+    await alarmDone();
     return true;
   }
   if (!pick) throw duplicate();
@@ -221,5 +246,6 @@ async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: str
   if (!legs || legs.some((l) => l.selection === pick)) throw duplicate();
   if (legs.length >= 3) throw new ServiceError("This match already has 3 picks.", 409, "too_many_picks");
   await updateBet(prisma, userId, matchId, { legs: [...legs, newLeg] }, now);
+  await alarmDone();
   return true;
 }

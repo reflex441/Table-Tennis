@@ -4,8 +4,8 @@ import type { PrismaClient } from "@/generated/prisma/client";
  * Database space: screenshots are by far the biggest thing stored, so each
  * one is deleted a day after its match (after the last one, if it shows
  * several). Uploads that never became a match go a day after uploading.
- * Matches, bets and stats are kept forever (the Profit page doesn't need
- * the images).
+ * Matches with a bet and their stats are kept forever (the Profit page
+ * doesn't need the images).
  */
 export const SCREENSHOT_KEEP_HOURS = 24;
 

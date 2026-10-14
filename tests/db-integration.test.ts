@@ -28,10 +28,14 @@ import { setAvatar, toPublicUser } from "@/lib/auth/accounts";
 import { capitalizeStoredCompetitions, shortenStoredPlayerNames } from "@/lib/matching/tidy-names";
 import { guessCompetition, ownerLeagueIndex } from "@/lib/bets/league-guess";
 import { getPublicProfile } from "@/lib/profiles";
+import { findSlipReferences } from "@/lib/bets/slip-match";
+import { slipPlayType } from "@/lib/bets/slip-play";
 import { createNbaBet, deleteNbaBet, listNbaBets, updateNbaBet } from "@/lib/nba/service";
 import { gradePendingNbaBets } from "@/lib/nba/grading-service";
 import { fakeEspn } from "./fixtures/espn";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
+import { autoFillBets } from "@/lib/bets/auto-fill";
+import { deleteIdleMatches } from "@/lib/alarms/idle-matches";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -665,6 +669,135 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await createPastBet(prisma, userId, { ...past, playType: "PERSONAL", selection: "SWEEP", stake: 0.75, odds: 3.65, result: "WON" }, now);
     const rows = (await listBetRows(prisma, userId)).filter((r) => r.matchId === under.matchId);
     expect(rows.map((r) => [r.selection, r.playType])).toEqual([["UNDER", "BOT"], ["SWEEP", "PERSONAL"]]);
+  });
+
+  it("scanned slips take Bot / Personal from the same match on your dashboard or the owner's", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    // userId is the owner. Their Cage Capital uploads: a bot UNDER and a personal play.
+    const at = (h: number) => new Date(Date.UTC(2030, 8, 21, h, 0));
+    const mk = (owner: string, player1: string, startsAt: Date, playType: "BOT" | "PERSONAL", selection: "UNDER" | "OVER" | null) =>
+      prisma.match.create({
+        data: {
+          userId: owner, player1, player2: "Minda M.", startsAt, timezone: "UTC", dedupeKey: matchDedupeKey(player1, "Minda M.", startsAt), playType,
+          statistics: { create: { selection, ouStats: "11/3" } },
+          alarm: { create: { reminderMinutes: 5, fireAt: startsAt, nextAttemptAt: startsAt, status: "TRIGGERED" } },
+        },
+      });
+    const ownersBot = await mk(userId, "Kosmal D.", at(8), "BOT", "UNDER");
+    await mk(userId, "Varcl J.", at(9), "PERSONAL", "OVER");
+    // The same players again later that day (a rematch): the closest one counts.
+    await mk(userId, "Kosmal D.", at(11), "PERSONAL", "OVER");
+    const samsOwn = await mk(sam, "Kosmal D.", at(8), "BOT", "UNDER");
+
+    const slip = (player1: string, h: number, timeKnown = true) => ({ player1, player2: "Minda M.", startsAt: new Date(at(h).getTime() + 10 * 60_000), timeKnown });
+    const [own, owners, personal, none, noTime] = await findSlipReferences(prisma, sam, [slip("Kosmal D.", 8), slip("Varcl J.", 9), slip("Kosmal D.", 11), slip("Nobody N.", 8), slip("Varcl J.", 3, false)]);
+    expect(own).toMatchObject({ source: "yours", matchId: samsOwn.id, playType: "BOT", selection: "UNDER" });
+    expect(owners).toMatchObject({ source: "owner", playType: "PERSONAL", selection: "OVER" });
+    expect(personal).toMatchObject({ source: "owner", playType: "PERSONAL" });
+    expect(none).toBeNull();
+    expect(noTime).toMatchObject({ source: "owner" }); // no time on the slip: the same day
+    // The owner's own slip finds their own match.
+    expect((await findSlipReferences(prisma, userId, [slip("Kosmal D.", 8)]))[0]).toMatchObject({ source: "yours", matchId: ownersBot.id });
+    // Bot only when the bot's pick was bet.
+    expect(slipPlayType(own!, "UNDER")).toBe("BOT");
+    expect(slipPlayType(own!, "SWEEP")).toBe("PERSONAL");
+    expect(slipPlayType(own!, null)).toBe("BOT");
+    expect(slipPlayType(owners!, "OVER")).toBe("PERSONAL");
+    expect(slipPlayType(null, "UNDER")).toBe("PERSONAL"); // no bot play at that time
+
+    // Adding it to the match on your dashboard: no copy, the bet is that match's, the alarm stops.
+    const base = { player1: own!.player1, player2: own!.player2, competition: null, startsAt: own!.startsAt, timezone: "UTC", pointsLine: 74.5, ouStats: "11/3" };
+    const res = await createPastBet(prisma, sam, { ...base, playType: "BOT", selection: "UNDER", stake: 1, odds: 1.85, result: "WON" }, now);
+    expect(res).toEqual({ matchId: samsOwn.id, combined: true });
+    expect(await prisma.match.count({ where: { userId: sam } })).toBe(1);
+    const after = await prisma.match.findUniqueOrThrow({ where: { id: samsOwn.id }, include: { alarm: true, bet: true, statistics: true } });
+    expect(after).toMatchObject({ playType: "BOT", alarm: { status: "COMPLETED", ackAction: "placed" }, bet: { result: "WON", stake: 1, profit: 0.85 }, statistics: { selection: "UNDER" } });
+    expect((await listMatches(prisma, sam, "completed")).map((m) => m.id)).toEqual([samsOwn.id]);
+
+    // A different pick than the bot's on a match with no bet yet: that pick, as a personal play.
+    const other = await mk(sam, "Prokop T.", at(10), "BOT", "UNDER");
+    await createPastBet(prisma, sam, { ...base, player1: "Prokop T.", startsAt: at(10).toISOString(), playType: "PERSONAL", selection: "SWEEP", pointsLine: null, stake: 0.5, odds: 3.5, result: "LOST" }, now);
+    expect(await prisma.match.findUniqueOrThrow({ where: { id: other.id }, include: { statistics: true } })).toMatchObject({ playType: "PERSONAL", statistics: { selection: "SWEEP" } });
+
+    // A new past bet keeps the O/U record it was given (for the matchups stats).
+    const fresh = await createPastBet(prisma, sam, { ...base, player1: "Fresh F.", startsAt: at(7).toISOString(), playType: "BOT", selection: "OVER", stake: 1, odds: 1.8, result: "WON" }, now);
+    expect((await listBetRows(prisma, sam)).find((r) => r.matchId === fresh.matchId)?.matchups).toBe(14);
+  });
+
+  it("a started match with a pick and no bet recorded gets the pick as its bet", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const at = (min: number) => new Date(now.getTime() + min * 60_000);
+    const mk = (player1: string, startsAt: Date, opts: { selection?: "OVER" | null; alarm?: Record<string, unknown>; owner?: string } = {}) =>
+      prisma.match.create({
+        data: {
+          userId: opts.owner ?? userId, player1, player2: "Minda M.", startsAt, timezone: "UTC", dedupeKey: matchDedupeKey(player1, "Minda M.", startsAt),
+          playType: "BOT", stakeUnits: 1.5, odds: 1.85,
+          statistics: { create: { selection: opts.selection === undefined ? "OVER" : opts.selection } },
+          alarm: { create: { reminderMinutes: 5, fireAt: startsAt, nextAttemptAt: startsAt, status: "COMPLETED", ...opts.alarm } },
+        },
+      });
+    const ignored = await mk("Madej B.", at(-60));
+    const edited = await mk("Rus M.", at(-30));
+    const removed = await mk("Lamr P.", at(-20), { alarm: { status: "TRIGGERED" } });
+    // Not filled in: no pick, alarm skipped or cancelled, not started, too long ago, turned off.
+    await mk("Nopick N.", at(-60), { selection: null });
+    await mk("Kosmal D.", at(-60), { alarm: { ackAt: at(-70), ackAction: "skipped" } });
+    await mk("Varcl J.", at(-60), { alarm: { status: "CANCELLED" } });
+    await mk("Prokop T.", at(30), { alarm: { status: "SCHEDULED" } });
+    await mk("Old O.", at(-3 * 24 * 60));
+    const off = (await prisma.user.create({ data: { email: "off@example.com", name: "Off", settings: { create: { autoRecordBets: false } } } })).id;
+    await mk("Madej B.", at(-60), { owner: off });
+
+    expect(await autoFillBets(prisma, now)).toBe(3);
+    expect(await autoFillBets(prisma, now)).toBe(0);
+    expect(await prisma.bet.count()).toBe(3);
+    expect(await getMatch(prisma, userId, ignored.id)).toMatchObject({ bet: { stake: 1.5, odds: 1.85, result: "PENDING", autoFilled: true }, alarm: { ackAction: "placed" } });
+    expect((await listMatches(prisma, userId, "pending")).map((m) => m.id).sort()).toEqual([ignored.id, edited.id, removed.id].sort());
+
+    // Scanning the bet slip replaces it with the real bet ("you already have this bet" is only for your own bets).
+    const slip = { player1: "Madej B.", player2: "Minda M.", competition: null, startsAt: at(-60).toISOString(), timezone: "UTC", playType: "BOT" as const, selection: "OVER" as const, pointsLine: 74.5, stake: 2, odds: 1.9, result: "WON" as const };
+    expect(await createPastBet(prisma, userId, slip, now)).toEqual({ matchId: ignored.id, combined: true });
+    expect((await getMatch(prisma, userId, ignored.id))?.bet).toMatchObject({ stake: 2, odds: 1.9, result: "WON", profit: 1.8, autoFilled: false, legs: [] });
+    // Now it's your bet: another pick on a second slip splits it, the same pick again is a duplicate.
+    await createPastBet(prisma, userId, { ...slip, playType: "PERSONAL", selection: "SWEEP", pointsLine: null, stake: 0.5, odds: 3.5, result: "LOST" }, now);
+    expect((await getMatch(prisma, userId, ignored.id))?.bet?.legs).toHaveLength(2);
+    await expect(createPastBet(prisma, userId, slip, now)).rejects.toMatchObject({ status: 409 });
+
+    // Settling it by hand confirms it; deleting it doesn't bring it back.
+    await updateBet(prisma, userId, edited.id, { result: "LOST" }, now);
+    expect((await getMatch(prisma, userId, edited.id))?.bet).toMatchObject({ result: "LOST", profit: -1.5, autoFilled: false });
+    await deleteBet(prisma, userId, removed.id);
+    expect(await autoFillBets(prisma, at(5))).toBe(0);
+    expect((await getMatch(prisma, userId, removed.id))?.bet).toBeNull();
+  });
+
+  it("finished matches with no bet are deleted a day after they started", async () => {
+    const now = new Date();
+    const ago = (h: number) => new Date(now.getTime() - h * 3_600_000);
+    const mk = (player1: string, startsAt: Date, status: "COMPLETED" | "CANCELLED" | "TRIGGERED", bet = false) =>
+      prisma.match.create({
+        data: {
+          userId, player1, player2: "Minda M.", startsAt, timezone: "UTC", dedupeKey: matchDedupeKey(player1, "Minda M.", startsAt),
+          alarm: { create: { reminderMinutes: 5, fireAt: startsAt, nextAttemptAt: startsAt, status } },
+          ...(bet ? { bet: { create: { stake: 1, result: "WON", odds: 1.9, profit: 0.9 } } } : {}),
+        },
+      });
+    await mk("Idle I.", ago(30), "COMPLETED");
+    await mk("Cancel C.", ago(30), "CANCELLED");
+    const withBet = await mk("Bet B.", ago(30), "COMPLETED", true);
+    const today = await mk("Today T.", ago(2), "COMPLETED");
+    const ringing = await mk("Ring R.", ago(30), "TRIGGERED");
+    // Nothing changed on them for a day...
+    await prisma.$executeRaw`UPDATE "Match" SET "updatedAt" = ${ago(25)}`;
+    await prisma.$executeRaw`UPDATE "Alarm" SET "updatedAt" = ${ago(25)}`;
+    // ...except this one, edited an hour ago.
+    const edited = await mk("Edited E.", ago(30), "COMPLETED");
+
+    expect(await deleteIdleMatches(prisma, now)).toBe(2);
+    const left = (await prisma.match.findMany({ select: { id: true } })).map((m) => m.id).sort();
+    expect(left).toEqual([withBet.id, today.id, ringing.id, edited.id].sort());
+    expect(await prisma.bet.count()).toBe(1);
   });
 
   it("past bets: a different pick on the same match becomes a split bet", async () => {

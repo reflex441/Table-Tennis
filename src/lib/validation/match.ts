@@ -151,6 +151,8 @@ export const pastBetSchema = z.object({
   stake: z.number().positive("Units must be more than 0").max(1000, "At most 1000 units"),
   odds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000).nullish().transform((v) => v ?? null),
   result: z.enum(["PENDING", "WON", "LOST", "VOID"]),
+  /** O/U record of the players from the matching Cage Capital match (for the matchups stats). */
+  ouStats: statisticsSchema.shape.ouStats.optional(),
 });
 
 export type PastBetInput = z.infer<typeof pastBetSchema>;

@@ -393,6 +393,11 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
           )}
           <Pencil className="h-3 w-3" />
         </button>
+        {bet.autoFilled && (
+          <span className="rounded border border-line px-1 text-[10px] text-muted" title="Filled in from the pick when the match started. Scanning the bet slip replaces it with your real bet; delete it if you didn't bet.">
+            Auto-filled
+          </span>
+        )}
         <ResultChip result={bet.result} />
         {settled && bet.profit !== null && <ProfitAmount units={bet.profit} />}
         {bet.result === "WON" && bet.profit === null && <span className="text-[11px] text-warn">Add the odds to count the profit</span>}

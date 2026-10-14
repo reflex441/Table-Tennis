@@ -8,6 +8,7 @@ import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { SELECTIONS, selectionName, type Selection } from "@/lib/selection";
 import { round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
+import { slipPlayType, type SlipReference } from "@/lib/bets/slip-play";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
@@ -30,12 +31,24 @@ interface Row {
   odds: string;
   result: SlipResult;
   resultText: string | null;
+  /** The same match on your dashboard or the owner's uploads (where Bot / Personal comes from). */
+  ref: SlipReference | null;
   status: null | { ok: boolean; message: string };
 }
 
 const RESULT_LABEL: Record<SlipResult, string> = { WON: "Won", LOST: "Lost", VOID: "Void", PENDING: "Not settled" };
 
-type ScannedBet = SlipBet & { startsAt: string | null; competitionGuessed?: boolean };
+type ScannedBet = SlipBet & { startsAt: string | null; competitionGuessed?: boolean; reference?: SlipReference | null; playType?: "BOT" | "PERSONAL" };
+
+/** Why the row is a bot or a personal play, in words. */
+function matchNote(r: Row): { text: string; known: boolean } {
+  if (!r.ref) return { text: "No bot play uploaded for this game at this time - personal play.", known: false };
+  const attach = r.ref.source === "yours" ? " It goes on that match on your dashboard." : "";
+  if (r.ref.playType !== "BOT") return { text: `Uploaded as a personal play.${attach}`, known: true };
+  const botPick = r.ref.selection ? ` (${selectionName(r.ref.selection)})` : "";
+  if (slipPlayType(r.ref, r.selection || null) === "PERSONAL") return { text: `Different pick from the bot play${botPick} - personal play.${attach}`, known: true };
+  return { text: `Lines up with the bot play${botPick} - bot play.${attach}`, known: true };
+}
 
 let counter = 0;
 
@@ -50,7 +63,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
   const tz = settings.timezone;
   const [rows, setRows] = useState<Row[]>([]);
   const [adding, setAdding] = useState(false);
-  const [playType, setPlayType] = useState<"BOT" | "PERSONAL">("BOT");
+  // Bets that don't line up with an uploaded bot play are personal plays (unless switched).
+  const [playType, setPlayType] = useState<"BOT" | "PERSONAL">("PERSONAL");
 
   const patch = (key: string, p: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
@@ -62,7 +76,9 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
     competition: b.competition ?? "",
     leagueGuessed: Boolean(b.competitionGuessed && b.competition),
     startsAtLocal: b.startsAt ? toLocalInputValue(b.startsAt, tz) : "",
-    playType,
+    // Bot when it lines up with an uploaded bot play; others follow the switch above.
+    playType: b.reference ? (b.playType ?? "PERSONAL") : playType,
+    ref: b.reference ?? null,
     selection: b.selection ?? "",
     pointsLine: b.pointsLine !== null ? String(b.pointsLine) : "",
     // Stake in money -> units with your unit size.
@@ -99,13 +115,16 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         continue;
       }
       try {
+        // On your dashboard: same players and time as that match, so the bet is added to it (no copy).
+        const own = r.ref?.source === "yours" ? r.ref : null;
         const res = await api<{ combined: boolean }>("/api/bets/past", {
           method: "POST",
           json: {
-            player1: r.player1.trim(),
-            player2: r.player2.trim(),
+            player1: own?.player1 ?? r.player1.trim(),
+            player2: own?.player2 ?? r.player2.trim(),
             competition: r.competition.trim() || null,
-            startsAt: fromLocalInputValue(r.startsAtLocal, tz),
+            startsAt: own?.startsAt ?? fromLocalInputValue(r.startsAtLocal, tz),
+            ouStats: r.ref?.ouStats ?? null,
             timezone: tz,
             playType: r.playType,
             selection: r.selection || null,
@@ -116,7 +135,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
           },
         });
         added++;
-        patch(r.key, { status: { ok: true, message: res.combined ? "Added to the same match (split bet)" : "Added" } });
+        patch(r.key, { status: { ok: true, message: res.combined ? (own ? "Added to that match on your dashboard" : "Added to the same match (split bet)") : "Added" } });
       } catch (err) {
         patch(r.key, { status: { ok: false, message: err instanceof Error ? err.message : String(err) } });
       }
@@ -141,14 +160,16 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
       <p className="text-xs text-muted">
         Upload screenshots of your settled bets from Ladbrokes or Sportsbet. <span className="text-text">Win</span> is counted as won and{" "}
         <span className="text-text">No Return</span> as lost. Stakes are turned into units with your unit size ({settings.currency}
-        {settings.unitSize} = 1u). Check the bets, then add them.
+        {settings.unitSize} = 1u). A bet that lines up with a bot play you uploaded (same players, time and pick) is a{" "}
+        <span className="text-text">bot play</span>; everything else is a <span className="text-text">personal play</span>. Check the bets, then add
+        them.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <ChooseScreenshots scanning={scanning} onFiles={scan} />
         <span className="ml-auto flex items-center gap-2 text-xs text-muted">
-          These bets are
-          <span className="flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Play type for new rows">
+          Bets with no bot play are
+          <span className="flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Play type for bets with no bot play">
             {(["BOT", "PERSONAL"] as const).map((t) => (
               <button
                 key={t}
@@ -158,7 +179,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 className={`rounded-md px-2 py-0.5 ${playType === t ? "bg-panel-2 font-semibold text-text" : "hover:text-text"}`}
                 onClick={() => {
                   setPlayType(t);
-                  setRows((prev) => prev.map((r) => (r.status?.ok ? r : { ...r, playType: t })));
+                  // Only bets that didn't line up with an uploaded match.
+                  setRows((prev) => prev.map((r) => (r.status?.ok || r.ref ? r : { ...r, playType: t })));
                 }}
               >
                 {t === "BOT" ? "Bot plays" : "Personal plays"}
@@ -207,7 +229,16 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                 </label>
                 <label className="w-36">
                   <span className="label">Pick</span>
-                  <select className="input py-1" value={r.selection} onChange={(e) => patch(r.key, { selection: e.target.value as Row["selection"] })} aria-label="Pick">
+                  <select
+                    className="input py-1"
+                    value={r.selection}
+                    onChange={(e) => {
+                      const selection = e.target.value as Row["selection"];
+                      // A different pick than the bot's is a personal play.
+                      patch(r.key, { selection, ...(r.ref ? { playType: slipPlayType(r.ref, selection || null) } : {}) });
+                    }}
+                    aria-label="Pick"
+                  >
                     <option value="">—</option>
                     {SELECTIONS.map((s) => (
                       <option key={s} value={s}>
@@ -239,6 +270,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
                   </select>
                 </label>
                 {r.resultText && <span className="self-center text-[11px] text-muted">Slip says &quot;{r.resultText}&quot;</span>}
+                <span className={`w-full text-[11px] ${matchNote(r).known ? "text-muted" : "text-warn"}`}>{matchNote(r).text}</span>
                 {r.status && (
                   <span className={`ml-auto flex items-center gap-1 self-center text-[11px] ${r.status.ok ? "text-over" : "text-under"}`}>
                     {r.status.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <TriangleAlert className="h-3.5 w-3.5" />} {r.status.message}
