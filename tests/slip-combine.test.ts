@@ -55,6 +55,9 @@ describe("combining bets on the same pick from bet slips", () => {
     expect(sameSlipPick({ selection: "POINTS_SPREAD", pointsLine: -4.5 }, { selection: "POINTS_SPREAD", pointsLine: 4.5 })).toBe(false);
     expect(sameSlipPick({ selection: "POINTS_SPREAD", pointsLine: -4.5 }, { selection: "POINTS_SPREAD", pointsLine: -4.5 })).toBe(true);
     expect(sameSlipPick({ selection: null, pointsLine: null }, { selection: null, pointsLine: null })).toBe(false);
+    // An ML on each player isn't the same bet; two on the same player are.
+    expect(sameSlipPick({ selection: "ML", pointsLine: null, text: "Mateusz Sikon" }, { selection: "ML", pointsLine: null, text: "Pawel Slosarczyk" })).toBe(false);
+    expect(sameSlipPick({ selection: "ML", pointsLine: null, text: "Mateusz Sikon" }, { selection: "ML", pointsLine: null, text: "Mateusz  Sikon" })).toBe(true);
   });
 
   it("a split past bet needs its pick", () => {
@@ -69,7 +72,7 @@ describe("bot plays are Over / Under only", () => {
   it("a sweep or spread is always a personal play", async () => {
     const { canBeBot, playTypeFor } = await import("@/lib/selection");
     const { slipPlayType } = await import("@/lib/bets/slip-play");
-    expect([canBeBot("OVER"), canBeBot("UNDER"), canBeBot(null), canBeBot("SWEEP"), canBeBot("POINTS_SPREAD"), canBeBot("SET_SPREAD")]).toEqual([true, true, true, false, false, false]);
+    expect([canBeBot("OVER"), canBeBot("UNDER"), canBeBot(null), canBeBot("SWEEP"), canBeBot("POINTS_SPREAD"), canBeBot("SET_SPREAD"), canBeBot("ML")]).toEqual([true, true, true, false, false, false, false]);
     expect(playTypeFor("SWEEP", "BOT")).toBe("PERSONAL");
     expect(playTypeFor("OVER", "BOT")).toBe("BOT");
     expect(playTypeFor("SWEEP", "PERSONAL")).toBe("PERSONAL");

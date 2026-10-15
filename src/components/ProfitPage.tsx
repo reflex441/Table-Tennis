@@ -17,7 +17,7 @@ import { DailyCalendar } from "./DailyCalendar";
 import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
 import { X } from "lucide-react";
 import { DateTime } from "luxon";
-import { BOT_IS_OVER_UNDER, SELECTIONS, SELECTION_LABEL, canBeBot, isSpread, pickText, type Selection } from "@/lib/selection";
+import { BOT_IS_OVER_UNDER, SELECTIONS, SELECTION_LABEL, canBeBot, isMainPick, pickText, type Selection } from "@/lib/selection";
 import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 import { AddPastBet } from "./AddPastBet";
 import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
@@ -257,7 +257,7 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
           Picks <span className="font-normal text-muted">· how each pick is doing{type === "ALL" ? "" : ` (${type === "BOT" ? "bot" : "personal"} plays)`}</span>
         </h2>
         <div className="grid gap-3 sm:grid-cols-3">
-          {picks.filter(({ sel, summary }) => summary.bets > 0 || !isSpread(sel) || pick === sel).map(({ sel, summary }) => (
+          {picks.filter(({ sel, summary }) => summary.bets > 0 || isMainPick(sel) || pick === sel).map(({ sel, summary }) => (
             <PlayTypeCard
               key={sel}
               title={SELECTION_LABEL[sel]}

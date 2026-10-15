@@ -35,6 +35,8 @@ interface Row {
   resultText: string | null;
   /** The same match on your dashboard or the owner's uploads (where Bot / Personal comes from). */
   ref: SlipReference | null;
+  /** The selection as shown on the slip ("Mateusz Sikon"), to tell the players' picks apart. */
+  pickText: string | null;
   /** The bets on the slips that make up this one (same match and pick), stake in money; `batch` = which screenshot. */
   parts: (SlipPart & { batch: number })[];
   /** The combined bets settled differently: one pick per result (a split bet), stake in money. */
@@ -75,7 +77,7 @@ function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
   for (const r of incoming) {
     const part = r.parts[0];
     const i = part
-      ? out.findIndex((t) => !t.status?.ok && t.parts.length > 0 && sameMatch(t, r) && sameSlipPick({ selection: t.selection || null, pointsLine: t.parts[0].pointsLine }, { selection: r.selection || null, pointsLine: part.pointsLine }))
+      ? out.findIndex((t) => !t.status?.ok && t.parts.length > 0 && sameMatch(t, r) && sameSlipPick({ selection: t.selection || null, pointsLine: t.parts[0].pointsLine, text: t.pickText }, { selection: r.selection || null, pointsLine: part.pointsLine, text: r.pickText }))
       : -1;
     if (i < 0) {
       out.push(r);
@@ -148,6 +150,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
       playType: type,
       ref: b.reference ?? null,
       selection: b.selection ?? "",
+      pickText: b.selectionText,
       pointsLine: b.pointsLine !== null ? String(b.pointsLine) : "",
       // Stake in money -> units with your unit size.
       // (No stake on the slip: 1u, or 0.75u for a personal play.)

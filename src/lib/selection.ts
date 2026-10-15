@@ -1,5 +1,5 @@
 /** The picks a match can have. Client-safe. */
-export const SELECTIONS = ["OVER", "UNDER", "SWEEP", "POINTS_SPREAD", "SET_SPREAD"] as const;
+export const SELECTIONS = ["OVER", "UNDER", "SWEEP", "POINTS_SPREAD", "SET_SPREAD", "ML"] as const;
 export type Selection = (typeof SELECTIONS)[number];
 
 export function isSelection(v: unknown): v is Selection {
@@ -12,18 +12,24 @@ export const SELECTION_LABEL: Record<Selection, string> = {
   SWEEP: "Sweep",
   POINTS_SPREAD: "Points spread",
   SET_SPREAD: "Set spread",
+  ML: "ML",
 };
 
-/** Bot plays are Over / Under picks only: a sweep or spread is always your own pick, a personal play. */
+/** Bot plays are Over / Under picks only: a sweep, spread or ML is always your own pick, a personal play. */
 export function canBeBot(s: Selection | null | undefined): boolean {
   return !s || s === "OVER" || s === "UNDER";
 }
 
-export const BOT_IS_OVER_UNDER = "Sweeps and spreads are personal plays - bot plays are Over / Under only";
+export const BOT_IS_OVER_UNDER = "Sweeps, spreads and ML are personal plays - bot plays are Over / Under only";
 
 /** The play type a pick can have: "BOT" on a sweep or spread becomes "PERSONAL". */
 export function playTypeFor(s: Selection | null | undefined, playType: "BOT" | "PERSONAL"): "BOT" | "PERSONAL" {
   return playType === "BOT" && !canBeBot(s) ? "PERSONAL" : playType;
+}
+
+/** The pick cards always on the Profit page (the others show once you have a bet on one). */
+export function isMainPick(s: Selection): boolean {
+  return s === "OVER" || s === "UNDER" || s === "SWEEP";
 }
 
 /** Handicap picks: their line is a spread ("-4.5", "+1.5"), not a points total. */

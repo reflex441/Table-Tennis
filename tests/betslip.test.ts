@@ -30,6 +30,32 @@ describe("bet slips", () => {
     expect(() => normalizeBetSlips({ nothing: true })).toThrow();
   });
 
+  it("'Match Betting' is the ML and a 'Correct Score' of 3-0 is the sweep", () => {
+    const base = { player1: "Pawel Slosarczyk", player2: "Mateusz Sikon", competition: null, odds: 2, stake: 150, dateText: "Thursday 15 Oct", timeText: "8:50pm (AEDT)" };
+    const bets = normalizeBetSlips({
+      bets: [
+        { ...base, selectionText: "Mateusz Sikon", marketText: "Match Betting", selection: null, pointsLine: null, resultText: "Win" },
+        { ...base, selectionText: "Mateusz Sikon 3-0", marketText: "Correct Score", selection: null, pointsLine: 3, odds: 7, resultText: "No Return" },
+        // Also without the market name, and whatever Gemini picked.
+        { ...base, selectionText: "Pawel Slosarczyk 0-3", marketText: null, selection: "ML", pointsLine: null, resultText: "No Return" },
+        { ...base, selectionText: "Mateusz Sikon 3-1", marketText: "Correct Score", selection: "SWEEP", pointsLine: null, resultText: "No Return" },
+        { ...base, selectionText: "Mateusz Sikon", marketText: null, selection: "ML", pointsLine: 1.5, resultText: "Win" },
+        // Handicaps still work as before.
+        { ...base, selectionText: "Mateusz Sikon (-2.5)", marketText: "Handicap", selection: null, pointsLine: 2.5, resultText: "Win" },
+      ],
+    });
+    expect(bets.map((b) => [b.selection, b.pointsLine])).toEqual([
+      ["ML", null],
+      ["SWEEP", null],
+      ["SWEEP", null],
+      [null, null],
+      ["ML", null],
+      ["SWEEP", null],
+    ]);
+    expect(bets[0]).toMatchObject({ player2: "Sikon M.", odds: 2, stake: 150, result: "WON" });
+    expect(pickText("ML", null)).toBe("ML");
+  });
+
   it("works out the date in your timezone", () => {
     const now = new Date("2026-10-03T02:00:00Z"); // 12:00 Sat 3 Oct in Sydney
     const tz = "Australia/Sydney";

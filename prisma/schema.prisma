@@ -33,6 +33,8 @@ enum Selection {
   SWEEP
   POINTS_SPREAD
   SET_SPREAD
+  /// Moneyline: a player to win the match ("Match Betting").
+  ML
 }
 
 enum AlarmStatus {

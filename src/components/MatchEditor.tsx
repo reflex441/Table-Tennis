@@ -128,6 +128,7 @@ export function MatchEditor({
             <option value="SWEEP">SWEEP</option>
             <option value="POINTS_SPREAD">POINTS SPREAD</option>
             <option value="SET_SPREAD">SET SPREAD</option>
+            <option value="ML">ML</option>
           </select>
         </F>
         <F label="Line" error={errors.pointsLine}>

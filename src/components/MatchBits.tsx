@@ -16,7 +16,9 @@ export function SelectionBadge({ selection, pointsLine }: { selection: Selection
           ? "bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30"
           : selection === "POINTS_SPREAD"
             ? "bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"
-            : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30";
+            : selection === "ML"
+              ? "bg-teal-500/15 text-teal-300 ring-1 ring-teal-400/30"
+              : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30";
   return <span className={`chip ${style}`}>{pickText(selection, pointsLine)}</span>;
 }
 

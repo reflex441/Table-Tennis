@@ -35,10 +35,20 @@ const RESULT_ORDER: BetResult[] = ["WON", "LOST", "VOID", "PENDING"];
 
 const round4 = (n: number) => Math.round(n * 10_000) / 10_000;
 
-/** Same pick on the same match: Over/Under with any line, other picks only on the same line (a spread's sign is its side). */
-export function sameSlipPick(a: { selection: Selection | null; pointsLine: number | null }, b: { selection: Selection | null; pointsLine: number | null }): boolean {
+interface SlipPick {
+  selection: Selection | null;
+  pointsLine: number | null;
+  /** The selection as shown on the slip ("Mateusz Sikon"): which player, for the picks that have a side. */
+  text?: string | null;
+}
+
+const side = (t: string | null | undefined) => (t ?? "").toLowerCase().replace(/[^a-z]/g, "");
+
+/** Same pick on the same match: Over/Under with any line, other picks only on the same line and player (an ML on each player isn't one bet). */
+export function sameSlipPick(a: SlipPick, b: SlipPick): boolean {
   if (!a.selection || a.selection !== b.selection) return false;
-  return a.selection === "OVER" || a.selection === "UNDER" || a.pointsLine === b.pointsLine;
+  if (a.selection === "OVER" || a.selection === "UNDER") return true;
+  return a.pointsLine === b.pointsLine && (!a.text || !b.text || side(a.text) === side(b.text));
 }
 
 /** Total stake, and the odds the total paid out at (stake-weighted; null if any part has none). */

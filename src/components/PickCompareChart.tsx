@@ -20,6 +20,7 @@ export const PICK_SERIES: Record<Selection, { color: string; dash?: string }> = 
   SWEEP: { color: "#8b5cf6", dash: "2 3" },
   POINTS_SPREAD: { color: "#0ea5e9", dash: "8 3 2 3" },
   SET_SPREAD: { color: "#f59e0b", dash: "1 3" },
+  ML: { color: "#14b8a6", dash: "10 3" },
 };
 
 interface PickSeries {

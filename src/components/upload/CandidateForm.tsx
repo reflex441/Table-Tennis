@@ -201,9 +201,9 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Field label="Selection">
           <select
-            className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : c.selection === "SWEEP" ? "text-violet-300" : c.selection === "POINTS_SPREAD" ? "text-sky-300" : c.selection === "SET_SPREAD" ? "text-amber-300" : ""}`}
+            className={`input ${c.selection === "OVER" ? "text-over" : c.selection === "UNDER" ? "text-under" : c.selection === "SWEEP" ? "text-violet-300" : c.selection === "POINTS_SPREAD" ? "text-sky-300" : c.selection === "SET_SPREAD" ? "text-amber-300" : c.selection === "ML" ? "text-teal-300" : ""}`}
             value={c.selection}
-            // Changing the pick never changes Bot / Personal (that has its own switch).
+            // A sweep, spread or ML is always a personal play (bot plays are Over / Under).
             onChange={(e) => {
               const selection = e.target.value as Candidate["selection"];
               onChange({ selection, ...(canBeBot(selection || null) ? {} : { playType: "PERSONAL", stakeUnits: restake(c.stakeUnits, c.playType, "PERSONAL") }) });
@@ -215,6 +215,7 @@ export function CandidateForm({ candidate: c, validation, timezone, index, merge
             <option value="SWEEP">SWEEP</option>
             <option value="POINTS_SPREAD">POINTS SPREAD</option>
             <option value="SET_SPREAD">SET SPREAD</option>
+            <option value="ML">ML</option>
           </select>
         </Field>
         <Field label="Line" error={err.pointsLine}>
