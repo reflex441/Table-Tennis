@@ -225,8 +225,8 @@ export async function createPastBet(
 }
 
 /**
- * A bet on a match you already have. With no bet yet (e.g. uploaded from Cage
- * Capital but the alarm was ignored) or only the auto-filled pick, it becomes
+ * A bet on a match you already have. With no bet yet (e.g. uploaded from a
+ * screenshot but the alarm was ignored) or only the auto-filled pick, it becomes
  * this match's bet; a bet on a different pick than the match's makes it a
  * personal play on that pick.
  * With a bet already, a different pick (e.g. an UNDER and a SWEEP) makes it a

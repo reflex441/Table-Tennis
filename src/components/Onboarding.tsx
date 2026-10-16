@@ -14,12 +14,12 @@ import { ReminderPicker } from "./ReminderPicker";
 /** Dispatch on window to open the tutorial again (Settings → Account). */
 export const TUTORIAL_EVENT = "tt:tutorial";
 
-type Source = "cage" | "tail";
+type Source = "upload" | "tail";
 type Step = "welcome" | "source" | "gemini" | "bookmaker" | "reminder" | "placing" | "notifications" | "units" | "how" | "done";
 
 /**
  * First-run tutorial, shown once per account after signing up: where picks
- * come from (Cage Capital screenshots, or Tailing), the Gemini key,
+ * come from (screenshots you upload, or Tailing), the Gemini key,
  * notifications, unit size, and how alarms and profit tracking work.
  */
 export function Onboarding({ user }: { user: PublicUser }) {
@@ -96,8 +96,8 @@ export function Onboarding({ user }: { user: PublicUser }) {
         {step === "placing" && <PlacingStep bookmaker={bookmaker} />}
         {step === "notifications" && <NotificationsStep />}
         {step === "units" && <UnitsStep onSaved={next} onBack={back} />}
-        {step === "how" && <HowItWorks source={source ?? "cage"} />}
-        {step === "done" && <Done source={source ?? "cage"} onFinish={finish} />}
+        {step === "how" && <HowItWorks source={source ?? "upload"} />}
+        {step === "done" && <Done source={source ?? "upload"} onFinish={finish} />}
 
         {step !== "units" && step !== "done" && (
           <div className="mt-6 flex items-center gap-2">
@@ -167,12 +167,12 @@ function SourceStep({ source, onChoose }: { source: Source | null; onChoose: (s:
     <>
       <Title icon={<ImagePlus className="h-4 w-4" />}>Where do your picks come from?</Title>
       <p className="mt-3 text-sm text-muted">
-        The <span className="font-semibold text-text">Upload</span> feature reads screenshots of <span className="font-semibold text-text">Cage Capital</span> picks, so
-        you need Cage Capital to use it. No Cage Capital? You can still get the picks with <span className="font-semibold text-text">Tailing</span>.
+        The <span className="font-semibold text-text">Upload</span> feature reads screenshots of your picks and sets an alarm for each match. No pick
+        screenshots? You can still get the picks with <span className="font-semibold text-text">Tailing</span>.
       </p>
       <div className="mt-4 flex flex-col gap-2">
-        {option("cage", <Upload className="h-4 w-4" />, "I have Cage Capital", "Upload screenshots of your picks. They're read automatically and alarms are set for each match.")}
-        {option("tail", <Users className="h-4 w-4" />, "I don't have Cage Capital", "Use Tailing: copy the picks from the Tailing page to your dashboard with one click. No screenshots needed.")}
+        {option("upload", <Upload className="h-4 w-4" />, "I have pick screenshots", "Upload screenshots of your picks. They're read automatically and alarms are set for each match.")}
+        {option("tail", <Users className="h-4 w-4" />, "I'll use Tailing", "Copy the picks from the Tailing page to your dashboard with one click. No screenshots needed.")}
       </div>
     </>
   );
@@ -544,9 +544,9 @@ function UnitsStep({ onSaved, onBack }: { onSaved: () => void; onBack: () => voi
 
 function HowItWorks({ source }: { source: Source }) {
   const steps =
-    source === "cage"
+    source === "upload"
       ? [
-          ["Upload", "Add screenshots of your Cage Capital picks. Gemini reads the players, times and stats."],
+          ["Upload", "Add screenshots of your picks. Gemini reads the players, times and stats."],
           ["Review", "Check the matches it found and confirm. An alarm is set for each one."],
           ["Alarm", "A few minutes before the match the alarm rings. Place your bet, then click \"I've placed the bet\" (you can split it, e.g. half Under, half Sweep)."],
           ["Settle", "After the match, mark it Won or Lost in the Pending section of the dashboard."],
@@ -572,7 +572,7 @@ function HowItWorks({ source }: { source: Source }) {
         ))}
       </ol>
       <p className="mt-4 text-xs text-muted">
-        {source === "cage" ? "You can also copy picks from the Tailing page any time. " : ""}Your bets count towards the Leaderboard.
+        {source === "upload" ? "You can also copy picks from the Tailing page any time. " : ""}Your bets count towards the Leaderboard.
       </p>
     </>
   );
@@ -588,14 +588,14 @@ function Done({ source, onFinish }: { source: Source; onFinish: () => void }) {
     <>
       <Title icon={<CheckCircle2 className="h-4 w-4" />}>You&apos;re all set!</Title>
       <p className="mt-3 text-sm text-muted">
-        {source === "cage" ? "Upload your first screenshot to set your alarms." : "Head to Tailing and copy the upcoming picks to your dashboard."}
+        {source === "upload" ? "Upload your first screenshot to set your alarms." : "Head to Tailing and copy the upcoming picks to your dashboard."}
       </p>
       <p className="mt-3 rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-muted">
         Want to see this tutorial again? Go to <span className="font-semibold text-text">Settings → Account → Show the tutorial again</span>.
       </p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-        <button className="btn-primary flex-1" onClick={() => go(source === "cage" ? "/upload" : "/tailing")}>
-          {source === "cage" ? (
+        <button className="btn-primary flex-1" onClick={() => go(source === "upload" ? "/upload" : "/tailing")}>
+          {source === "upload" ? (
             <>
               <Upload className="h-4 w-4" /> Upload a screenshot
             </>

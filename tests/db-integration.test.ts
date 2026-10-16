@@ -673,7 +673,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
   it("scanned slips take Bot / Personal from the same match on your dashboard or the owner's", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
-    // userId is the owner. Their Cage Capital uploads: a bot UNDER and a personal play.
+    // userId is the owner. Their uploads: a bot UNDER and a personal play.
     const at = (h: number) => new Date(Date.UTC(2030, 8, 21, h, 0));
     const mk = (owner: string, player1: string, startsAt: Date, playType: "BOT" | "PERSONAL", selection: "UNDER" | "OVER" | null) =>
       prisma.match.create({

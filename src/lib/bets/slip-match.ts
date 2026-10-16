@@ -6,7 +6,7 @@ import type { SlipReference } from "./slip-play";
 
 /**
  * Bet slips don't say whether a bet was a bot or a personal play, but the
- * Cage Capital screenshot did: so a scanned slip is matched to the same match
+ * uploaded pick screenshot did: so a scanned slip is matched to the same match
  * (same players, about the same time) on your own dashboard, else on the
  * owner's, and takes its play type from there (see slipPlayType).
  */

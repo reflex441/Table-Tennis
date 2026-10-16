@@ -1,6 +1,6 @@
 /**
  * Player names are stored as "Surname F." (e.g. "Koczyba M."), the way
- * Cage Capital writes them. Bet slips and typed names often have the full
+ * pick screenshots write them. Bet slips and typed names often have the full
  * name ("Mariusz Koczyba"); this turns them into the same short form so
  * duplicates, tailing and league guessing all match up.
  */

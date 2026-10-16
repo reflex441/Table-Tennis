@@ -17,7 +17,7 @@ export const POST = handle((request: Request) =>
   readScreenshotWithGemini(request, BET_SLIP_PROMPT, BET_SLIP_JSON_SCHEMA, async ({ raw, settings, prisma, userId }) => {
     const leagues = await ownerLeagueIndex(prisma);
     const slips = normalizeBetSlips(raw).map((b) => ({ ...b, at: slipDate(b.dateText, b.timeText, settings.timezone) }));
-    // The same match on your dashboard or the owner's (the uploaded Cage Capital plays) says whether it was a bot play.
+    // The same match on your dashboard or the owner's (the uploaded bot plays) says whether it was a bot play.
     const refs = await findSlipReferences(
       prisma,
       userId,
