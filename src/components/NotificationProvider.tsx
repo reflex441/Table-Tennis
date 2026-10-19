@@ -9,6 +9,7 @@ import { detectDeviceType, getCurrentSubscription, registerServiceWorker } from 
 import { useSettings } from "./SettingsProvider";
 import { installAudioUnlock, playOnce } from "@/lib/siren";
 import { desktopApp } from "@/lib/desktop-bridge";
+import { POLL_SECONDS, type PollSeconds } from "@/lib/usage/budget";
 
 interface Toast {
   id: string;
@@ -28,12 +29,13 @@ interface NotificationContextValue {
   clearAll: () => Promise<void>;
   /** Show a transient message (e.g. "Alarm created"). */
   notify: (title: string, body?: string, url?: string) => void;
+  /** How often open apps check the server (slower as the month's free server time fills up). */
+  poll: PollSeconds;
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 export const NOTIFICATION_EVENT = "tt:notification";
-const POLL_MS = 30_000;
 
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -41,6 +43,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [notifications, setNotifications] = useState<InAppNotificationDTO[]>([]);
   const [unread, setUnread] = useState(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [poll, setPoll] = useState<PollSeconds>(POLL_SECONDS[0]);
   const cursor = useRef<string | null>(null);
   const seen = useRef<Set<string>>(new Set());
   const soundRef = useRef(settings.soundEnabled);
@@ -65,7 +68,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const refresh = useCallback(async () => {
     try {
-      const res = await api<{ notifications: InAppNotificationDTO[]; unread: number; serverTime: string }>("/api/notifications");
+      const res = await api<{ notifications: InAppNotificationDTO[]; unread: number; serverTime: string; poll?: PollSeconds }>("/api/notifications");
+      if (res.poll) setPoll((p) => (JSON.stringify(p) === JSON.stringify(res.poll) ? p : res.poll!));
       setNotifications(res.notifications);
       setUnread(res.unread);
       const first = cursor.current === null;
@@ -95,7 +99,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // and coming back checks straight away.
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
-    }, POLL_MS);
+    }, poll.notifications * 1000);
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };
@@ -105,7 +109,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [refresh]);
+  }, [refresh, poll.notifications]);
 
   // Register the service worker and keep the server's copy of this browser's
   // push subscription in sync (e.g. after the database was reset).
@@ -151,8 +155,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   );
 
   const value = useMemo(
-    () => ({ notifications, unread, refresh, markAllRead, remove, clearAll, notify }),
-    [notifications, unread, refresh, markAllRead, remove, clearAll, notify],
+    () => ({ notifications, unread, refresh, markAllRead, remove, clearAll, notify, poll }),
+    [notifications, unread, refresh, markAllRead, remove, clearAll, notify, poll],
   );
 
   return (

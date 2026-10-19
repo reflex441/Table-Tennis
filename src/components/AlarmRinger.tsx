@@ -22,6 +22,7 @@ import { desktopApp } from "@/lib/desktop-bridge";
  * Backstop poll. New alarms are picked up straight away through the
  * notifications poll (NOTIFICATION_EVENT), so this can be slow.
  */
+/** Default check interval; the server says when to check less often (as the month's free server time fills up). */
 const POLL_MS = 30_000;
 const noopSubscribe = () => () => {};
 
@@ -36,6 +37,7 @@ export function AlarmRinger() {
   const isDesktop = useSyncExternalStore(noopSubscribe, () => detectDeviceType() === "desktop", () => false);
   const [ringing, setRinging] = useState<MatchDTO[]>([]);
   const [busy, setBusy] = useState(false);
+  const [pollMs, setPollMs] = useState(POLL_MS);
   const [soundBlocked, setSoundBlocked] = useState(false);
   const stopRef = useRef<(() => void) | null>(null);
   // Stake (units) / odds typed for the alarm on screen, keyed by match.
@@ -45,8 +47,9 @@ export function AlarmRinger() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await api<{ matches: MatchDTO[] }>("/api/alarms/ringing");
+      const res = await api<{ matches: MatchDTO[]; pollSeconds?: number }>("/api/alarms/ringing");
       setRinging(res.matches);
+      if (res.pollSeconds && res.pollSeconds >= 15) setPollMs(res.pollSeconds * 1000);
     } catch {
       /* offline - keep current state */
     }
@@ -58,7 +61,7 @@ export function AlarmRinger() {
     if (!enabled) return;
     installAudioUnlock();
     const first = setTimeout(() => void refresh(), 0);
-    const timer = setInterval(() => void refresh(), POLL_MS);
+    const timer = setInterval(() => void refresh(), pollMs);
     // The in-app notification is written just before the alarm is marked
     // triggered, so check again shortly after.
     let followUp: ReturnType<typeof setTimeout> | undefined;
@@ -81,7 +84,7 @@ export function AlarmRinger() {
       navigator.serviceWorker?.removeEventListener("message", onMessage);
       document.removeEventListener("visibilitychange", onEvent);
     };
-  }, [enabled, refresh]);
+  }, [enabled, refresh, pollMs]);
 
   const active = enabled && ringing.length > 0;
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import { Bell, BellOff, CheckCircle2, Eye, EyeOff, Info, KeyRound, Loader2, Send, Smartphone, Volume2, XCircle, Trash2 } from "lucide-react";
 import { startSiren, unlockAudio } from "@/lib/siren";
+import { SAVING_LABEL, type SavingLevel } from "@/lib/usage/budget";
 import { ALARM_SOUNDS, ALARM_SOUND_LABEL } from "@/lib/alarm-sounds";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
@@ -31,6 +32,8 @@ interface Health {
   cronLastRunAt?: string | null;
   cronHealthy?: boolean;
   storage?: { usedBytes?: number; limitBytes?: number; screenshots?: number; screenshotBytes?: number; screenshotKeepHours: number };
+  /** Vercel only: server CPU the app measured in the last 30 days, the allowance and the saving step. */
+  cpu?: { usedMs: number; budgetMs: number; level: SavingLevel };
 }
 
 interface Device {
@@ -295,6 +298,7 @@ export function SettingsPage() {
             )}
           </ul>
           {health.storage?.usedBytes !== undefined && health.storage.limitBytes ? <StorageMeter storage={health.storage as Required<NonNullable<Health["storage"]>>} /> : null}
+          {health.cpu ? <CpuMeter cpu={health.cpu} /> : null}
           {health.schedulerMode === "external" && !health.cronHealthy && (
             <p className="mt-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
               cron-job.org isn&apos;t calling the app, so alarms only fire while someone has the app open, and phones with the app closed get nothing. In cron-job.org,
@@ -1340,6 +1344,35 @@ async function squareThumbnail(file: File, size: number): Promise<Blob> {
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 
 /** How full the database is (Supabase free plan: 500 MB, read-only when full). */
+const hm = (ms: number) => {
+  const min = Math.round(ms / 60_000);
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
+};
+
+/** Server time used (Vercel's free allowance) and the saving step it puts the apps in. */
+function CpuMeter({ cpu }: { cpu: NonNullable<Health["cpu"]> }) {
+  const pct = Math.min(100, (cpu.usedMs / cpu.budgetMs) * 100);
+  const tone = cpu.level >= 3 ? "bg-under" : cpu.level >= 1 ? "bg-warn" : "bg-over";
+  return (
+    <div className="mt-3">
+      <div className="flex items-baseline justify-between text-sm">
+        <span>Server time (last 30 days)</span>
+        <span className="tabular text-muted">
+          <span className="font-semibold text-text">{hm(cpu.usedMs)}</span> of {hm(cpu.budgetMs)} ({pct < 1 ? pct.toFixed(1) : Math.round(pct)}%)
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-line" role="meter" aria-label="Server time used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(pct, 1)}%` }} />
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Vercel&apos;s free plan pauses the site past its monthly server time, so the app measures what it uses. As it fills up, open apps check the server less
+        often (alarms keep working): at 35%, 55% and 75%. Saving mode: <span className="font-semibold text-text">{SAVING_LABEL[cpu.level]}</span>. An estimate - Vercel&apos;s
+        Usage page has the exact figure.
+      </p>
+    </div>
+  );
+}
+
 function StorageMeter({ storage }: { storage: Required<NonNullable<Health["storage"]>> }) {
   const pct = Math.min(100, (storage.usedBytes / storage.limitBytes) * 100);
   const tone = pct >= 90 ? "bg-under" : pct >= 70 ? "bg-warn" : "bg-over";

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { ServiceError } from "@/lib/alarms/service";
 import { formatZodError } from "@/lib/validation/match";
+import { meterRequest } from "@/lib/usage/meter";
 
 export function jsonError(status: number, code: string, message: string, details?: unknown) {
   return NextResponse.json({ error: { code, message, details } }, { status });
@@ -19,7 +20,7 @@ export async function parseJson<T>(request: Request, schema: ZodType<T>): Promis
   return parsed.data;
 }
 
-/** Wrap a route handler with consistent error responses. */
+/** Wrap a route handler with consistent error responses (and measure the server CPU used, see meter.ts). */
 export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response>) {
   return async (...args: A): Promise<Response> => {
     try {
@@ -29,6 +30,8 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
       if (err instanceof ZodError) return jsonError(422, "validation_error", formatZodError(err));
       console.error(err);
       return jsonError(500, "internal_error", "Unexpected server error.");
+    } finally {
+      meterRequest();
     }
   };
 }

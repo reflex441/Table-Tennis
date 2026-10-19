@@ -6,6 +6,8 @@ import { getGeminiApiKey } from "@/lib/settings";
 import { getCurrentUser } from "@/lib/auth/current";
 import { cronHealthy, lastCronRun } from "@/lib/scheduler/heartbeat";
 import { SCREENSHOT_KEEP_HOURS, storageUsage } from "@/lib/storage";
+import { budgetMs, meterEnabled, usageLast30Days } from "@/lib/usage/meter";
+import { savingLevel } from "@/lib/usage/budget";
 
 /** Liveness for load balancers; signed-in users also get configuration details. */
 export async function GET() {
@@ -28,6 +30,11 @@ export async function GET() {
           ? await lastCronRun(db()).then((last) => ({ cronLastRunAt: last?.toISOString() ?? null, cronHealthy: cronHealthy(last) }))
           : {}),
         storage: { ...(await storageUsage(db()).catch(() => null)), screenshotKeepHours: SCREENSHOT_KEEP_HOURS },
+        ...(meterEnabled()
+          ? await usageLast30Days(db())
+              .then((u) => ({ cpu: { usedMs: u.cpuMs, budgetMs: budgetMs(), level: savingLevel(u.cpuMs, budgetMs()) } }))
+              .catch(() => ({}))
+          : {}),
       };
     }
   } catch {

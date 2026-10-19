@@ -20,7 +20,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof CalendarClock; empty
 
 export function Dashboard({ initial }: { initial: MatchDTO[] }) {
   const { settings } = useSettings();
-  const { notify } = useNotifications();
+  const { notify, poll } = useNotifications();
   const [matches, setMatches] = useState(initial);
   const [section, setSection] = useState<Section>("upcoming");
 
@@ -36,10 +36,14 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
   useEffect(() => {
     // Hidden tabs/windows skip the background reload (fewer server calls on
     // free hosting); notifications and becoming visible still refresh.
-    // Alarms going off reload it straight away (onEvent below), so once a minute is plenty.
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void reload();
-    }, 60_000);
+    // Alarms going off reload it straight away (onEvent below), so once a minute is plenty
+    // (less often, or never, as the month's free server time fills up).
+    const timer =
+      poll.dashboard > 0
+        ? setInterval(() => {
+            if (document.visibilityState === "visible") void reload();
+          }, poll.dashboard * 1000)
+        : undefined;
     const onVisible = () => {
       if (document.visibilityState === "visible") void reload();
     };
@@ -59,7 +63,7 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener(NOTIFICATION_EVENT, onEvent);
     };
-  }, [reload]);
+  }, [reload, poll.dashboard]);
 
   const grouped = useMemo(() => {
     const g: Record<Section, MatchDTO[]> = { upcoming: [], triggered: [], pending: [], completed: [] };

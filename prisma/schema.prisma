@@ -475,3 +475,11 @@ model InviteKey {
   usedById    String?
   usedBy      User?     @relation("inviteUser", fields: [usedById], references: [id], onDelete: SetNull)
 }
+
+/// Server CPU the app measured itself using, per UTC day ("2026-10-19"), to stay
+/// within the host's free allowance (Vercel Hobby: 4 hours of active CPU a month).
+model UsageDay {
+  day      String @id
+  cpuMs    Int    @default(0)
+  requests Int    @default(0)
+}

@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { requireUserId } from "@/lib/auth/current";
 import { handle } from "@/lib/api";
 import type { InAppNotificationDTO } from "@/lib/types";
+import { currentSavingLevel } from "@/lib/usage/meter";
+import { POLL_SECONDS } from "@/lib/usage/budget";
 
 /** Recent in-app notifications; `?after=<iso>` returns only newer ones. */
 export const GET = handle(async (request: Request) => {
@@ -29,7 +31,9 @@ export const GET = handle(async (request: Request) => {
     matchId: r.matchId,
     readAt: r.readAt?.toISOString() ?? null,
   }));
-  return NextResponse.json({ notifications, unread, serverTime: new Date().toISOString() });
+  // How often open apps check, slower as the month's server time fills up.
+  const poll = POLL_SECONDS[await currentSavingLevel(prisma)];
+  return NextResponse.json({ notifications, unread, serverTime: new Date().toISOString(), poll });
 });
 
 /** Clear all of your notifications. */

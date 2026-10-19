@@ -36,6 +36,7 @@ import { fakeEspn } from "./fixtures/espn";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 import { autoFillBets } from "@/lib/bets/auto-fill";
 import { deleteIdleMatches } from "@/lib/alarms/idle-matches";
+import { recordUsage, usageLast30Days } from "@/lib/usage/meter";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -56,7 +57,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE "BetLeg", "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "User", "AppSecret" CASCADE`,
+      `TRUNCATE "BetLeg", "Bet", "NotificationDelivery", "InAppNotification", "Alarm", "MatchStatistics", "MatchSource", "Match", "PushSubscription", "Settings", "Screenshot", "User", "AppSecret", "UsageDay" CASCADE`,
     );
     userId = (await prisma.user.create({ data: { email: "owner@example.com", name: "Owner" } })).id;
   });
@@ -863,6 +864,17 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await updateMatch(prisma, userId, over.match.id, { selection: "SWEEP" }, now)).playType).toBe("PERSONAL");
     expect((await updateMatch(prisma, userId, over.match.id, { playType: "BOT" }, now)).playType).toBe("PERSONAL");
     expect((await updateMatch(prisma, userId, over.match.id, { selection: "UNDER", playType: "BOT" }, now)).playType).toBe("BOT");
+  });
+
+  it("adds up the server time used per day and over the last 30 days", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000);
+    await recordUsage(prisma, 1500, 3, now);
+    await recordUsage(prisma, 500, 1, now);
+    await recordUsage(prisma, 2000, 10, daysAgo(29));
+    await recordUsage(prisma, 9999, 99, daysAgo(30)); // too long ago
+    expect(await prisma.usageDay.findUnique({ where: { day: "2030-09-21" } })).toMatchObject({ cpuMs: 2000, requests: 4 });
+    expect(await usageLast30Days(prisma, now)).toEqual({ cpuMs: 4000, requests: 14 });
   });
 
   it("past bets: a different pick on the same match becomes a split bet", async () => {
