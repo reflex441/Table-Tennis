@@ -7,6 +7,7 @@ import { shortenStoredPlayerNamesIfDue } from "@/lib/matching/tidy-names";
 import { gradeNbaBetsIfDue } from "@/lib/nba/grading-service";
 import { autoFillBetsIfDue } from "@/lib/bets/auto-fill";
 import { deleteIdleMatchesIfDue } from "@/lib/alarms/idle-matches";
+import { cronHealthy, lastCronRun } from "./heartbeat";
 
 /**
  * Run one dispatch pass against the database. Used by the in-process loop,
@@ -25,12 +26,14 @@ export async function runDispatchOnce(log?: (msg: string) => void): Promise<Disp
   return report;
 }
 
-const fallback = globalThis as unknown as { __ttLastFallbackDispatch?: number };
+const fallback = globalThis as unknown as { __ttLastFallbackDispatch?: number; __ttCronCheckedAt?: number; __ttCronHealthy?: boolean };
 
 /**
  * Backup for serverless hosting (SCHEDULER_MODE=external): while anyone has
  * the app open, its regular polling also delivers due alarms, so they still
- * fire if the cron service is missing or late. At most every 20 s per server
+ * fire if the cron service is missing or late. Only while the cron service
+ * looks stopped (it calls every minute; checked at most once a minute), so
+ * it costs no server time while the cron works. At most every 20 s per server
  * instance; alarms are claimed in the database, so nothing is sent twice.
  */
 export async function dispatchIfDue(): Promise<void> {
@@ -40,6 +43,11 @@ export async function dispatchIfDue(): Promise<void> {
   if (now - (fallback.__ttLastFallbackDispatch ?? 0) < 20_000) return;
   fallback.__ttLastFallbackDispatch = now;
   try {
+    if (now - (fallback.__ttCronCheckedAt ?? 0) >= 60_000) {
+      fallback.__ttCronCheckedAt = now;
+      fallback.__ttCronHealthy = cronHealthy(await lastCronRun(db()), new Date(now));
+    }
+    if (fallback.__ttCronHealthy) return;
     await runDispatchOnce();
   } catch (err) {
     console.error("[fallback dispatch]", err);

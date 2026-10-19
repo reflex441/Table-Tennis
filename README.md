@@ -192,7 +192,7 @@ All three have free plans. Together they run the app 24/7 with your PC off.
 - Uploads over ~3.8 MB are re-encoded as JPEG in the browser (Vercel's request limit is 4.5 MB).
 - Supabase's free database holds 500 MB; screenshots use most of that space.
 - Vercel's free plan is for non-commercial use.
-- Apps poll less often in the background to stay well within the free request allowance.
+- Vercel's free plan includes 4 hours of server CPU a month (**Fluid Active CPU**); past that it pauses the project (alarms stop, new pushes don't deploy) until usage drops. To stay under it, open apps check for notifications every 30 s and reload the dashboard every minute, only while on screen (computers also check for ringing alarms every 30 s), and the alarm check that open apps can run as a backup only runs while the cron service looks stopped. **Vercel → Usage** shows which routes use the CPU.
 
 **Updating:** push to GitHub. Vercel rebuilds and redeploys automatically (about 1–2 minutes) and runs new database migrations. Browsers and the desktop app pick up the new version on their next reload. The desktop app also reloads by itself when it is reopened after being in the tray for 30+ minutes.
 

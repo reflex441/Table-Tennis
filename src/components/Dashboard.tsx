@@ -36,9 +36,10 @@ export function Dashboard({ initial }: { initial: MatchDTO[] }) {
   useEffect(() => {
     // Hidden tabs/windows skip the background reload (fewer server calls on
     // free hosting); notifications and becoming visible still refresh.
+    // Alarms going off reload it straight away (onEvent below), so once a minute is plenty.
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void reload();
-    }, 20_000);
+    }, 60_000);
     const onVisible = () => {
       if (document.visibilityState === "visible") void reload();
     };

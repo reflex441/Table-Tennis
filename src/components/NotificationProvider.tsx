@@ -33,7 +33,7 @@ interface NotificationContextValue {
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 export const NOTIFICATION_EVENT = "tt:notification";
-const POLL_MS = 15_000;
+const POLL_MS = 30_000;
 
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -90,11 +90,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const first = setTimeout(() => void refresh(), 0);
-    // Every POLL_MS while visible, every other tick in the background.
-    let tick = 0;
+    // Every POLL_MS while the app is on screen only (each check is server time on free
+    // hosting); in the background push notifications and the computer alarm cover it,
+    // and coming back checks straight away.
     const timer = setInterval(() => {
-      tick += 1;
-      if (document.visibilityState === "visible" || tick % 2 === 0) void refresh();
+      if (document.visibilityState === "visible") void refresh();
     }, POLL_MS);
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
