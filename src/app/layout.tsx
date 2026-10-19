@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth/current";
 import type { PublicUser } from "@/lib/auth/accounts";
 import type { SettingsDTO } from "@/lib/validation/settings";
 import { DEFAULT_BOOKMAKERS, DEFAULT_TIPSTERS } from "@/lib/nba/aliases";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "TT Alarms - Table tennis match reminders",
@@ -82,6 +83,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
           )}
           {children}
+          <Analytics />
         </body>
       </html>
     );
@@ -98,6 +100,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <AlarmRinger />
           </NotificationProvider>
         </SettingsProvider>
+        <Analytics />
       </body>
     </html>
   );
