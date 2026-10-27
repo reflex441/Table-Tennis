@@ -9,6 +9,7 @@ import type { ScannedPick } from "@/lib/gemini/nba";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { useSettings } from "../SettingsProvider";
 import { NbaDatalists, NbaFields, draftToJson, type NbaDraft } from "./NbaBetForm";
+import { canonicalBookmaker } from "@/lib/nba/aliases";
 import { statCode } from "@/lib/nba/stats";
 import { ChooseScreenshots, ScanErrors, useScreenshotScan } from "../ScreenshotScan";
 
@@ -48,7 +49,7 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
       game: b.game ?? "",
       units: b.units !== null ? String(b.units) : "1",
       odds: b.odds !== null ? String(b.odds) : "",
-      bookmaker: b.bookmaker ?? "",
+      bookmaker: canonicalBookmaker(b.bookmaker) ?? "",
       placedAtLocal: b.placedAt ? toLocalInputValue(b.placedAt, tz) : DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"),
       dateKind: b.dateKind ?? "GAME",
       result: "PENDING",

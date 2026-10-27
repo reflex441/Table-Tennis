@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { discordDate, nbaDedupeKey, parseOdds } from "@/lib/nba/parse";
-import { DEFAULT_BOOKMAKERS, DEFAULT_TIPSTERS, bookmakerFor, parseBookmakers, parseTipsters, tipsterFor } from "@/lib/nba/aliases";
+import { DEFAULT_BOOKMAKERS, DEFAULT_TIPSTERS, NBA_BOOKMAKERS, bookmakerFor, canonicalBookmaker, parseBookmakers, parseTipsters, tipsterFor } from "@/lib/nba/aliases";
 import { NBA_PICKS_PROMPT, normalizeNbaPicks } from "@/lib/gemini/nba";
 import { nbaBetSchema, nbaBetUpdateSchema } from "@/lib/validation/nba";
 import { summarize } from "@/lib/bets/profit";
@@ -48,7 +48,22 @@ describe("NBA picks", () => {
     expect(bookmakerFor("All on Sportsbet", DEFAULT_BOOKMAKERS)).toBe("Sportsbet");
     expect(bookmakerFor("+138 FD +137 NV, +134 CZR, +132 DK, +131 PB", DEFAULT_BOOKMAKERS)).toBe("Sportsbet");
     expect(bookmakerFor("DK", DEFAULT_BOOKMAKERS)).toBe("DraftKings");
-    expect(bookmakerFor("TAB", DEFAULT_BOOKMAKERS)).toBe("TAB");
+    expect(bookmakerFor("TAB", DEFAULT_BOOKMAKERS)).toBe("Tab");
+    // One spelling per bookmaker, so "PointsBet" and "Pointsbet" are counted once.
+    expect(bookmakerFor("PB", DEFAULT_BOOKMAKERS)).toBe("Pointsbet");
+    expect(bookmakerFor("PointsBet", [{ code: "P", name: "PointsBet" }])).toBe("Pointsbet");
+    expect(["PointsBet", "points bet", "Pointsbet", "TAB", "bet 365", "LADBROKES", "sportsbet", "DraftKings", " "].map(canonicalBookmaker)).toEqual([
+      "Pointsbet",
+      "Pointsbet",
+      "Pointsbet",
+      "Tab",
+      "Bet365",
+      "Ladbrokes",
+      "Sportsbet",
+      "DraftKings",
+      null,
+    ]);
+    expect(NBA_BOOKMAKERS).toEqual(["Bet365", "Ladbrokes", "Tab", "Sportsbet", "Pointsbet"]);
     expect(bookmakerFor("", DEFAULT_BOOKMAKERS)).toBeNull();
     // Never edited = the built-in lists; an edited (even empty) list is used as is.
     expect(parseTipsters(null)).toEqual(DEFAULT_TIPSTERS);

@@ -8,6 +8,7 @@ import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { round2, type BetResult } from "@/lib/bets/profit";
 import { NBA_MARKETS, NBA_MARKET_LABEL, parseOdds, type NbaMarket } from "@/lib/nba/parse";
 import { STAT_CODES, STAT_LABEL, statCode } from "@/lib/nba/stats";
+import { NBA_BOOKMAKERS, canonicalBookmaker } from "@/lib/nba/aliases";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { useSettings } from "../SettingsProvider";
 import { DateTimeInput } from "../DateTimeInput";
@@ -44,7 +45,7 @@ function draftFromBet(b: NbaBetDTO, tz: string): NbaDraft {
     game: b.game ?? "",
     units: String(b.stake),
     odds: b.odds !== null ? String(b.odds) : "",
-    bookmaker: b.bookmaker ?? "",
+    bookmaker: canonicalBookmaker(b.bookmaker) ?? "",
     placedAtLocal: toLocalInputValue(b.placedAt, tz),
     dateKind: b.dateKind,
     result: b.result,
@@ -88,23 +89,14 @@ export function draftToJson(d: NbaDraft, tz: string): string | Record<string, un
   };
 }
 
-/** Lists for the tipster and bookmaker boxes. */
+/** Suggestions for the tipster box. */
 export function NbaDatalists({ tipsters }: { tipsters: string[] }) {
-  const { settings } = useSettings();
-  const books = [...new Set(settings.nbaBookmakers.map((b) => b.name))].sort();
   return (
-    <>
-      <datalist id="nba-tipsters">
-        {tipsters.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
-      <datalist id="nba-bookmakers">
-        {books.map((b) => (
-          <option key={b} value={b} />
-        ))}
-      </datalist>
-    </>
+    <datalist id="nba-tipsters">
+      {tipsters.map((t) => (
+        <option key={t} value={t} />
+      ))}
+    </datalist>
   );
 }
 
@@ -148,7 +140,16 @@ export function NbaFields({ d, onChange, compact = false }: { d: NbaDraft; onCha
         </label>
         <label className="w-32">
           <span className="label">Bookmaker</span>
-          <input className={`input ${pad}`} list="nba-bookmakers" value={d.bookmaker} onChange={(e) => onChange({ bookmaker: e.target.value })} aria-label="Bookmaker" />
+          <select className={`input ${pad}`} value={d.bookmaker} onChange={(e) => onChange({ bookmaker: e.target.value })} aria-label="Bookmaker">
+            <option value="">—</option>
+            {NBA_BOOKMAKERS.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+            {/* A bookmaker outside the list (e.g. read from an older pick) stays selectable. */}
+            {d.bookmaker && !(NBA_BOOKMAKERS as readonly string[]).includes(d.bookmaker) && <option value={d.bookmaker}>{d.bookmaker}</option>}
+          </select>
           <span className="mt-0.5 block h-3.5" />
         </label>
         <div>

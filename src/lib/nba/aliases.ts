@@ -19,12 +19,15 @@ export interface BookmakerAlias {
 
 export const DEFAULT_TIPSTERS: TipsterAlias[] = [{ match: "Winible", name: "ADP" }];
 
+/** The bookmakers to pick from, each always spelt this one way. */
+export const NBA_BOOKMAKERS = ["Bet365", "Ladbrokes", "Tab", "Sportsbet", "Pointsbet"] as const;
+
 export const DEFAULT_BOOKMAKERS: BookmakerAlias[] = [
   { code: "FD", name: "Sportsbet" },
   { code: "FanDuel", name: "Sportsbet" },
   { code: "SB", name: "Sportsbet" },
   { code: "LB", name: "Ladbrokes" },
-  { code: "PB", name: "PointsBet" },
+  { code: "PB", name: "Pointsbet" },
   { code: "DK", name: "DraftKings" },
   { code: "CZR", name: "Caesars" },
   { code: "MGM", name: "BetMGM" },
@@ -73,6 +76,16 @@ export function tipsterFor(sender: string | null | undefined, aliases: TipsterAl
 }
 
 /**
+ * One spelling per bookmaker, so it's counted once: "PointsBet", "points bet"
+ * -> "Pointsbet", "TAB" -> "Tab", "bet 365" -> "Bet365". Others stay as written.
+ */
+export function canonicalBookmaker(name: string | null | undefined): string | null {
+  const raw = (name ?? "").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  return NBA_BOOKMAKERS.find((b) => key(b) === key(raw)) ?? raw;
+}
+
+/**
  * The bookmaker: a code ("FD" -> "Sportsbet"), a bookmaker's own name, or
  * the text as written. "+138 FD +137 NV" is on the first one listed (FD).
  */
@@ -80,15 +93,16 @@ export function bookmakerFor(text: string | null | undefined, aliases: Bookmaker
   const raw = (text ?? "").replace(/\s+/g, " ").trim();
   if (!raw) return null;
   const whole = key(raw);
-  const exact = aliases.find((a) => key(a.code) === whole || key(a.name) === whole);
-  if (exact) return exact.name;
+  const known = [...aliases, ...NBA_BOOKMAKERS.map((b) => ({ code: b, name: b }))];
+  const exact = known.find((a) => key(a.code) === whole || key(a.name) === whole);
+  if (exact) return canonicalBookmaker(exact.name);
   // First code or name that appears as a word, in the order written.
   const words = raw.split(/[^A-Za-z0-9]+/).filter(Boolean);
   for (const w of words) {
-    const hit = aliases.find((a) => key(a.code) === key(w) || key(a.name) === key(w));
-    if (hit) return hit.name;
+    const hit = known.find((a) => key(a.code) === key(w) || key(a.name) === key(w));
+    if (hit) return canonicalBookmaker(hit.name);
   }
-  return raw.replace(/^(all\s+)?on\s+/i, "").slice(0, 40);
+  return canonicalBookmaker(raw.replace(/^(all\s+)?on\s+/i, "").slice(0, 40));
 }
 
 /** Tipster names for suggestions: the aliases' names plus any already used. */

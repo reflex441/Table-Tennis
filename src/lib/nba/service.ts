@@ -4,6 +4,7 @@ import { ServiceError } from "@/lib/alarms/service-error";
 import { computeProfit, round2, type BetResult } from "@/lib/bets/profit";
 import type { NbaBetInput, NbaBetUpdate } from "@/lib/validation/nba";
 import { nbaDedupeKey, type NbaMarket } from "./parse";
+import { canonicalBookmaker } from "./aliases";
 
 /** An NBA bet as sent to the browser. */
 export interface NbaBetDTO {
@@ -87,7 +88,7 @@ export async function createNbaBet(prisma: PrismaClient, userId: string, input: 
       side: input.side,
       stake,
       odds: input.odds,
-      bookmaker: input.bookmaker,
+      bookmaker: canonicalBookmaker(input.bookmaker),
       placedAt,
       dateKind: input.dateKind,
       result,
@@ -131,7 +132,7 @@ export async function updateNbaBet(prisma: PrismaClient, userId: string, id: str
         ...(input.stat !== undefined ? { stat: input.stat } : {}),
         ...(input.line !== undefined ? { line: input.line } : {}),
         ...(input.side !== undefined ? { side: input.side } : {}),
-        ...(input.bookmaker !== undefined ? { bookmaker: input.bookmaker } : {}),
+        ...(input.bookmaker !== undefined ? { bookmaker: canonicalBookmaker(input.bookmaker) } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         profit: computeProfit(stake, odds, result),
         settledAt: result === "PENDING" ? null : (bet.settledAt ?? now),

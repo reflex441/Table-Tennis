@@ -945,6 +945,15 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
   });
 
+  it("NBA bookmakers are saved with one spelling", async () => {
+    const now = new Date("2030-09-21T12:00:00Z");
+    const base = { tipster: "ADP", market: "MONEYLINE" as const, game: null, team: null, player: null, stat: null, line: null, side: null, stake: 1, odds: 1.9, dateKind: "GAME" as const, result: "PENDING" as const, notes: null };
+    const a = await createNbaBet(prisma, userId, { ...base, pick: "Knicks ML", bookmaker: "PointsBet", placedAt: "2030-09-22T00:00:00Z" }, now);
+    const b = await createNbaBet(prisma, userId, { ...base, pick: "Celtics ML", bookmaker: "pointsbet", placedAt: "2030-09-22T00:00:00Z" }, now);
+    expect([a.bookmaker, b.bookmaker]).toEqual(["Pointsbet", "Pointsbet"]);
+    expect((await updateNbaBet(prisma, userId, a.id, { bookmaker: "TAB" }, now)).bookmaker).toBe("Tab");
+  });
+
   it("NBA bets: added, settled, edited and kept apart from table tennis", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const base = { tipster: "ADP", market: "FUTURE" as const, game: null, team: null, player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", notes: null, placedAt: "2030-09-20T08:52:00Z", dateKind: "GAME" as const };

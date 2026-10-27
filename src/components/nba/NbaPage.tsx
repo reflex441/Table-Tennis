@@ -8,7 +8,7 @@ import { api } from "@/lib/client-api";
 import { formatDayLabel } from "@/lib/format";
 import { formatUnits, summarize, summarizeBy, type BetResult, type ProfitSummary, type Settleable } from "@/lib/bets/profit";
 import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
-import { knownTipsters } from "@/lib/nba/aliases";
+import { canonicalBookmaker, knownTipsters } from "@/lib/nba/aliases";
 import { NBA_MARKET_LABEL } from "@/lib/nba/parse";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { ProfitAmount, ResultChip } from "../BetBits";
@@ -78,7 +78,7 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
   const tt = useMemo(() => summarize(tableTennis), [tableTennis]);
   const combined = useMemo(() => summarize([...bets, ...tableTennis]), [bets, tableTennis]);
   const byTipster = useMemo(() => summarizeBy(bets, (b) => b.tipster), [bets]);
-  const byBook = useMemo(() => summarizeBy(bets, (b) => b.bookmaker ?? "Unknown bookmaker"), [bets]);
+  const byBook = useMemo(() => summarizeBy(bets, (b) => canonicalBookmaker(b.bookmaker) ?? "Unknown bookmaker"), [bets]);
 
   const scoped = useMemo(() => dated.filter((b) => !tipster || b.tipster === tipster), [dated, tipster]);
   const daily = useMemo(() => dailyPL(chart === "combined" && !tipster ? [...scoped, ...tableTennis] : scoped, tz), [scoped, tableTennis, chart, tipster, tz]);
