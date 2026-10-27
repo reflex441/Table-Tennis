@@ -277,6 +277,7 @@ export function SettingsPage() {
 
       <AccountSection />
       <InviteKeysSection />
+      <AccountsSection />
 
       <Section title="Server status">
         {health ? (
@@ -1023,6 +1024,107 @@ interface Invite {
   createdAt: string;
   usedAt: string | null;
   usedBy: string | null;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  bets: number;
+  nbaBets: number;
+  nbaTailing: boolean;
+  isOwner: boolean;
+}
+
+/** Every registered account, with who can tail your NBA picks (only shown to the owner). */
+function AccountsSection() {
+  const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    // Not the owner (403): the section stays hidden.
+    void api<{ accounts: Account[] }>("/api/accounts")
+      .then((r) => !cancelled && setAccounts(r.accounts))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!accounts) return null;
+
+  const toggleNba = async (a: Account) => {
+    setBusy(a.id);
+    setError(null);
+    try {
+      await api(`/api/accounts/${a.id}`, { method: "PATCH", json: { nbaTailing: !a.nbaTailing } });
+      setAccounts((prev) => (prev ?? []).map((x) => (x.id === a.id ? { ...x, nbaTailing: !a.nbaTailing } : x)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const day = (iso: string | null) => (iso ? DateTime.fromISO(iso).toFormat("d LLL yyyy") : "never");
+
+  return (
+    <Section
+      title={`Accounts (${accounts.length})`}
+      description="Everyone who has registered, newest first. Only you can see this. NBA tailing lets that account see your NBA picks on the Tailing page and copy them."
+    >
+      <div className="-mx-1 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
+            <tr>
+              <th className="px-1 py-1.5 font-medium">Name</th>
+              <th className="px-1 py-1.5 font-medium">Joined</th>
+              <th className="px-1 py-1.5 font-medium">Last sign-in</th>
+              <th className="px-1 py-1.5 text-right font-medium">Bets</th>
+              <th className="px-1 py-1.5 text-right font-medium">NBA</th>
+              <th className="px-1 py-1.5 text-right font-medium">NBA tailing</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {accounts.map((a) => (
+              <tr key={a.id}>
+                <td className="max-w-[14rem] px-1 py-1.5">
+                  <span className="block truncate font-medium">
+                    {a.name}
+                    {a.isOwner && <span className="ml-1 text-[11px] font-normal text-muted">(you)</span>}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted">{a.email}</span>
+                </td>
+                <td className="whitespace-nowrap px-1 py-1.5 text-xs text-muted">{day(a.createdAt)}</td>
+                <td className="whitespace-nowrap px-1 py-1.5 text-xs text-muted">{a.lastLoginAt ? (DateTime.fromISO(a.lastLoginAt).toRelative() ?? day(a.lastLoginAt)) : "never"}</td>
+                <td className="px-1 py-1.5 text-right tabular">{a.bets}</td>
+                <td className="px-1 py-1.5 text-right tabular">{a.nbaBets}</td>
+                <td className="px-1 py-1.5 text-right">
+                  {a.isOwner ? (
+                    <span className="text-[11px] text-muted">your picks</span>
+                  ) : (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={a.nbaTailing}
+                      aria-label={`NBA tailing for ${a.name}`}
+                      disabled={busy === a.id}
+                      onClick={() => void toggleNba(a)}
+                      className={`inline-flex h-5 w-9 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${a.nbaTailing ? "bg-accent" : "bg-line"}`}
+                    >
+                      <span className={`h-4 w-4 rounded-full bg-white transition-transform ${a.nbaTailing ? "translate-x-4" : ""}`} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {error && <p className="mt-2 text-xs text-under">{error}</p>}
+    </Section>
+  );
 }
 
 /** The owner's one-time invite keys (only shown to the owner). */

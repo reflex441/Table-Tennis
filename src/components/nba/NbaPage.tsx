@@ -381,7 +381,7 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
   );
 }
 
-function SummaryCard({ title, icon, summary, action }: { title: string; icon: React.ReactNode; summary: ProfitSummary; action?: React.ReactNode }) {
+export function SummaryCard({ title, icon, summary, action }: { title: string; icon: React.ReactNode; summary: ProfitSummary; action?: React.ReactNode }) {
   return (
     <div className="card p-3">
       <div className="flex items-center justify-between gap-2">
@@ -401,7 +401,7 @@ function SummaryCard({ title, icon, summary, action }: { title: string; icon: Re
   );
 }
 
-function SummaryTable({
+export function SummaryTable({
   rows,
   label,
   active,

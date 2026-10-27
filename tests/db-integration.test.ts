@@ -37,6 +37,8 @@ import { matchDedupeKey } from "@/lib/matching/dedupe";
 import { autoFillBets } from "@/lib/bets/auto-fill";
 import { deleteIdleMatches } from "@/lib/alarms/idle-matches";
 import { recordUsage, usageLast30Days } from "@/lib/usage/meter";
+import { listAccounts, setNbaTailing } from "@/lib/auth/account-list";
+import { copyNbaBets, getNbaTail } from "@/lib/nba/tailing";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -875,6 +877,50 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     await recordUsage(prisma, 9999, 99, daysAgo(30)); // too long ago
     expect(await prisma.usageDay.findUnique({ where: { day: "2030-09-21" } })).toMatchObject({ cpuMs: 2000, requests: 4 });
     expect(await usageLast30Days(prisma, now)).toEqual({ cpuMs: 4000, requests: 14 });
+  });
+
+  it("only the owner sees the accounts list, and decides who can tail their NBA picks", async () => {
+    // userId is the owner (the first account).
+    const lyu = (await prisma.user.create({ data: { email: "lyu@example.com", name: "Lyu" } })).id;
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    const now = new Date("2030-09-21T12:00:00Z");
+    const pick = { tipster: "ADP", market: "MONEYLINE" as const, game: null, team: "Knicks", player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", dateKind: "GAME" as const };
+    const open = await createNbaBet(prisma, userId, { ...pick, pick: "Knicks ML", stake: 1.5, odds: 1.9, placedAt: "2030-09-22T00:00:00Z", result: "PENDING", notes: "my own note" }, now);
+    await createNbaBet(prisma, userId, { ...pick, pick: "Celtics ML", team: "Celtics", stake: 1, odds: 2, placedAt: "2030-09-20T00:00:00Z", result: "WON", notes: null }, now);
+    await createPastBet(prisma, lyu, { player1: "Kolek M.", player2: "Lamparski M.", competition: null, startsAt: "2030-09-20T06:55:00Z", timezone: "UTC", playType: "PERSONAL", selection: "OVER", pointsLine: 74.5, stake: 1, odds: 1.9, result: "WON" }, now);
+
+    const accounts = await listAccounts(prisma, userId);
+    expect(accounts.map((a) => [a.name, a.bets, a.nbaBets, a.nbaTailing, a.isOwner])).toEqual([
+      ["Sam", 0, 0, false, false],
+      ["Lyu", 1, 0, false, false],
+      ["Owner", 0, 2, false, true],
+    ]);
+    expect(accounts[0].email).toBe("sam@example.com");
+    await expect(listAccounts(prisma, lyu)).rejects.toMatchObject({ status: 403 });
+    await expect(setNbaTailing(prisma, lyu, sam, true)).rejects.toMatchObject({ status: 403 });
+
+    // Nobody but the owner sees the NBA picks until the owner turns it on.
+    expect(await getNbaTail(prisma, lyu)).toBeNull();
+    await expect(copyNbaBets(prisma, lyu, null, now)).rejects.toMatchObject({ status: 403 });
+    expect((await getNbaTail(prisma, userId))?.isSelf).toBe(true);
+    await setNbaTailing(prisma, userId, lyu, true);
+    const seen = (await getNbaTail(prisma, lyu))!;
+    expect(seen.bets.map((b) => [b.pick, b.result, b.copied, b.notes])).toEqual([
+      ["Knicks ML", "PENDING", false, null], // the owner's notes stay private
+      ["Celtics ML", "WON", false, null],
+    ]);
+    expect(await getNbaTail(prisma, sam)).toBeNull();
+
+    // Copying: open picks only, same units and odds; never twice.
+    expect(await copyNbaBets(prisma, lyu, null, now)).toEqual({ copied: 1, skipped: 0 });
+    expect(await listNbaBets(prisma, lyu)).toMatchObject([{ pick: "Knicks ML", tipster: "ADP", stake: 1.5, odds: 1.9, result: "PENDING", team: "Knicks", notes: null }]);
+    expect((await getNbaTail(prisma, lyu))!.bets[0]).toMatchObject({ id: open.id, copied: true });
+    expect(await copyNbaBets(prisma, lyu, [open.id], now)).toEqual({ copied: 0, skipped: 1 });
+    await expect(copyNbaBets(prisma, userId, null, now)).rejects.toMatchObject({ status: 400 });
+
+    // Turned off again: gone.
+    await setNbaTailing(prisma, userId, lyu, false);
+    expect(await getNbaTail(prisma, lyu)).toBeNull();
   });
 
   it("past bets: a different pick on the same match becomes a split bet", async () => {

@@ -92,6 +92,8 @@ model User {
   onboardedAt     DateTime? @db.Timestamptz(3)
   /// When the NBA page's tutorial was finished (null = show it on the NBA page).
   nbaOnboardedAt  DateTime? @db.Timestamptz(3)
+  /// Can see and copy the owner's NBA picks on the Tailing page (the owner turns it on in Settings → Accounts).
+  nbaTailing      Boolean   @default(false)
 
   settings      Settings?
   matches       Match[]             @relation("owner")

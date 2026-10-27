@@ -11,12 +11,17 @@ import { EdgeIndicator, SelectionBadge } from "./MatchBits";
 import { ProfitPage } from "./ProfitPage";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
+import type { NbaTail } from "@/lib/nba/tailing";
+import { NbaTailView } from "./nba/NbaTail";
+import { BasketballIcon } from "./nba/BasketballIcon";
 
 /**
  * The Tailing page: the tailed account's upcoming bets (copy them to your
- * dashboard) and their profit page. The account owner sees a preview.
+ * dashboard) and their profit page, plus their NBA picks for the accounts
+ * allowed to see them. The account owner sees a preview.
  */
-export function TailProfilePage({ initial }: { initial: TailProfile }) {
+export function TailProfilePage({ initial, nba = null }: { initial: TailProfile; nba?: NbaTail | null }) {
+  const [view, setView] = useState<"tt" | "nba">("tt");
   const { settings, update } = useSettings();
   const { notify } = useNotifications();
   const [profile, setProfile] = useState(initial);
@@ -69,6 +74,32 @@ export function TailProfilePage({ initial }: { initial: TailProfile }) {
         </div>
       </div>
 
+      {nba && (
+        <div className="flex self-start rounded-lg border border-line p-0.5 text-sm" role="tablist" aria-label="Sport">
+          {(
+            [
+              ["tt", <span key="tt" aria-hidden="true">🏓</span>, "Table tennis"],
+              ["nba", <BasketballIcon key="nba" className="h-4 w-4 text-orange-400" />, "NBA"],
+            ] as const
+          ).map(([id, icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={view === id}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 ${view === id ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
+              onClick={() => setView(id)}
+            >
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {nba && view === "nba" ? (
+        <NbaTailView initial={nba} ownerName={account.name} />
+      ) : (
+      <>
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
           <h2 className="text-sm font-semibold">
@@ -126,6 +157,8 @@ export function TailProfilePage({ initial }: { initial: TailProfile }) {
       </section>
 
       <ProfitPage initial={profile.bets} title={`${account.name}'s profit`} readOnly />
+      </>
+      )}
     </div>
   );
 }
