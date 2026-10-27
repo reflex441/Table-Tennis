@@ -887,13 +887,15 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const pick = { tipster: "ADP", market: "MONEYLINE" as const, game: null, team: "Knicks", player: null, stat: null, line: null, side: null, bookmaker: "Sportsbet", dateKind: "GAME" as const };
     const open = await createNbaBet(prisma, userId, { ...pick, pick: "Knicks ML", stake: 1.5, odds: 1.9, placedAt: "2030-09-22T00:00:00Z", result: "PENDING", notes: "my own note" }, now);
     await createNbaBet(prisma, userId, { ...pick, pick: "Celtics ML", team: "Celtics", stake: 1, odds: 2, placedAt: "2030-09-20T00:00:00Z", result: "WON", notes: null }, now);
+    // Futures aren't shared.
+    const future = await createNbaBet(prisma, userId, { ...pick, market: "FUTURE", pick: "Knicks to win the title", team: null, stake: 1, odds: 8, placedAt: "2030-09-22T00:00:00Z", result: "PENDING", notes: null }, now);
     await createPastBet(prisma, lyu, { player1: "Kolek M.", player2: "Lamparski M.", competition: null, startsAt: "2030-09-20T06:55:00Z", timezone: "UTC", playType: "PERSONAL", selection: "OVER", pointsLine: 74.5, stake: 1, odds: 1.9, result: "WON" }, now);
 
     const accounts = await listAccounts(prisma, userId);
     expect(accounts.map((a) => [a.name, a.bets, a.nbaBets, a.nbaTailing, a.isOwner])).toEqual([
       ["Sam", 0, 0, false, false],
       ["Lyu", 1, 0, false, false],
-      ["Owner", 0, 2, false, true],
+      ["Owner", 0, 3, false, true],
     ]);
     expect(accounts[0].email).toBe("sam@example.com");
     await expect(listAccounts(prisma, lyu)).rejects.toMatchObject({ status: 403 });
@@ -903,6 +905,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await getNbaTail(prisma, lyu)).toBeNull();
     await expect(copyNbaBets(prisma, lyu, null, now)).rejects.toMatchObject({ status: 403 });
     expect((await getNbaTail(prisma, userId))?.isSelf).toBe(true);
+    expect((await getNbaTail(prisma, userId))?.bets.map((b) => b.pick)).not.toContain("Knicks to win the title");
     await setNbaTailing(prisma, userId, lyu, true);
     const seen = (await getNbaTail(prisma, lyu))!;
     expect(seen.bets.map((b) => [b.pick, b.result, b.copied, b.notes])).toEqual([
@@ -916,6 +919,8 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(await listNbaBets(prisma, lyu)).toMatchObject([{ pick: "Knicks ML", tipster: "ADP", stake: 1.5, odds: 1.9, result: "PENDING", team: "Knicks", notes: null }]);
     expect((await getNbaTail(prisma, lyu))!.bets[0]).toMatchObject({ id: open.id, copied: true });
     expect(await copyNbaBets(prisma, lyu, [open.id], now)).toEqual({ copied: 0, skipped: 1 });
+    expect(await copyNbaBets(prisma, lyu, [future.id], now)).toEqual({ copied: 0, skipped: 0 });
+    expect(await listNbaBets(prisma, lyu)).toHaveLength(1);
     await expect(copyNbaBets(prisma, userId, null, now)).rejects.toMatchObject({ status: 400 });
 
     // Turned off again: gone.

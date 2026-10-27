@@ -8,7 +8,11 @@ import { nbaDedupeKey, type NbaMarket } from "./parse";
  * NBA on the Tailing page: the owner's NBA picks and record, for the
  * accounts the owner allowed (Settings → Accounts → NBA tailing). Open picks
  * can be copied to your own NBA page, where ESPN settles them as usual.
+ * Futures are left out (not shown, counted or copied).
  */
+
+/** Futures aren't shared. */
+const shared = (b: { market: string }) => b.market !== "FUTURE";
 
 export type NbaTailBet = NbaBetDTO & {
   /** Open pick that's already on your NBA page (same tipster, pick and time). */
@@ -36,7 +40,7 @@ const keyOf = (b: { tipster: string; pick: string; placedAt: string | Date }) =>
 export async function getNbaTail(prisma: PrismaClient, viewerId: string): Promise<NbaTail | null> {
   const a = await access(prisma, viewerId);
   if (!a) return null;
-  const bets = await listNbaBets(prisma, a.ownerId);
+  const bets = (await listNbaBets(prisma, a.ownerId)).filter(shared);
   const openKeys = bets.filter((b) => b.result === "PENDING").map(keyOf);
   const mine = a.isSelf
     ? new Set(openKeys)
@@ -58,7 +62,7 @@ export async function copyNbaBets(prisma: PrismaClient, viewerId: string, ids: s
   const a = await access(prisma, viewerId);
   if (!a) throw new ServiceError("NBA tailing isn't turned on for your account.", 403, "forbidden");
   if (a.isSelf) throw new ServiceError("These are your own picks - they're already on your NBA page.", 400, "self");
-  const source = await prisma.nbaBet.findMany({ where: { userId: a.ownerId, result: "PENDING", ...(ids ? { id: { in: ids } } : {}) } });
+  const source = (await prisma.nbaBet.findMany({ where: { userId: a.ownerId, result: "PENDING", ...(ids ? { id: { in: ids } } : {}) } })).filter(shared);
   const result: CopyResult = { copied: 0, skipped: 0 };
   for (const b of source) {
     try {
