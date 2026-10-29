@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discordDate, nbaDedupeKey, parseOdds } from "@/lib/nba/parse";
+import { discordDate, nbaDedupeKey, parseOdds, defaultGameDay } from "@/lib/nba/parse";
 import { DEFAULT_BOOKMAKERS, DEFAULT_TIPSTERS, NBA_BOOKMAKERS, bookmakerFor, canonicalBookmaker, parseBookmakers, parseTipsters, tipsterFor } from "@/lib/nba/aliases";
 import { NBA_PICKS_PROMPT, normalizeNbaPicks } from "@/lib/gemini/nba";
 import { nbaBetSchema, nbaBetUpdateSchema } from "@/lib/validation/nba";
@@ -100,5 +100,13 @@ describe("NBA picks", () => {
     const tt = [{ stake: 1, odds: 1.85, result: "WON" as const, profit: 0.85 }];
     expect(summarize(nba)).toMatchObject({ bets: 2, won: 1, lost: 1, profit: 0.08, staked: 2.5 });
     expect(summarize([...nba, ...tt])).toMatchObject({ bets: 3, profit: 0.93, staked: 3.5 });
+  });
+
+  it("a scanned pick with no game day shown is for tomorrow", () => {
+    const tz = "Australia/Sydney";
+    // Scanned on Thursday 29 Oct (2pm in Sydney) -> the 30th.
+    expect(defaultGameDay(new Date("2026-10-29T03:00:00Z"), tz).toISOString()).toBe("2026-10-30T01:00:00.000Z"); // midday on the 30th, Sydney
+    // Just after midnight on the 30th -> the 31st.
+    expect(defaultGameDay(new Date("2026-10-29T13:30:00Z"), tz).toISOString()).toBe("2026-10-31T01:00:00.000Z");
   });
 });

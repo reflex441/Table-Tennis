@@ -85,3 +85,12 @@ export function nbaDedupeKey(tipster: string, pick: string, placedAt: Date): str
   const minute = new Date(Math.floor(placedAt.getTime() / 60_000) * 60_000).toISOString();
   return `${norm(tipster)}|${norm(pick)}@${minute}`;
 }
+
+/**
+ * The game day for a scanned pick that doesn't show one: tomorrow where you
+ * are (picks sent today are for tonight's US games, the next day in Sydney),
+ * at midday like a date typed in.
+ */
+export function defaultGameDay(now: Date, timezone: string): Date {
+  return DateTime.fromJSDate(now, { zone: timezone }).plus({ days: 1 }).set({ hour: 12, minute: 0, second: 0, millisecond: 0 }).toJSDate();
+}

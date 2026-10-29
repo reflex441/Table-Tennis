@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Check, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
-import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { toLocalInputValue } from "@/lib/format";
 import type { ScannedPick } from "@/lib/gemini/nba";
@@ -11,6 +10,7 @@ import { useSettings } from "../SettingsProvider";
 import { NbaDatalists, NbaFields, draftToJson, type NbaDraft } from "./NbaBetForm";
 import { canonicalBookmaker } from "@/lib/nba/aliases";
 import { statCode } from "@/lib/nba/stats";
+import { defaultGameDay } from "@/lib/nba/parse";
 import { ChooseScreenshots, ScanErrors, useScreenshotScan } from "../ScreenshotScan";
 
 type Scanned = ScannedPick & { tipster: string | null; bookmaker: string | null; odds: number | null; placedAt: string | null; dateKind?: "GAME" | "POSTED" };
@@ -50,7 +50,7 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
       units: b.units !== null ? String(b.units) : "1",
       odds: b.odds !== null ? String(b.odds) : "",
       bookmaker: canonicalBookmaker(b.bookmaker) ?? "",
-      placedAtLocal: b.placedAt ? toLocalInputValue(b.placedAt, tz) : DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"),
+      placedAtLocal: toLocalInputValue(b.placedAt ?? defaultGameDay(new Date(), tz).toISOString(), tz),
       dateKind: b.dateKind ?? "GAME",
       result: "PENDING",
       team: b.team ?? "",
@@ -63,7 +63,7 @@ export function NbaScanner({ tipsters, onAdded, onClose }: { tipsters: string[];
       b.sender && `Sent by ${b.sender}`,
       b.oddsText && `odds ${b.oddsText}`,
       b.bookmakerText && `on ${b.bookmakerText}`,
-      b.gameTimeText ? `game ${b.gameTimeText}` : b.postedText && `posted ${b.postedText} (no game day shown - the result comes from the next game after the post, and the date updates once it's found)`,
+      b.gameTimeText ? `game ${b.gameTimeText}` : `${b.postedText ? `posted ${b.postedText} - ` : ""}no game day shown, so it's set to tomorrow (change it if the game is another day)`,
     ]
       .filter(Boolean)
       .join(" · "),
