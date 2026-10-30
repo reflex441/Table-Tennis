@@ -9,6 +9,10 @@ export interface AccountDTO {
   email: string;
   createdAt: string;
   lastLoginAt: string | null;
+  /** Last time they used the site (signed in), at most 10 minutes out. */
+  lastSeenAt: string | null;
+  /** Used the site in the last 15 minutes. */
+  online: boolean;
   /** Table tennis bets recorded. */
   bets: number;
   nbaBets: number;
@@ -23,7 +27,7 @@ async function requireOwner(prisma: PrismaClient, userId: string): Promise<void>
 }
 
 /** Every registered account, newest first (owner only). */
-export async function listAccounts(prisma: PrismaClient, viewerId: string): Promise<AccountDTO[]> {
+export async function listAccounts(prisma: PrismaClient, viewerId: string, now = new Date()): Promise<AccountDTO[]> {
   await requireOwner(prisma, viewerId);
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
@@ -34,6 +38,7 @@ export async function listAccounts(prisma: PrismaClient, viewerId: string): Prom
       email: true,
       createdAt: true,
       lastLoginAt: true,
+      lastSeenAt: true,
       nbaTailing: true,
       _count: { select: { matches: { where: { bet: { isNot: null } } }, nbaBets: true } },
     },
@@ -44,6 +49,9 @@ export async function listAccounts(prisma: PrismaClient, viewerId: string): Prom
     email: u.email,
     createdAt: u.createdAt.toISOString(),
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+    lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
+    // Visits are saved every 10 minutes.
+    online: u.lastSeenAt !== null && now.getTime() - u.lastSeenAt.getTime() < 15 * 60_000,
     bets: u._count.matches,
     nbaBets: u._count.nbaBets,
     nbaTailing: u.nbaTailing,

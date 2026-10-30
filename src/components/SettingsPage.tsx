@@ -1032,6 +1032,8 @@ interface Account {
   email: string;
   createdAt: string;
   lastLoginAt: string | null;
+  lastSeenAt: string | null;
+  online: boolean;
   bets: number;
   nbaBets: number;
   nbaTailing: boolean;
@@ -1068,11 +1070,15 @@ function AccountsSection() {
     }
   };
   const day = (iso: string | null) => (iso ? DateTime.fromISO(iso).toFormat("d LLL yyyy") : "never");
+  const ago = (a: Account) => {
+    const iso = a.lastSeenAt ?? a.lastLoginAt;
+    return a.online ? "online now" : iso ? (DateTime.fromISO(iso).toRelative() ?? day(iso)) : "never";
+  };
 
   return (
     <Section
       title={`Accounts (${accounts.length})`}
-      description="Everyone who has registered, newest first. Only you can see this. NBA tailing lets that account see your NBA picks on the Tailing page and copy them."
+      description="Everyone who has registered, newest first. Only you can see this. Last visit is when they last used the site (hover it for the exact time and their last sign-in). NBA tailing lets that account see your NBA picks on the Tailing page and copy them."
     >
       <div className="-mx-1 overflow-x-auto">
         <table className="w-full text-sm">
@@ -1080,7 +1086,7 @@ function AccountsSection() {
             <tr>
               <th className="px-1 py-1.5 font-medium">Name</th>
               <th className="px-1 py-1.5 font-medium">Joined</th>
-              <th className="px-1 py-1.5 font-medium">Last sign-in</th>
+              <th className="px-1 py-1.5 font-medium">Last visit</th>
               <th className="px-1 py-1.5 text-right font-medium">Bets</th>
               <th className="px-1 py-1.5 text-right font-medium">NBA</th>
               <th className="px-1 py-1.5 text-right font-medium">NBA tailing</th>
@@ -1097,7 +1103,12 @@ function AccountsSection() {
                   <span className="block truncate text-[11px] text-muted">{a.email}</span>
                 </td>
                 <td className="whitespace-nowrap px-1 py-1.5 text-xs text-muted">{day(a.createdAt)}</td>
-                <td className="whitespace-nowrap px-1 py-1.5 text-xs text-muted">{a.lastLoginAt ? (DateTime.fromISO(a.lastLoginAt).toRelative() ?? day(a.lastLoginAt)) : "never"}</td>
+                <td
+                  className="whitespace-nowrap px-1 py-1.5 text-xs text-muted"
+                  title={`Last visit: ${a.lastSeenAt ? DateTime.fromISO(a.lastSeenAt).toFormat("d LLL yyyy, h:mm a") : "never"} · last sign-in: ${a.lastLoginAt ? DateTime.fromISO(a.lastLoginAt).toFormat("d LLL yyyy, h:mm a") : "never"}`}
+                >
+                  {a.online ? <span className="text-over">online now</span> : ago(a)}
+                </td>
                 <td className="px-1 py-1.5 text-right tabular">{a.bets}</td>
                 <td className="px-1 py-1.5 text-right tabular">{a.nbaBets}</td>
                 <td className="px-1 py-1.5 text-right">

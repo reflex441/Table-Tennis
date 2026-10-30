@@ -84,6 +84,8 @@ model User {
   passwordHash    String?
   googleId        String?   @unique
   lastLoginAt     DateTime? @db.Timestamptz(3)
+  /// Last time the account used the site (any page or app check while signed in), at most every 10 minutes.
+  lastSeenAt      DateTime? @db.Timestamptz(3)
   /// Profile picture (small JPEG/PNG/WebP, resized in the browser).
   avatar          Bytes?
   avatarMime      String?

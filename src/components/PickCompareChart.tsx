@@ -5,9 +5,10 @@ import { DateTime } from "luxon";
 import { niceTicks, type CumulativePoint } from "@/lib/bets/daily";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { SELECTION_LABEL, type Selection } from "@/lib/selection";
+import { smoothPath } from "@/lib/chart-path";
 
 const HEIGHT = 300;
-const PAD = { top: 12, right: 64, bottom: 26, left: 52 };
+const PAD = { top: 12, right: 84, bottom: 26, left: 52 };
 
 /**
  * Line colours per pick (validated for colour-blind separation on the dark
@@ -57,7 +58,7 @@ export function PickCompareChart({ series, unitSize, currency }: { series: PickS
     const y = (v: number) => PAD.top + ((hi - v) / (hi - lo)) * innerH;
     const lines = shown.map((s) => ({
       pick: s.pick,
-      d: s.points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.cumulative).toFixed(1)}`).join(""),
+      d: smoothPath(s.points.map((p, i) => ({ x: x(i), y: y(p.cumulative) }))),
       end: s.points[n - 1]?.cumulative ?? 0,
     }));
     // End labels, nudged apart so they never overlap.
@@ -126,7 +127,7 @@ export function PickCompareChart({ series, unitSize, currency }: { series: PickS
           ))}
           {geo.xLabels.map(({ i, day }) => (
             <text key={day} x={geo.x(i)} y={HEIGHT - 8} textAnchor={n === 1 ? "middle" : i === 0 ? "start" : i === last ? "end" : "middle"} className="fill-muted text-[10px]">
-              {DateTime.fromISO(day).toFormat("d LLL")}
+              {DateTime.fromISO(day).toFormat("LLL d")}
             </text>
           ))}
           {geo.lines.map((l) => (

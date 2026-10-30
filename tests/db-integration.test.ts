@@ -38,6 +38,7 @@ import { autoFillBets } from "@/lib/bets/auto-fill";
 import { deleteIdleMatches } from "@/lib/alarms/idle-matches";
 import { recordUsage, usageLast30Days } from "@/lib/usage/meter";
 import { listAccounts, setNbaTailing } from "@/lib/auth/account-list";
+import { recordVisit } from "@/lib/auth/last-seen";
 import { copyNbaBets, getNbaTail } from "@/lib/nba/tailing";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -933,6 +934,16 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // Turned off again: gone.
     await setNbaTailing(prisma, userId, lyu, false);
     expect(await getNbaTail(prisma, lyu)).toBeNull();
+  });
+
+  it("notes when each account last used the site, at most every 10 minutes", async () => {
+    const t0 = new Date("2030-09-21T12:00:00Z");
+    const at = (min: number) => new Date(t0.getTime() + min * 60_000);
+    expect(await recordVisit(prisma, userId, t0)).toBe(true);
+    expect(await recordVisit(prisma, userId, at(5))).toBe(false); // a few minutes later: not saved again
+    expect(await recordVisit(prisma, userId, at(11))).toBe(true);
+    expect((await listAccounts(prisma, userId, at(20)))[0]).toMatchObject({ lastSeenAt: at(11).toISOString(), online: true });
+    expect((await listAccounts(prisma, userId, at(60)))[0]).toMatchObject({ lastSeenAt: at(11).toISOString(), online: false });
   });
 
   it("past bets: a different pick on the same match becomes a split bet", async () => {
