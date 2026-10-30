@@ -838,7 +838,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect((await getMatch(prisma, userId, m.id))?.bet).toMatchObject({ stake: 2.25, result: "LOST", profit: -0.52, autoFilled: false, legs: [{ result: "WON", playType: null }, { result: "LOST", playType: null }] });
   });
 
-  it("bot plays are Over / Under only: sweep and spread picks are personal plays", async () => {
+  it("sweep and spread picks start as personal plays; making one a bot play yourself sticks", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const base = { player2: "Bot B.", competition: null, timezone: "UTC", playType: "BOT" as const, pointsLine: null, odds: 1.9, result: "WON" as const, stake: 1 };
     const pickOf = async (matchId: string) => (await listBetRows(prisma, userId)).filter((r) => r.matchId === matchId).map((r) => [r.selection, r.playType]);
@@ -847,9 +847,14 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const split = await createPastBet(prisma, userId, { ...base, player1: "Split S.", startsAt: "2030-09-20T01:00:00Z", selection: "OVER" }, now);
     await createPastBet(prisma, userId, { ...base, player1: "Split S.", startsAt: "2030-09-20T01:00:00Z", selection: "SWEEP", odds: 3.5, result: "LOST" }, now);
     expect(await pickOf(split.matchId)).toEqual([["OVER", "BOT"], ["SWEEP", "PERSONAL"]]);
-    // Switching the sweep to bot doesn't stick; the over can still be switched.
+    // Making the sweep a bot play yourself sticks, also when it's settled or the picks are edited.
     await updateBet(prisma, userId, split.matchId, { leg: { index: 1, playType: "BOT" } }, now);
-    expect(await pickOf(split.matchId)).toEqual([["OVER", "BOT"], ["SWEEP", "PERSONAL"]]);
+    expect(await pickOf(split.matchId)).toEqual([["OVER", "BOT"], ["SWEEP", "BOT"]]);
+    await updateBet(prisma, userId, split.matchId, { leg: { index: 1, result: "WON" } }, now);
+    await updateBet(prisma, userId, split.matchId, { legs: [{ selection: "OVER", stake: 1, odds: 1.9 }, { selection: "SWEEP", stake: 0.5, odds: 3.5 }] }, now);
+    expect(await pickOf(split.matchId)).toEqual([["OVER", "BOT"], ["SWEEP", "BOT"]]);
+    // And back; the over can be switched too.
+    await updateBet(prisma, userId, split.matchId, { leg: { index: 1, playType: "PERSONAL" } }, now);
     await updateBet(prisma, userId, split.matchId, { leg: { index: 0, playType: "PERSONAL" } }, now);
     expect(await pickOf(split.matchId)).toEqual([["OVER", "PERSONAL"], ["SWEEP", "PERSONAL"]]);
 
@@ -859,13 +864,15 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const upload = await createMatchWithAlarm(prisma, userId, input({ player1: "Upload U.", selection: "SET_SPREAD", pointsLine: 1.5, playType: "BOT" }), now);
     if (upload.status !== "created") throw new Error("not created");
     expect(upload.match.playType).toBe("PERSONAL");
-    // A bot OVER edited to a SWEEP becomes personal; making it a bot play again doesn't stick.
+    // A bot OVER edited to a SWEEP becomes personal; making it a bot play yourself sticks, also
+    // when the match is edited again (with the same pick).
     const over = await createMatchWithAlarm(prisma, userId, input({ player1: "Edit E.", selection: "OVER", playType: "BOT" }), now);
     if (over.status !== "created") throw new Error("not created");
     expect(over.match.playType).toBe("BOT");
     expect((await updateMatch(prisma, userId, over.match.id, { selection: "SWEEP" }, now)).playType).toBe("PERSONAL");
-    expect((await updateMatch(prisma, userId, over.match.id, { playType: "BOT" }, now)).playType).toBe("PERSONAL");
-    expect((await updateMatch(prisma, userId, over.match.id, { selection: "UNDER", playType: "BOT" }, now)).playType).toBe("BOT");
+    expect((await updateMatch(prisma, userId, over.match.id, { playType: "BOT" }, now)).playType).toBe("BOT");
+    expect((await updateMatch(prisma, userId, over.match.id, { selection: "SWEEP", notes: "edited" }, now)).playType).toBe("BOT");
+    expect((await updateMatch(prisma, userId, over.match.id, { selection: "UNDER", playType: "PERSONAL" }, now)).playType).toBe("PERSONAL");
   });
 
   it("adds up the server time used per day and over the last 30 days", async () => {

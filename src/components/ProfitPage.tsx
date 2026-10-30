@@ -17,7 +17,7 @@ import { DailyCalendar } from "./DailyCalendar";
 import { cumulativeSeries, dailyPL, dayKey } from "@/lib/bets/daily";
 import { X } from "lucide-react";
 import { DateTime } from "luxon";
-import { BOT_IS_OVER_UNDER, SELECTIONS, SELECTION_LABEL, canBeBot, isMainPick, pickText, type Selection } from "@/lib/selection";
+import { SELECTIONS, SELECTION_LABEL, isMainPick, pickText, type Selection } from "@/lib/selection";
 import { PICK_SERIES, PickCompareChart } from "./PickCompareChart";
 import { AddPastBet } from "./AddPastBet";
 import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
@@ -422,10 +422,6 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
                     <td className="px-3 py-1.5">
                       {readOnly ? (
                         <PlayTypeChip playType={r.playType} />
-                      ) : !canBeBot(r.selection) && r.playType === "PERSONAL" ? (
-                        <span title={BOT_IS_OVER_UNDER}>
-                          <PlayTypeChip playType={r.playType} />
-                        </span>
                       ) : (
                         <button
                           className="rounded-full transition-opacity hover:opacity-80 disabled:opacity-50"

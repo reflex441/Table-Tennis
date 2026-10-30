@@ -190,8 +190,10 @@ export async function updateMatch(prisma: PrismaClient, userId: string, id: stri
     }
   }
 
-  // Bot plays are Over / Under only: a sweep or spread pick makes it a personal play.
-  const playType = playTypeFor(input.selection !== undefined ? input.selection : existing.statistics?.selection, input.playType ?? existing.playType);
+  // Changing the pick to a sweep or spread makes it a personal play (bot plays are Over / Under);
+  // choosing Bot / Personal yourself always counts.
+  const selectionChanged = input.selection !== undefined && input.selection !== (existing.statistics?.selection ?? null);
+  const playType = input.playType ?? (selectionChanged ? playTypeFor(input.selection, existing.playType) : existing.playType);
 
   const statsFields = ["selection", "pointsLine", "ouStats", "ouHitRate", "edge"] as const;
   const statsUpdate: Record<string, unknown> = {};

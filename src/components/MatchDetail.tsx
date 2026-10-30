@@ -7,7 +7,6 @@ import { ArrowLeft, BellRing, CheckCheck, CheckCircle2, Pencil, RotateCcw, Trash
 import type { MatchDTO } from "@/lib/types";
 import { api } from "@/lib/client-api";
 import { formatDateTime, formatDayLabel, formatPct, formatReminder, formatTime } from "@/lib/format";
-import { BOT_IS_OVER_UNDER, canBeBot } from "@/lib/selection";
 import { Countdown, EdgeIndicator, PercentBar, SelectionBadge, StatusBadge } from "./MatchBits";
 import { MatchEditor, type MatchFormValues } from "./MatchEditor";
 import { useSettings } from "./SettingsProvider";
@@ -193,9 +192,7 @@ export function MatchDetail({ initial }: { initial: MatchDTO }) {
                 key={t}
                 role="radio"
                 aria-checked={match.playType === t}
-                disabled={t === "BOT" && !canBeBot(match.statistics.selection)}
-                title={t === "BOT" && !canBeBot(match.statistics.selection) ? BOT_IS_OVER_UNDER : undefined}
-                className={`rounded-md px-2.5 py-1 disabled:opacity-40 ${match.playType === t ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
+                className={`rounded-md px-2.5 py-1 ${match.playType === t ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
                 onClick={() => void setPlayType(t)}
               >
                 {t === "BOT" ? "Bot play" : "Personal play"}

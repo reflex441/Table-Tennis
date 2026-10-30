@@ -16,9 +16,12 @@ interface Leg {
 
 type PlayType = "BOT" | "PERSONAL";
 
-/** Bot plays are Over / Under only: a sweep or spread pick of a bot play counts as a personal play. */
+/**
+ * Bot plays are Over / Under: a sweep or spread pick that follows a bot match
+ * counts as a personal play. One you made a bot play yourself stays one.
+ */
 function overUnderOnlyBot(legs: Leg[], matchPlayType: PlayType): Leg[] {
-  return legs.map((l) => (!canBeBot(l.selection) && (l.playType ?? matchPlayType) === "BOT" ? { ...l, playType: "PERSONAL" } : l));
+  return legs.map((l) => (!canBeBot(l.selection) && l.playType === null && matchPlayType === "BOT" ? { ...l, playType: "PERSONAL" } : l));
 }
 
 /** After a match became a bot play: its sweep / spread picks that follow it are made personal plays. */
@@ -248,7 +251,8 @@ async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: str
   const pick = input.selection;
   const duplicate = () => new ServiceError("You already have this bet (same match, same pick).", 409, "duplicate", { existingId: matchId });
   // Its own Bot / Personal when that differs from the match (e.g. a bot UNDER plus a personal SWEEP).
-  const playType = input.playType === match.playType ? null : input.playType;
+  const legType = playTypeFor(pick, input.playType);
+  const playType = legType === match.playType ? null : legType;
   const parts = input.legs ?? [{ stake: input.stake, odds: input.odds, result: input.result }];
   const newLegs: Leg[] = parts.map((l) => ({ selection: pick!, stake: round2(l.stake), odds: l.odds ?? null, result: l.result as BetResult, playType }));
 
