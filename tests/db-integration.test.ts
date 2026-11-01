@@ -712,7 +712,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // Adding it to the match on your dashboard: no copy, the bet is that match's, the alarm stops.
     const base = { player1: own!.player1, player2: own!.player2, competition: null, startsAt: own!.startsAt, timezone: "UTC", pointsLine: 74.5, ouStats: "11/3" };
     const res = await createPastBet(prisma, sam, { ...base, playType: "BOT", selection: "UNDER", stake: 1, odds: 1.85, result: "WON" }, now);
-    expect(res).toEqual({ matchId: samsOwn.id, combined: true });
+    expect(res).toEqual({ matchId: samsOwn.id, combined: true, samePick: false });
     expect(await prisma.match.count({ where: { userId: sam } })).toBe(1);
     const after = await prisma.match.findUniqueOrThrow({ where: { id: samsOwn.id }, include: { alarm: true, bet: true, statistics: true } });
     expect(after).toMatchObject({ playType: "BOT", alarm: { status: "COMPLETED", ackAction: "placed" }, bet: { result: "WON", stake: 1, profit: 0.85 }, statistics: { selection: "UNDER" } });
@@ -760,7 +760,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
 
     // Scanning the bet slip replaces it with the real bet ("you already have this bet" is only for your own bets).
     const slip = { player1: "Madej B.", player2: "Minda M.", competition: null, startsAt: at(-60).toISOString(), timezone: "UTC", playType: "BOT" as const, selection: "OVER" as const, pointsLine: 74.5, stake: 2, odds: 1.9, result: "WON" as const };
-    expect(await createPastBet(prisma, userId, slip, now)).toEqual({ matchId: ignored.id, combined: true });
+    expect(await createPastBet(prisma, userId, slip, now)).toEqual({ matchId: ignored.id, combined: true, samePick: false });
     expect((await getMatch(prisma, userId, ignored.id))?.bet).toMatchObject({ stake: 2, odds: 1.9, result: "WON", profit: 1.8, autoFilled: false, legs: [] });
     // Now it's your bet: another pick on a second slip splits it, the same pick again is a duplicate.
     await createPastBet(prisma, userId, { ...slip, playType: "PERSONAL", selection: "SWEEP", pointsLine: null, stake: 0.5, odds: 3.5, result: "LOST" }, now);
@@ -835,7 +835,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
         bet: { create: { stake: 1.5, autoFilled: true } },
       },
     });
-    expect(await createPastBet(prisma, userId, { ...base, playType: "BOT", startsAt: startsAt.toISOString(), stake: 2.25, legs }, now)).toEqual({ matchId: m.id, combined: true });
+    expect(await createPastBet(prisma, userId, { ...base, playType: "BOT", startsAt: startsAt.toISOString(), stake: 2.25, legs }, now)).toEqual({ matchId: m.id, combined: true, samePick: false });
     expect((await getMatch(prisma, userId, m.id))?.bet).toMatchObject({ stake: 2.25, result: "LOST", profit: -0.52, autoFilled: false, legs: [{ result: "WON", playType: null }, { result: "LOST", playType: null }] });
   });
 
@@ -952,7 +952,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const under = await createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 0.5, odds: 1.88, result: "WON" }, now);
     expect(under.combined).toBe(false);
     const sweep = await createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.75, result: "LOST" }, now);
-    expect(sweep).toEqual({ matchId: under.matchId, combined: true });
+    expect(sweep).toEqual({ matchId: under.matchId, combined: true, samePick: false });
     const bet = await prisma.bet.findUniqueOrThrow({ where: { matchId: under.matchId }, include: { legs: { orderBy: { position: "asc" } } } });
     expect(bet.legs.map((l) => [l.selection, l.stake, l.odds, l.result])).toEqual([
       ["UNDER", 0.5, 1.88, "WON"],
@@ -966,6 +966,71 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     // The same pick again is still a duplicate.
     await expect(createPastBet(prisma, userId, { ...base, selection: "UNDER", stake: 1, odds: 1.9, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
     await expect(createPastBet(prisma, userId, { ...base, selection: "SWEEP", stake: 1, odds: 3.5, result: "LOST" }, now)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("past bets: another slip bet on a pick you have is combined into it (three sweeps)", async () => {
+    const now = new Date("2030-11-01T12:00:00Z");
+    // Total Exact Sets 3 $50 @ 2.40, Petas 3-0 $50 @ 2.50 and Petas -2.5 $45.45 @ 2.65, all won ($200 = 1u).
+    const base = { player1: "Petas K.", player2: "Adamiak G.", competition: "Czech Liga Pro", timezone: "Australia/Sydney", playType: "PERSONAL" as const, startsAt: "2030-10-31T07:30:00Z" };
+    const sweep = { ...base, selection: "SWEEP" as const, pointsLine: null };
+    const under = await createPastBet(prisma, userId, { ...base, playType: "BOT", selection: "UNDER", pointsLine: 74.5, stake: 1, odds: 1.85, result: "WON" }, now);
+    // The first sweep (its own row) is a second pick on the match.
+    const first = await createPastBet(prisma, userId, { ...sweep, stake: 0.25, odds: 2.4, result: "WON", parts: [{ stake: 0.25, odds: 2.4, result: "WON" }] }, now);
+    expect(first).toEqual({ matchId: under.matchId, combined: true, samePick: false });
+    // The other two (combined on the slip list) are combined into it.
+    const twoMore = [{ stake: 0.25, odds: 2.5, result: "WON" as const }, { stake: 0.2273, odds: 2.65, result: "WON" as const }];
+    const second = await createPastBet(prisma, userId, { ...sweep, stake: 0.48, odds: 2.5714, result: "WON", parts: twoMore }, now);
+    expect(second).toEqual({ matchId: under.matchId, combined: true, samePick: true });
+    const legs = async () =>
+      (await prisma.betLeg.findMany({ where: { bet: { matchId: under.matchId } }, orderBy: { position: "asc" } })).map((l) => [l.selection, l.stake, l.odds, l.result, l.profit]);
+    // $145.45 paid $365.44: 0.73u @ 2.5125, +1.10u.
+    expect(await legs()).toEqual([
+      ["UNDER", 1, 1.85, "WON", 0.85],
+      ["SWEEP", 0.73, 2.5125, "WON", 1.1],
+    ]);
+    // Scanning the slips again (all three in one row, or just one) adds nothing.
+    const all3 = [{ stake: 0.25, odds: 2.4, result: "WON" as const }, ...twoMore];
+    await expect(createPastBet(prisma, userId, { ...sweep, stake: 0.73, odds: 2.5125, result: "WON", parts: all3 }, now)).rejects.toMatchObject({ status: 409, code: "duplicate" });
+    await expect(createPastBet(prisma, userId, { ...sweep, stake: 0.25, odds: 2.5, result: "WON", parts: [twoMore[0]] }, now)).rejects.toMatchObject({ status: 409 });
+    // Typed in by hand (no slip bets): still a duplicate.
+    await expect(createPastBet(prisma, userId, { ...sweep, stake: 0.5, odds: 2.2, result: "WON" }, now)).rejects.toMatchObject({ status: 409 });
+    // A fourth sweep that lost: the pick becomes a split by result (won 0.73u, lost 0.25u).
+    expect(await createPastBet(prisma, userId, { ...sweep, stake: 0.25, odds: 2.6, result: "LOST", parts: [{ stake: 0.25, odds: 2.6, result: "LOST" }] }, now)).toMatchObject({ samePick: true });
+    expect(await legs()).toEqual([
+      ["UNDER", 1, 1.85, "WON", 0.85],
+      ["SWEEP", 0.73, 2.5125, "WON", 1.1],
+      ["SWEEP", 0.25, 2.6, "LOST", -0.25],
+    ]);
+    expect(await prisma.bet.findUniqueOrThrow({ where: { matchId: under.matchId } })).toMatchObject({ stake: 1.98, result: "WON", profit: 1.7 });
+    expect(await prisma.match.count({ where: { userId } })).toBe(1);
+  });
+
+  it("past bets: combining slip bets into a pick saved before (no slip bets kept), a settled rescan, and edits", async () => {
+    const now = new Date("2030-11-01T12:00:00Z");
+    const base = { player1: "Petas K.", player2: "Adamiak G.", competition: null, timezone: "Australia/Sydney", playType: "PERSONAL" as const, startsAt: "2030-10-31T07:30:00Z", selection: "SWEEP" as const, pointsLine: null };
+    // Saved before the slip bets were kept: 0.25u @ 2.40.
+    const old = await createPastBet(prisma, userId, { ...base, stake: 0.25, odds: 2.4, result: "WON" }, now);
+    expect((await prisma.bet.findUniqueOrThrow({ where: { matchId: old.matchId } })).slipParts).toBeNull();
+    // A row that doesn't include it is refused (can't tell it apart); one that does is combined.
+    await expect(createPastBet(prisma, userId, { ...base, stake: 0.25, odds: 2.5, result: "WON", parts: [{ stake: 0.25, odds: 2.5, result: "WON" }] }, now)).rejects.toMatchObject({ status: 409 });
+    const parts = [{ stake: 0.25, odds: 2.4, result: "WON" as const }, { stake: 0.25, odds: 2.5, result: "WON" as const }, { stake: 0.2273, odds: 2.65, result: "WON" as const }];
+    expect(await createPastBet(prisma, userId, { ...base, stake: 0.73, odds: 2.5125, result: "WON", parts }, now)).toMatchObject({ samePick: true });
+    const bet = () => prisma.bet.findUniqueOrThrow({ where: { matchId: old.matchId }, include: { legs: true } });
+    expect(await bet()).toMatchObject({ stake: 0.73, odds: 2.5125, result: "WON", profit: 1.1, legs: [] });
+    await expect(createPastBet(prisma, userId, { ...base, stake: 0.73, odds: 2.5125, result: "WON", parts }, now)).rejects.toMatchObject({ status: 409 });
+
+    // Scanned while open, then again once settled with one more bet: settled and combined.
+    const over = { ...base, player1: "Kolek M.", selection: "OVER" as const, pointsLine: 74.5 };
+    const open = await createPastBet(prisma, userId, { ...over, stake: 0.5, odds: 1.9, result: "PENDING", parts: [{ stake: 0.5, odds: 1.9, result: "PENDING" }] }, now);
+    await createPastBet(prisma, userId, { ...over, stake: 1, odds: 1.85, result: "WON", parts: [{ stake: 0.5, odds: 1.9, result: "WON" }, { stake: 0.5, odds: 1.8, result: "WON" }] }, now);
+    expect(await prisma.bet.findUniqueOrThrow({ where: { matchId: open.matchId } })).toMatchObject({ stake: 1, odds: 1.85, result: "WON", profit: 0.85 });
+    // Settling by hand keeps the slip bets; changing the stake forgets them (the same pick is then a duplicate).
+    await updateBet(prisma, userId, open.matchId, { result: "LOST" }, now);
+    expect((await prisma.bet.findUniqueOrThrow({ where: { matchId: open.matchId } })).slipParts).not.toBeNull();
+    await expect(createPastBet(prisma, userId, { ...over, stake: 0.5, odds: 1.8, result: "LOST", parts: [{ stake: 0.5, odds: 1.8, result: "LOST" }] }, now)).rejects.toMatchObject({ status: 409 });
+    await updateBet(prisma, userId, open.matchId, { stake: 1.2 }, now);
+    expect((await prisma.bet.findUniqueOrThrow({ where: { matchId: open.matchId } })).slipParts).toBeNull();
+    await expect(createPastBet(prisma, userId, { ...over, stake: 0.3, odds: 1.7, result: "LOST", parts: [{ stake: 0.3, odds: 1.7, result: "LOST" }] }, now)).rejects.toMatchObject({ status: 409 });
   });
 
   it("NBA bookmakers are saved with one spelling", async () => {
@@ -1100,7 +1165,7 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const base = { player1: "Kosmal D.", player2: "Minda M.", competition: "TT ELITE", timezone: "UTC", playType: "PERSONAL" as const, startsAt: "2030-09-20T06:55:00Z" };
     const first = await createPastBet(prisma, userId, { ...base, selection: "POINTS_SPREAD", pointsLine: -4.5, stake: 1, odds: 1.9, result: "WON" }, now);
     const second = await createPastBet(prisma, userId, { ...base, selection: "SET_SPREAD", pointsLine: 1.5, stake: 0.5, odds: 1.5, result: "LOST" }, now);
-    expect(second).toEqual({ matchId: first.matchId, combined: true });
+    expect(second).toEqual({ matchId: first.matchId, combined: true, samePick: false });
     const rows = await listBetRows(prisma, userId);
     expect(rows.map((r) => [r.selection, r.profit])).toEqual(expect.arrayContaining([["POINTS_SPREAD", 0.9], ["SET_SPREAD", -0.5]]));
     expect((await prisma.matchStatistics.findFirstOrThrow({ where: { matchId: first.matchId } })).pointsLine).toBe(-4.5);

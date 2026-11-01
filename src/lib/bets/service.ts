@@ -1,9 +1,11 @@
-import type { Bet, PrismaClient } from "@/generated/prisma/client";
+import { Prisma, type Bet, type PrismaClient } from "@/generated/prisma/client";
 import { ServiceError } from "@/lib/alarms/service-error";
 import { combineLegs, computeProfit, defaultStake, round2, type BetResult } from "./profit";
 import type { BetInput, BetLegInput, PastBetInput } from "@/lib/validation/match";
 import { matchDedupeKey } from "@/lib/matching/dedupe";
 import { canBeBot, playTypeFor, type Selection } from "@/lib/selection";
+import { combineSlipParts } from "./slip-combine";
+import { mergeParts, readParts, sameBet, type StoredPart } from "./slip-parts";
 
 interface Leg {
   selection: Selection;
@@ -102,6 +104,8 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
 
   if (legs.length) {
     const totals = combineLegs(legs);
+    // Stakes, odds or picks changed: the slip bets it was made of no longer add up to it.
+    const edited = legs.length !== current.length || legs.some((l, i) => l.selection !== current[i].selection || l.stake !== current[i].stake || l.odds !== current[i].odds);
     return prisma.$transaction(async (tx) => {
       await tx.betLeg.deleteMany({ where: { betId: bet.id } });
       await tx.betLeg.createMany({
@@ -116,6 +120,7 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
           profit: totals.profit,
           settledAt: totals.result === "PENDING" ? null : bet.settledAt ?? now,
           autoFilled: false,
+          ...(edited ? { slipParts: Prisma.DbNull } : {}),
         },
       });
     });
@@ -138,6 +143,7 @@ export async function updateBet(prisma: PrismaClient, userId: string, matchId: s
         settledAt: result === "PENDING" ? null : bet.settledAt ?? now,
         // Changed by you: no longer just the auto-filled pick.
         autoFilled: false,
+        ...(unsplit || stake !== bet.stake || odds !== bet.odds ? { slipParts: Prisma.DbNull } : {}),
       },
     });
   });
@@ -171,14 +177,14 @@ export async function createPastBet(
   userId: string,
   input: PastBetInput,
   now = new Date(),
-): Promise<{ matchId: string; combined: boolean }> {
+): Promise<{ matchId: string; combined: boolean; samePick?: boolean }> {
   const startsAt = new Date(input.startsAt);
   if (startsAt.getTime() > now.getTime()) {
     throw new ServiceError("That match hasn't started yet - add upcoming matches with Upload or Manual so you get the alarm.", 422, "not_past");
   }
   const dedupeKey = matchDedupeKey(input.player1, input.player2, startsAt);
   const existing = await prisma.match.findUnique({ where: { userId_dedupeKey: { userId, dedupeKey } }, select: { id: true } });
-  if (existing) return { matchId: existing.id, combined: await addPickToMatch(prisma, userId, existing.id, input, now) };
+  if (existing) return { matchId: existing.id, combined: true, ...(await addPickToMatch(prisma, userId, existing.id, input, now)) };
   const result = input.result as BetResult;
   // Several bets on this pick that settled differently: a split bet (one pick per result).
   const legs = input.legs?.map((l) => ({ selection: input.selection!, stake: round2(l.stake), odds: l.odds ?? null, result: l.result as BetResult, playType: null }));
@@ -211,6 +217,7 @@ export async function createPastBet(
                 placedAt: startsAt,
                 settledAt: totals.result === "PENDING" ? null : now,
                 legs: { create: legs.map((l, position) => ({ position, ...l, profit: computeProfit(l.stake, l.odds, l.result) })) },
+                ...slipPartsData(input),
               }
             : {
                 stake: input.stake,
@@ -219,6 +226,7 @@ export async function createPastBet(
                 profit: computeProfit(input.stake, input.odds, result),
                 placedAt: startsAt,
                 settledAt: result === "PENDING" ? null : now,
+                ...slipPartsData(input),
               },
       },
     },
@@ -227,22 +235,37 @@ export async function createPastBet(
   return { matchId: match.id, combined: false };
 }
 
+/** The slip bets a past bet from the bet-slip scanner is made of, with its pick. */
+function incomingParts(input: PastBetInput): StoredPart[] | null {
+  return input.parts?.length ? input.parts.map((p) => ({ pick: input.selection, stake: p.stake, odds: p.odds ?? null, result: p.result as BetResult })) : null;
+}
+
+const partsJson = (parts: StoredPart[]) => parts as unknown as Prisma.InputJsonValue;
+
+function slipPartsData(input: PastBetInput): { slipParts?: Prisma.InputJsonValue } {
+  const parts = incomingParts(input);
+  return parts ? { slipParts: partsJson(parts) } : {};
+}
+
 /**
  * A bet on a match you already have. With no bet yet (e.g. uploaded from a
  * screenshot but the alarm was ignored) or only the auto-filled pick, it becomes
  * this match's bet; a bet on a different pick than the match's makes it a
  * personal play on that pick.
  * With a bet already, a different pick (e.g. an UNDER and a SWEEP) makes it a
- * split bet; the same pick twice is refused. Either way the alarm is done.
+ * split bet. The same pick again: a new bet from a slip (e.g. a second sweep)
+ * is combined into it like bets on one slip are (see combineSlipParts); the
+ * same slip bet again, or the same pick added by hand, is refused as a
+ * duplicate. Either way the alarm is done.
  * `legs` (one pick settled differently on two lines) adds one pick per result.
  */
-async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: string, input: PastBetInput, now: Date): Promise<true> {
+async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: string, input: PastBetInput, now: Date): Promise<{ samePick: boolean }> {
   const match = await prisma.match.findFirstOrThrow({
     where: { id: matchId, userId },
     select: {
       playType: true,
       statistics: { select: { selection: true } },
-      bet: { select: { stake: true, odds: true, result: true, autoFilled: true, legs: { orderBy: { position: "asc" } } } },
+      bet: { select: { stake: true, odds: true, result: true, autoFilled: true, slipParts: true, legs: { orderBy: { position: "asc" } } } },
     },
   });
   // Bet on: the alarm is done (it stops ringing, like "Bet placed").
@@ -250,11 +273,15 @@ async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: str
     prisma.alarm.updateMany({ where: { matchId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED", completedAt: now, ackAt: now, ackAction: "placed" } });
   const pick = input.selection;
   const duplicate = () => new ServiceError("You already have this bet (same match, same pick).", 409, "duplicate", { existingId: matchId });
+  const tooMany = () => new ServiceError("A match can have at most 3 picks.", 409, "too_many_picks");
   // Its own Bot / Personal when that differs from the match (e.g. a bot UNDER plus a personal SWEEP).
   const legType = playTypeFor(pick, input.playType);
   const playType = legType === match.playType ? null : legType;
   const parts = input.legs ?? [{ stake: input.stake, odds: input.odds, result: input.result }];
   const newLegs: Leg[] = parts.map((l) => ({ selection: pick!, stake: round2(l.stake), odds: l.odds ?? null, result: l.result as BetResult, playType }));
+  const incoming = incomingParts(input);
+  // Saved after updateBet (which forgets them when the picks change).
+  const saveParts = (all: StoredPart[]) => prisma.bet.update({ where: { matchId }, data: { slipParts: all.length ? partsJson(all) : Prisma.DbNull } });
 
   if (!match.bet || match.bet.autoFilled) {
     // The match is there (e.g. added for an alarm) but has no bet yet, or only the pick filled in when it started.
@@ -276,19 +303,55 @@ async function addPickToMatch(prisma: PrismaClient, userId: string, matchId: str
         ...(!match.statistics && pick ? { statistics: { create: { selection: pick, pointsLine: input.pointsLine, ouStats: input.ouStats ?? null } } } : {}),
       },
     });
+    if (incoming) await saveParts(incoming);
     await personalSweepsAndSpreads(prisma, matchId);
     await alarmDone();
-    return true;
+    return { samePick: false };
   }
   if (!pick) throw duplicate();
-  const legs = match.bet.legs.length
+  const legs: Leg[] | null = match.bet.legs.length
     ? match.bet.legs.map((l) => ({ selection: l.selection as Selection, stake: l.stake, odds: l.odds, result: l.result as BetResult, playType: l.playType }))
     : match.statistics?.selection
       ? [{ selection: match.statistics.selection as Selection, stake: match.bet.stake, odds: match.bet.odds, result: match.bet.result as BetResult, playType: null }]
       : null;
-  if (!legs || legs.some((l) => l.selection === pick)) throw duplicate();
-  if (legs.length + newLegs.length > 3) throw new ServiceError("A match can have at most 3 picks.", 409, "too_many_picks");
-  await updateBet(prisma, userId, matchId, { legs: [...legs, ...newLegs] }, now);
+  if (!legs) throw duplicate();
+  const stored = readParts(match.bet.slipParts);
+
+  if (!legs.some((l) => l.selection === pick)) {
+    if (legs.length + newLegs.length > 3) throw tooMany();
+    await updateBet(prisma, userId, matchId, { legs: [...legs, ...newLegs] }, now);
+    if (stored || incoming) await saveParts([...(stored ?? []), ...(incoming ?? [])]);
+    await alarmDone();
+    return { samePick: false };
+  }
+
+  // The same pick again. Only bets from slips are combined (one typed in by hand is a duplicate).
+  if (!incoming) throw duplicate();
+  const mine = legs.filter((l) => l.selection === pick);
+  const single = mine.length === 1 ? mine[0] : null;
+  let known = stored?.filter((p) => p.pick === pick) ?? [];
+  let loose = false;
+  if (!known.length) {
+    // Saved before the slip bets were kept: it's the same bet only if it's one of these slip bets.
+    if (!single || !incoming.some((p) => sameBet(p, single, true))) throw duplicate();
+    known = [{ pick, stake: single.stake, odds: single.odds, result: single.result }];
+    loose = true;
+  } else if (single && single.result !== "PENDING") {
+    // Settled since (by you or a slip): its slip bets have that result.
+    known = known.map((p) => ({ ...p, result: single.result }));
+  }
+  const merged = mergeParts(known, incoming, loose);
+  if (!merged.changed) throw duplicate();
+
+  const c = combineSlipParts(merged.parts.map((p) => ({ stake: p.stake, odds: p.odds, result: p.result, pointsLine: null })));
+  const combined: Leg[] = (c.legs ?? [c]).map((l) => ({ selection: pick, stake: round2(l.stake), odds: l.odds, result: l.result, playType: mine[0].playType }));
+  // In the place of the pick's old leg(s).
+  const next = legs.filter((l) => l.selection !== pick);
+  next.splice(legs.findIndex((l) => l.selection === pick), 0, ...combined);
+  if (next.length > 3) throw tooMany();
+  if (next.length === 1) await updateBet(prisma, userId, matchId, { legs: null, stake: next[0].stake, odds: next[0].odds, result: next[0].result }, now);
+  else await updateBet(prisma, userId, matchId, { legs: next }, now);
+  await saveParts([...(stored ?? []).filter((p) => p.pick !== pick), ...merged.parts]);
   await alarmDone();
-  return true;
+  return { samePick: true };
 }

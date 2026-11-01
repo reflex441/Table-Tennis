@@ -163,6 +163,22 @@ export const pastBetSchema = z.object({
     .min(2)
     .max(3)
     .optional(),
+  /**
+   * From the bet-slip scanner: the single bets on the slips this pick is made
+   * of (stake in units). The match remembers them, so a new slip bet on a pick
+   * you already have is combined into it, and the same one again is a duplicate.
+   */
+  parts: z
+    .array(
+      z.object({
+        stake: z.number().positive().max(1000),
+        odds: z.number().gt(1).max(1000).nullish().transform((v) => v ?? null),
+        result: betResultSchema,
+      }),
+    )
+    .min(1)
+    .max(20)
+    .optional(),
 }).refine((b) => !b.legs || b.selection, { message: "Choose the pick of the split bet", path: ["selection"] });
 
 export type PastBetInput = z.infer<typeof pastBetSchema>;

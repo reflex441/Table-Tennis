@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
-import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
+import { BOT_IS_OVER_UNDER, SELECTIONS, SELECTION_LABEL, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
 import { defaultUnits, restake, round2 } from "@/lib/bets/profit";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { slipPlayType, type SlipReference } from "@/lib/bets/slip-play";
@@ -76,9 +76,15 @@ function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
   const out = [...rows];
   for (const r of incoming) {
     const part = r.parts[0];
-    const i = part
-      ? out.findIndex((t) => !t.status?.ok && t.parts.length > 0 && sameMatch(t, r) && sameSlipPick({ selection: t.selection || null, pointsLine: t.parts[0].pointsLine, text: t.pickText }, { selection: r.selection || null, pointsLine: part.pointsLine, text: r.pickText }))
-      : -1;
+    const samePick = (t: Row) =>
+      t.parts.length > 0 && sameMatch(t, r) && sameSlipPick({ selection: t.selection || null, pointsLine: t.parts[0].pointsLine, text: t.pickText }, { selection: r.selection || null, pointsLine: part.pointsLine, text: r.pickText });
+    // Already added: the same bet again is a repeat (a new one on that pick gets its own row, and is combined into it when added).
+    const done = part ? out.findIndex((t) => t.status?.ok && samePick(t) && t.parts.some((p) => p.batch !== part.batch && samePart(p, part))) : -1;
+    if (done >= 0) {
+      out[done] = { ...out[done], repeats: out[done].repeats + 1 };
+      continue;
+    }
+    const i = part ? out.findIndex((t) => !t.status?.ok && samePick(t)) : -1;
     if (i < 0) {
       out.push(r);
       continue;
@@ -102,6 +108,19 @@ function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
     };
   }
   return out;
+}
+
+/**
+ * The slip bets the row is made of, in units (sent with it, so a later slip
+ * bet on the same pick combines into it). None once you've changed its
+ * stake, odds or result: then they no longer add up to it.
+ */
+function slipParts(r: Row, unitSize: number): { stake: number; odds: number | null; result: SlipResult }[] | null {
+  if (!r.parts.length || !(unitSize > 0)) return null;
+  const c = combineSlipParts(r.parts);
+  const odds = r.odds.trim() ? Number(r.odds) : null;
+  if (!r.legs && (round2(c.stake / unitSize) !== Number(r.units) || c.odds !== odds || c.result !== r.result)) return null;
+  return r.parts.map((p) => ({ stake: Math.round((p.stake / unitSize) * 10_000) / 10_000, odds: p.odds, result: p.result }));
 }
 
 /** "2 bets combined: $250 @ 1.80 (75.5) + $200 @ 1.73 (74.5)" for a row made of several bets. */
@@ -202,7 +221,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         const own = r.ref?.source === "yours" ? r.ref : null;
         // Settled differently on two lines: one pick per result, stakes in units.
         const legs = r.legs?.map((l) => ({ stake: round2(l.stake / settings.unitSize), odds: l.odds, result: l.result }));
-        const res = await api<{ combined: boolean }>("/api/bets/past", {
+        const parts = slipParts(r, settings.unitSize);
+        const res = await api<{ combined: boolean; samePick: boolean }>("/api/bets/past", {
           method: "POST",
           json: {
             player1: own?.player1 ?? r.player1.trim(),
@@ -218,10 +238,18 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
             odds: legs ? null : r.odds.trim() ? Number(r.odds) : null,
             result: r.result,
             ...(legs ? { legs } : {}),
+            ...(parts ? { parts } : {}),
           },
         });
         added++;
-        patch(r.key, { status: { ok: true, message: res.combined ? (own ? "Added to that match on your dashboard" : "Added to the same match (split bet)") : "Added" } });
+        const message = res.samePick
+          ? `Combined with the ${r.selection === "ML" ? "ML" : r.selection ? SELECTION_LABEL[r.selection].toLowerCase() : "bet"} already on that match`
+          : res.combined
+            ? own
+              ? "Added to that match on your dashboard"
+              : "Added to the same match (split bet)"
+            : "Added";
+        patch(r.key, { status: { ok: true, message } });
       } catch (err) {
         patch(r.key, { status: { ok: false, message: err instanceof Error ? err.message : String(err) } });
       }

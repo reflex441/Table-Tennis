@@ -49,7 +49,7 @@ describe("combining bets on the same pick from bet slips", () => {
     expect(combineLegs(legs)).toEqual({ stake: 4.5, result: "LOST", profit: -1.04 });
   });
 
-  it("Over/Under on any line is the same pick; spreads and sweeps only on the same line", () => {
+  it("Over/Under on any line and every sweep are the same pick; spreads only on the same line", () => {
     expect(sameSlipPick({ selection: "OVER", pointsLine: 75.5 }, { selection: "OVER", pointsLine: 74.5 })).toBe(true);
     expect(sameSlipPick({ selection: "OVER", pointsLine: 75.5 }, { selection: "UNDER", pointsLine: 75.5 })).toBe(false);
     expect(sameSlipPick({ selection: "POINTS_SPREAD", pointsLine: -4.5 }, { selection: "POINTS_SPREAD", pointsLine: 4.5 })).toBe(false);
@@ -58,6 +58,35 @@ describe("combining bets on the same pick from bet slips", () => {
     // An ML on each player isn't the same bet; two on the same player are.
     expect(sameSlipPick({ selection: "ML", pointsLine: null, text: "Mateusz Sikon" }, { selection: "ML", pointsLine: null, text: "Pawel Slosarczyk" })).toBe(false);
     expect(sameSlipPick({ selection: "ML", pointsLine: null, text: "Mateusz Sikon" }, { selection: "ML", pointsLine: null, text: "Mateusz  Sikon" })).toBe(true);
+    // "Total Exact Sets 3", "Kacper Petas 3-0" and "Kacper Petas (-2.5)" are all the sweep.
+    const sweeps = ["3", "Kacper Petas 3-0", "Kacper Petas (-2.5)"].map((text) => ({ selection: "SWEEP" as const, pointsLine: null, text }));
+    expect([sameSlipPick(sweeps[0], sweeps[1]), sameSlipPick(sweeps[1], sweeps[2]), sameSlipPick(sweeps[0], sweeps[2])]).toEqual([true, true, true]);
+  });
+
+  it("the three sweeps add up to one bet: $145.45 that paid $365.44", () => {
+    const c = combineSlipParts([
+      { stake: 50, odds: 2.4, result: "WON", pointsLine: null },
+      { stake: 50, odds: 2.5, result: "WON", pointsLine: null },
+      { stake: 45.45, odds: 2.65, result: "WON", pointsLine: null },
+    ]);
+    expect(c).toMatchObject({ stake: 145.45, odds: 2.5125, result: "WON", legs: null });
+    expect(round2(c.stake * c.odds!)).toBe(365.44);
+  });
+
+  it("slip bets already on a pick aren't counted again; an open one takes the settled result", async () => {
+    const { mergeParts, readParts, sameBet } = await import("@/lib/bets/slip-parts");
+    const known: { stake: number; odds: number | null; result: "WON" | "LOST" | "VOID" | "PENDING" }[] = [{ stake: 0.25, odds: 2.4, result: "WON" }];
+    expect(mergeParts(known, [{ stake: 0.25, odds: 2.4, result: "WON" }])).toEqual({ parts: known, changed: false });
+    expect(mergeParts(known, [{ stake: 0.25, odds: 2.4, result: "WON" }, { stake: 0.25, odds: 2.5, result: "WON" }]).parts).toHaveLength(2);
+    // Two identical bets on one slip are two bets.
+    expect(mergeParts([], [known[0], known[0]]).parts).toHaveLength(2);
+    expect(mergeParts([{ stake: 0.5, odds: 1.9, result: "PENDING" as const }], [{ stake: 0.5, odds: 1.9, result: "WON" }])).toEqual({ parts: [{ stake: 0.5, odds: 1.9, result: "WON" }], changed: true });
+    expect(mergeParts(known, [{ stake: 0.25, odds: 2.4, result: "PENDING" }]).changed).toBe(false);
+    // A pick saved with its stake rounded to 0.01u.
+    expect(sameBet({ stake: 0.23, odds: 2.65 }, { stake: 0.2273, odds: 2.65 }, true)).toBe(true);
+    expect(sameBet({ stake: 0.23, odds: 2.65 }, { stake: 0.2273, odds: 2.65 })).toBe(false);
+    expect(readParts([{ pick: "SWEEP", stake: 0.25, odds: 2.4, result: "WON" }, { stake: -1 }, "x"])).toEqual([{ pick: "SWEEP", stake: 0.25, odds: 2.4, result: "WON" }]);
+    expect(readParts(null)).toBeNull();
   });
 
   it("a split past bet needs its pick", () => {

@@ -56,6 +56,27 @@ describe("bet slips", () => {
     expect(pickText("ML", null)).toBe("ML");
   });
 
+  it("'Total Exact Sets' 3, a 3-0 correct score and a -2.5 set line are all the sweep", () => {
+    const base = { player1: "Kacper Petas", player2: "Grzegorz Adamiak", competition: null, pointsLine: null, resultText: "Win", dateText: "Saturday 31 Oct", timeText: "6:30pm (AEDT)" };
+    const bets = normalizeBetSlips({
+      bets: [
+        { ...base, selectionText: "3", marketText: "Total Exact Sets", selection: null, odds: 2.4, stake: 50 },
+        { ...base, selectionText: "Kacper Petas 3-0", marketText: "Correct Score", selection: null, odds: 2.5, stake: 50 },
+        { ...base, selectionText: "Kacper Petas (-2.5)", marketText: "Line -2.5", selection: "SET_SPREAD", pointsLine: -2.5, odds: 2.65, stake: 45.45 },
+        // Other set totals aren't a pick; under 3.5 sets is the sweep.
+        { ...base, selectionText: "4", marketText: "Total Exact Sets", selection: "SWEEP", odds: 3.2, stake: 10 },
+        { ...base, selectionText: "Under 3.5", marketText: "Total Sets", selection: "UNDER", pointsLine: 3.5, odds: 2.3, stake: 10 },
+      ],
+    });
+    expect(bets.map((b) => [b.selection, b.pointsLine])).toEqual([
+      ["SWEEP", null],
+      ["SWEEP", null],
+      ["SWEEP", null],
+      [null, null],
+      ["SWEEP", null],
+    ]);
+  });
+
   it("works out the date in your timezone", () => {
     const now = new Date("2026-10-03T02:00:00Z"); // 12:00 Sat 3 Oct in Sydney
     const tz = "Australia/Sydney";

@@ -44,12 +44,12 @@ export const BET_SLIP_JSON_SCHEMA = {
           player2: str("Second player's name."),
           competition: str("League / competition if shown (usually 'TT Elite Series', 'TT Cup' or 'Czech Liga Pro'). Null if not shown."),
           selectionText: str("The selection exactly as shown on the slip, e.g. 'Over 73.5', 'Under 74.5', 'Dawid Kosmal (-2.5)', 'Dawid Kosmal (+1.5)', 'Dawid Kosmal (-4.5)', 'Mateusz Sikon', 'Mateusz Sikon 3-0'."),
-          marketText: str("The market name shown under the selection, e.g. 'Match Betting', 'Correct Score', 'Total', 'Handicap'. Null if not shown."),
+          marketText: str("The market name shown under the selection, e.g. 'Match Betting', 'Correct Score', 'Total Exact Sets', 'Line -2.5', 'Total', 'Handicap'. Null if not shown."),
           selection: {
             type: ["string", "null"],
             enum: ["OVER", "UNDER", "SWEEP", "SET_SPREAD", "POINTS_SPREAD", "ML", null],
             description:
-              "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet. SWEEP for a player at -2.5 sets (e.g. 'Dawid Kosmal (-2.5)' with 'Line 2.5': winning 3-0), or a 'Correct Score' of 3-0 (e.g. 'Mateusz Sikon 3-0'). SET_SPREAD for any other set handicap (e.g. '(-1.5)', '(+1.5)', '(+2.5)'). POINTS_SPREAD for a points handicap (e.g. '(-4.5)', '(+3.5)'). ML for 'Match Betting' / head to head (a player to win the match, e.g. 'Mateusz Sikon'). Null for other markets (e.g. other correct scores).",
+              "OVER for an Over bet (e.g. 'Over 73.5'), UNDER for an Under bet. SWEEP for a player at -2.5 sets (e.g. 'Dawid Kosmal (-2.5)' with 'Line 2.5': winning 3-0), or a 'Correct Score' of 3-0 (e.g. 'Mateusz Sikon 3-0'), or 'Total Exact Sets' 3 (the match over in 3 sets). SET_SPREAD for any other set handicap (e.g. '(-1.5)', '(+1.5)', '(+2.5)'). POINTS_SPREAD for a points handicap (e.g. '(-4.5)', '(+3.5)'). ML for 'Match Betting' / head to head (a player to win the match, e.g. 'Mateusz Sikon'). Null for other markets (e.g. other correct scores).",
           },
           pointsLine: num("The total points line, e.g. 'Over 73.5' -> 73.5. For a spread, the handicap with its sign, e.g. '(-4.5)' -> -4.5. Null for a SWEEP."),
           odds: num("Decimal odds of the bet, e.g. '@ 1.80' -> 1.8."),
@@ -69,7 +69,7 @@ export const BET_SLIP_PROMPT = `You are reading a screenshot of bookmaker bet sl
 Return every bet visible in the screenshot, one entry per bet, in order.
 - player1 / player2: the two players of the match ("A vs B").
 - selectionText: the selection exactly as shown (e.g. "Over 73.5", "Dawid Kosmal (-2.5)", "Mateusz Sikon", "Mateusz Sikon 3-0"). marketText: the market name under it ("Match Betting", "Correct Score"...).
-- selection: OVER for "Over 73.5", UNDER for "Under 73.5" (total points markets). SWEEP for a player with a -2.5 set handicap, shown like "Dawid Kosmal (-2.5)" with "Line 2.5" (that player winning 3-0), or a "Correct Score" bet on 3-0 ("Mateusz Sikon 3-0"). SET_SPREAD for any other set handicap ("(-1.5)", "(+1.5)", "(+2.5)"). POINTS_SPREAD for a points handicap ("(-4.5)", "(+3.5)"). ML for "Match Betting" / head to head: a player to win the match ("Mateusz Sikon"). Null for other markets (other correct scores...).
+- selection: OVER for "Over 73.5", UNDER for "Under 73.5" (total points markets). SWEEP for a player with a -2.5 set handicap, shown like "Dawid Kosmal (-2.5)" with "Line 2.5" (that player winning 3-0), or a "Correct Score" bet on 3-0 ("Mateusz Sikon 3-0"), or "Total Exact Sets" 3 (the match over in 3 sets). SET_SPREAD for any other set handicap ("(-1.5)", "(+1.5)", "(+2.5)"). POINTS_SPREAD for a points handicap ("(-4.5)", "(+3.5)"). ML for "Match Betting" / head to head: a player to win the match ("Mateusz Sikon"). Null for other markets (other correct scores...).
 - pointsLine: the number after Over/Under; for a spread, the handicap with its sign (-4.5); null for a SWEEP or ML. odds: the decimal odds of the bet. stake: the amount staked, without the currency sign.
 - resultText: copy the settlement exactly: "Win"/"Won" (and a return amount) means the bet won; "No Return" means it lost; "Refund"/"Void" means void. Null if the bet hasn't been settled yet.
 - dateText / timeText: copy the date and time shown for the bet verbatim. Don't convert or guess.
@@ -117,7 +117,8 @@ function handicapPick(text: string | null | undefined): { selection: Selection; 
 
 /**
  * From the market: "Correct Score" 3-0 (or 0-3) is the sweep, other correct
- * scores aren't a pick; "Match Betting" / head to head is the ML. Undefined
+ * scores aren't a pick; "Total Exact Sets" 3 is the sweep too; "Match
+ * Betting" / head to head is the ML. Undefined
  * when the market says nothing (Gemini's pick or the handicap decide).
  */
 function marketPick(market: string | null, selectionText: string | null): Selection | null | undefined {
@@ -126,6 +127,11 @@ function marketPick(market: string | null, selectionText: string | null): Select
     if (!score) return null;
     const sets = [Number(score[1]), Number(score[2])].sort().join("-");
     return sets === "0-3" ? "SWEEP" : null;
+  }
+  // "Total Exact Sets" 3 (or Under 3.5 sets): the match is over in 3 sets, a sweep. Other set totals aren't a pick.
+  if (/\bsets\b/i.test(market ?? "") && /\b(exact|total|number)\b/i.test(market ?? "")) {
+    const t = (selectionText ?? "").trim();
+    return /^3(\s*sets?)?$/i.test(t) || /^under\s*3\.5\b/i.test(t) ? "SWEEP" : null;
   }
   if (/match\s*betting|head\s*to\s*head|\bh2h\b|match\s*winner|to\s*win|money\s*line|\bml\b/i.test(market ?? "")) return "ML";
   return undefined;

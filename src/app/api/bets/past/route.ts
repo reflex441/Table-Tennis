@@ -10,6 +10,6 @@ import { getMatch } from "@/lib/alarms/queries";
 export const POST = handle(async (request: Request) => {
   const userId = await requireUserId();
   const input = await parseJson(request, pastBetSchema);
-  const { matchId, combined } = await createPastBet(db(), userId, input);
-  return NextResponse.json({ match: await getMatch(db(), userId, matchId), combined }, { status: 201 });
+  const { matchId, combined, samePick } = await createPastBet(db(), userId, input);
+  return NextResponse.json({ match: await getMatch(db(), userId, matchId), combined, samePick: Boolean(samePick) }, { status: 201 });
 });

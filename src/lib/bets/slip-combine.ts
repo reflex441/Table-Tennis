@@ -44,10 +44,15 @@ interface SlipPick {
 
 const side = (t: string | null | undefined) => (t ?? "").toLowerCase().replace(/[^a-z]/g, "");
 
-/** Same pick on the same match: Over/Under with any line, other picks only on the same line and player (an ML on each player isn't one bet). */
+/**
+ * Same pick on the same match: Over/Under with any line, and every sweep (a
+ * "Correct Score 3-0", a "-2.5" set line and "Total Exact Sets 3" are all the
+ * sweep). Other picks only on the same line and player (an ML on each player
+ * isn't one bet).
+ */
 export function sameSlipPick(a: SlipPick, b: SlipPick): boolean {
   if (!a.selection || a.selection !== b.selection) return false;
-  if (a.selection === "OVER" || a.selection === "UNDER") return true;
+  if (a.selection === "OVER" || a.selection === "UNDER" || a.selection === "SWEEP") return true;
   return a.pointsLine === b.pointsLine && (!a.text || !b.text || side(a.text) === side(b.text));
 }
 
