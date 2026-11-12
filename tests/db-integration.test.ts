@@ -39,6 +39,7 @@ import { deleteIdleMatches } from "@/lib/alarms/idle-matches";
 import { recordUsage, usageLast30Days } from "@/lib/usage/meter";
 import { listAccounts, setNbaTailing } from "@/lib/auth/account-list";
 import { recordVisit } from "@/lib/auth/last-seen";
+import { pastBetSuggestions } from "@/lib/bets/past-games-query";
 import { copyNbaBets, getNbaTail } from "@/lib/nba/tailing";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -1158,6 +1159,43 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(guessCompetition("Komorowicz J.", "Dmytro Kovtanyuk", index)).toBe("TT CUP");
     // Sam's own matches aren't used, not even for Sam.
     expect(guessCompetition("Varcl J.", null, index)).toBeNull();
+  });
+
+  it("past bet form: suggests your and the owner's past games and players, never anyone else's", async () => {
+    const now = new Date("2030-11-12T12:00:00Z");
+    const sam = (await prisma.user.create({ data: { email: "sam@example.com", name: "Sam" } })).id;
+    const lee = (await prisma.user.create({ data: { email: "lee@example.com", name: "Lee" } })).id;
+    const at = (h: number) => new Date(now.getTime() - h * 3_600_000);
+    let k = 0;
+    const game = (userId: string, player1: string, player2: string, startsAt: Date, competition: string | null, more: Record<string, unknown> = {}) =>
+      prisma.match.create({ data: { userId, player1, player2, competition, startsAt, timezone: "UTC", dedupeKey: `g${k++}`, ...more } });
+    // The owner's games (the bot plays).
+    await game(userId, "Lewczuk M.", "Staniczek A.", at(3.5), "TT ELITE", { playType: "BOT", statistics: { create: { selection: "UNDER", pointsLine: 74.5 } } });
+    await game(userId, "Lewczuk M.", "Kubik P.", at(30), "TT ELITE");
+    await game(userId, "Lewczuk M.", "Nowak J.", at(24 * 60), "TT CUP"); // too long ago to suggest, but still counts for the league
+    await game(userId, "Lewczuk M.", "Later L.", new Date(now.getTime() + 3_600_000), "TT ELITE"); // not played yet
+    // Sam's copy of the first one (with a bet), and Sam's own game.
+    const copy = await game(sam, "Staniczek A.", "Lewczuk M.", at(3.5), "TT Elite");
+    await prisma.bet.create({ data: { matchId: copy.id, stake: 1, odds: 1.77, placedAt: now } });
+    await game(sam, "Varcl J.", "Prokop T.", at(5), null);
+    // Lee's game: never suggested to Sam.
+    await game(lee, "Secret S.", "Hidden H.", at(2), "TT CUP");
+
+    const forSam = await pastBetSuggestions(prisma, sam, now);
+    expect(forSam.games.map((g) => [g.player1, g.player2, g.competition, g.mine, g.bet])).toEqual([
+      ["Staniczek A.", "Lewczuk M.", "TT ELITE", true, true], // Sam's own copy wins over the owner's
+      ["Varcl J.", "Prokop T.", null, true, false],
+      ["Lewczuk M.", "Kubik P.", "TT ELITE", false, false],
+    ]);
+    const lewczuk = forSam.players.find((p) => p.name === "Lewczuk M.")!;
+    expect(lewczuk.games).toBe(5);
+    expect(Object.fromEntries(lewczuk.leagues.map(([league, n]) => [league, n]))).toEqual({ "TT ELITE": 4, "TT CUP": 1 });
+    expect(forSam.players.some((p) => p.name === "Secret S.")).toBe(false);
+
+    // The owner sees the pick of their bot play.
+    const forOwner = await pastBetSuggestions(prisma, userId, now);
+    expect(forOwner.games[0]).toMatchObject({ player1: "Lewczuk M.", playType: "BOT", selection: "UNDER", pointsLine: 74.5, mine: true, bet: false });
+    expect(forOwner.games).toHaveLength(2);
   });
 
   it("spread picks are saved and split like any other pick", async () => {

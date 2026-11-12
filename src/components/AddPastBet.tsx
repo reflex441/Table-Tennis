@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Plus, ScanText, X } from "lucide-react";
 import { SlipScanner } from "./SlipScanner";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
-import { fromLocalInputValue } from "@/lib/format";
-import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, selectionName, type Selection } from "@/lib/selection";
+import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
+import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
 import { restake, round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
 import { LeagueSelect } from "./LeagueSelect";
+import { PlayerSearch } from "./PlayerSearch";
+import { leagueIndexOf, type PastGame, type PastSuggestions } from "@/lib/bets/past-games";
+import { guessCompetition } from "@/lib/bets/league-index";
 
 type Result = "WON" | "LOST" | "VOID" | "PENDING";
 
@@ -58,6 +61,54 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const set = (patch: Partial<typeof f>) => setF((prev) => ({ ...prev, ...patch }));
 
+  // Past games and players to pick from as you type (loaded once; the search runs here).
+  const [suggestions, setSuggestions] = useState<PastSuggestions | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<PastSuggestions>("/api/bets/past/suggestions")
+      .then((s) => live && setSuggestions(s))
+      .catch(() => {}); // Without them the form works as before.
+    return () => {
+      live = false;
+    };
+  }, []);
+  const leagues = useMemo(() => (suggestions ? leagueIndexOf(suggestions.players) : null), [suggestions]);
+  // Where the league came from; null = chosen by you (then it's left alone).
+  const [leagueFrom, setLeagueFrom] = useState<"auto" | "guess" | "game" | null>("auto");
+
+  /** New player names: the league follows the players' past matches unless you chose one. */
+  const setPlayers = (patch: { player1?: string; player2?: string }) => {
+    const next = { ...f, ...patch };
+    if (leagueFrom === null || !leagues) return set(patch);
+    const guess = guessCompetition(next.player1, next.player2, leagues);
+    if (guess) {
+      set({ ...patch, competition: guess });
+      setLeagueFrom("guess");
+    } else {
+      // Nothing known about these players: an earlier guess no longer applies.
+      set({ ...patch, ...(leagueFrom !== "auto" ? { competition: "" } : {}) });
+      setLeagueFrom("auto");
+    }
+  };
+
+  /** A past game from the list: the match, its league and time, and its pick. */
+  const pickGame = (g: PastGame) => {
+    const guess = leagues ? guessCompetition(g.player1, g.player2, leagues) : null;
+    const competition = g.competition ?? guess ?? (leagueFrom === null ? f.competition : "");
+    const selection = g.selection ?? (f.selection || null);
+    const playType = playTypeFor(selection, g.playType);
+    set({
+      player1: g.player1,
+      player2: g.player2,
+      competition,
+      startsAt: toLocalInputValue(g.startsAt, tz),
+      ...(g.selection ? { selection: g.selection, pointsLine: g.pointsLine !== null ? String(g.pointsLine) : "" } : {}),
+      playType,
+      stake: restake(f.stake, f.playType, playType),
+    });
+    setLeagueFrom(g.competition ? "game" : guess ? "guess" : leagueFrom === null ? null : "auto");
+  };
+
   const save = async () => {
     const startsAt = fromLocalInputValue(f.startsAt, tz);
     const stake = Number(f.stake);
@@ -92,7 +143,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
       notify(
         "Past bet added",
         res.combined
-          ? `Added to your existing ${f.player1.trim()} vs ${f.player2.trim()} match as a split bet.`
+          ? `Added to your existing ${f.player1.trim()} vs ${f.player2.trim()} match.`
           : `${f.player1.trim()} vs ${f.player2.trim()} is on your Profit page.`,
       );
       router.refresh();
@@ -132,17 +183,20 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label>
-          <span className="label">Player 1</span>
-          <input className="input" value={f.player1} onChange={(e) => set({ player1: e.target.value })} aria-label="Player 1" />
-        </label>
-        <label>
-          <span className="label">Player 2</span>
-          <input className="input" value={f.player2} onChange={(e) => set({ player2: e.target.value })} aria-label="Player 2" />
-        </label>
+        <PlayerSearch label="Player 1" value={f.player1} other={f.player2} suggestions={suggestions} timezone={tz} onChange={(v) => setPlayers({ player1: v })} onPickGame={pickGame} />
+        <PlayerSearch label="Player 2" value={f.player2} other={f.player1} suggestions={suggestions} timezone={tz} onChange={(v) => setPlayers({ player2: v })} onPickGame={pickGame} />
         <label>
           <span className="label">League</span>
-          <LeagueSelect value={f.competition} onChange={(v) => set({ competition: v })} />
+          <LeagueSelect
+            value={f.competition}
+            onChange={(v) => {
+              set({ competition: v });
+              setLeagueFrom(null);
+            }}
+          />
+          <span className="mt-0.5 block text-[11px] text-muted">
+            {leagueFrom === "guess" ? "From the players' past matches" : leagueFrom === "game" ? "From that game" : "\u00a0"}
+          </span>
         </label>
         <div>
           <span className="label">Date and time</span>
