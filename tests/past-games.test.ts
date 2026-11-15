@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leagueIndexOf, nameFits, searchGames, searchPlayers, type KnownPlayer, type PastGame } from "@/lib/bets/past-games";
+import { leagueIndexOf, nameFits, searchPlayers, type KnownPlayer } from "@/lib/bets/past-games";
 import { buildLeagueIndex, guessCompetition } from "@/lib/bets/league-index";
 
 const players: KnownPlayer[] = [
@@ -9,39 +9,37 @@ const players: KnownPlayer[] = [
   { name: "Kowalewski M.", games: 50, leagues: [] },
 ];
 
-const game = (player1: string, player2: string, startsAt: string): PastGame => ({
-  player1,
-  player2,
-  competition: "TT ELITE",
-  startsAt,
-  playType: "BOT",
-  selection: "UNDER",
-  pointsLine: 74.5,
-  mine: false,
-  bet: false,
-});
-
-describe("past bet form: searching past games and players", () => {
-  it("a name fits when every typed word starts one of its words", () => {
+describe("past bet form: searching players", () => {
+  it("a name fits when the typed surname starts it and the initial is its initial", () => {
     expect(nameFits("Lewczuk M.", "lewc")).toBe(true);
     expect(nameFits("Lewczuk M.", "m lew")).toBe(true);
+    expect(nameFits("Lewczuk M.", "Lewczuk M.")).toBe(true);
     expect(nameFits("Lewczuk M.", "Mateusz Lewczuk")).toBe(true); // full first name vs the initial
     expect(nameFits("Lewczuk M.", "czuk")).toBe(false);
+    expect(nameFits("Lewczuk M.", "Lewczuk K.")).toBe(false); // another initial
     expect(nameFits("Lewczuk M.", "Adam Lewczuk")).toBe(false);
     expect(nameFits("Lewczuk M.", " ")).toBe(false);
+    // "Jablonski K." isn't "Komorowicz J." (K is the initial, not the start of a surname).
+    expect(nameFits("Komorowicz J.", "Jablonski K.")).toBe(false);
+    expect(nameFits("Komorowicz J.", "Jablonski")).toBe(false);
   });
 
-  it("players: surname matches first, then the most games", () => {
+  it("searching a full name shows just that player", () => {
+    const list: KnownPlayer[] = [
+      { name: "Komorowicz J.", games: 40, leagues: [["TT CUP", 40, 5]] },
+      { name: "Wiekiera A.", games: 30, leagues: [["TT CUP", 30, 5]] },
+      { name: "Jablonski K.", games: 9, leagues: [["TT CUP", 9, 5]] },
+      { name: "Jablonski P.", games: 20, leagues: [["TT ELITE", 20, 5]] },
+      { name: "Kosowski J.", games: 25, leagues: [["TT ELITE", 25, 5]] },
+    ];
+    expect(searchPlayers(list, "Jablonski K.").map((p) => p.name)).toEqual(["Jablonski K."]);
+    // Just the surname: both Jablonskis (most games first).
+    expect(searchPlayers(list, "jabl").map((p) => p.name)).toEqual(["Jablonski P.", "Jablonski K."]);
+  });
+
+  it("players: the exact name first, then surname matches, then the most games", () => {
     expect(searchPlayers(players, "lew").map((p) => p.name)).toEqual(["Lewandowski K.", "Lewczuk M."]);
-    // "Kowalewski M." only fits "m" through the initial: after the surnames.
-    expect(searchPlayers(players, "m").map((p) => p.name)).toEqual(["Kowalewski M.", "Lewczuk M."]);
-  });
-
-  it("games: latest first, and with the other player typed in, games of the two first", () => {
-    const games = [game("Lewczuk M.", "Kubik P.", "2026-11-12T09:00:00Z"), game("Staniczek A.", "Lewczuk M.", "2026-11-12T08:30:00Z"), game("Nowak J.", "Kubik P.", "2026-11-12T08:00:00Z")];
-    expect(searchGames(games, "lewc").map((g) => g.player2)).toEqual(["Kubik P.", "Lewczuk M."]);
-    expect(searchGames(games, "lewc", "Stan").map((g) => g.player1)).toEqual(["Staniczek A.", "Lewczuk M."]);
-    expect(searchGames(games, "zzz")).toEqual([]);
+    expect(searchPlayers(players, "Lewczuk M.").map((p) => p.name)).toEqual(["Lewczuk M."]);
   });
 
   it("the league comes from the players' past matches, the same as from the matches themselves", () => {

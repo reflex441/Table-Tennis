@@ -6,15 +6,15 @@ import { Check, Loader2, Plus, ScanText, X } from "lucide-react";
 import { SlipScanner } from "./SlipScanner";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
-import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
-import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
+import { fromLocalInputValue } from "@/lib/format";
+import { BOT_IS_OVER_UNDER, SELECTIONS, canBeBot, selectionName, type Selection } from "@/lib/selection";
 import { restake, round2 } from "@/lib/bets/profit";
 import { useSettings } from "./SettingsProvider";
 import { useNotifications } from "./NotificationProvider";
 import { DateTimeInput } from "./DateTimeInput";
 import { LeagueSelect } from "./LeagueSelect";
 import { PlayerSearch } from "./PlayerSearch";
-import { leagueIndexOf, type PastGame, type PastSuggestions } from "@/lib/bets/past-games";
+import { leagueIndexOf, type PastSuggestions } from "@/lib/bets/past-games";
 import { guessCompetition } from "@/lib/bets/league-index";
 
 type Result = "WON" | "LOST" | "VOID" | "PENDING";
@@ -61,7 +61,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const set = (patch: Partial<typeof f>) => setF((prev) => ({ ...prev, ...patch }));
 
-  // Past games and players to pick from as you type (loaded once; the search runs here).
+  // Player names to pick from as you type (loaded once; the search runs here).
   const [suggestions, setSuggestions] = useState<PastSuggestions | null>(null);
   useEffect(() => {
     let live = true;
@@ -74,7 +74,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
   }, []);
   const leagues = useMemo(() => (suggestions ? leagueIndexOf(suggestions.players) : null), [suggestions]);
   // Where the league came from; null = chosen by you (then it's left alone).
-  const [leagueFrom, setLeagueFrom] = useState<"auto" | "guess" | "game" | null>("auto");
+  const [leagueFrom, setLeagueFrom] = useState<"auto" | "guess" | null>("auto");
 
   /** New player names: the league follows the players' past matches unless you chose one. */
   const setPlayers = (patch: { player1?: string; player2?: string }) => {
@@ -89,24 +89,6 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
       set({ ...patch, ...(leagueFrom !== "auto" ? { competition: "" } : {}) });
       setLeagueFrom("auto");
     }
-  };
-
-  /** A past game from the list: the match, its league and time, and its pick. */
-  const pickGame = (g: PastGame) => {
-    const guess = leagues ? guessCompetition(g.player1, g.player2, leagues) : null;
-    const competition = g.competition ?? guess ?? (leagueFrom === null ? f.competition : "");
-    const selection = g.selection ?? (f.selection || null);
-    const playType = playTypeFor(selection, g.playType);
-    set({
-      player1: g.player1,
-      player2: g.player2,
-      competition,
-      startsAt: toLocalInputValue(g.startsAt, tz),
-      ...(g.selection ? { selection: g.selection, pointsLine: g.pointsLine !== null ? String(g.pointsLine) : "" } : {}),
-      playType,
-      stake: restake(f.stake, f.playType, playType),
-    });
-    setLeagueFrom(g.competition ? "game" : guess ? "guess" : leagueFrom === null ? null : "auto");
   };
 
   const save = async () => {
@@ -183,8 +165,8 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <PlayerSearch label="Player 1" value={f.player1} other={f.player2} suggestions={suggestions} timezone={tz} onChange={(v) => setPlayers({ player1: v })} onPickGame={pickGame} />
-        <PlayerSearch label="Player 2" value={f.player2} other={f.player1} suggestions={suggestions} timezone={tz} onChange={(v) => setPlayers({ player2: v })} onPickGame={pickGame} />
+        <PlayerSearch label="Player 1" value={f.player1} suggestions={suggestions} onChange={(v) => setPlayers({ player1: v })} />
+        <PlayerSearch label="Player 2" value={f.player2} suggestions={suggestions} onChange={(v) => setPlayers({ player2: v })} />
         <label>
           <span className="label">League</span>
           <LeagueSelect
@@ -195,7 +177,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
             }}
           />
           <span className="mt-0.5 block text-[11px] text-muted">
-            {leagueFrom === "guess" ? "From the players' past matches" : leagueFrom === "game" ? "From that game" : "\u00a0"}
+            {leagueFrom === "guess" ? "From the players' past matches" : "\u00a0"}
           </span>
         </label>
         <div>
