@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Bot, Swords, Trophy, User } from "lucide-react";
 import type { BetRowWithMatch } from "@/lib/bets/queries";
 import { formatUnits, summarize, summarizeBy, type ProfitSummary } from "@/lib/bets/profit";
@@ -23,6 +23,9 @@ import { AddPastBet } from "./AddPastBet";
 import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } from "@/lib/bets/matchups";
 import { tidyCompetition } from "@/lib/leagues";
 import { SummaryStats, pct } from "./SummaryStats";
+import { Segmented } from "./Segmented";
+import { PlayerProfit, type PlayerKind } from "./PlayerProfit";
+import { rowIsFor } from "@/lib/bets/by-player";
 
 type Period = "7d" | "30d" | "90d" | "all";
 type TypeFilter = "ALL" | "BOT" | "PERSONAL";
@@ -80,6 +83,9 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
   const [chartMode, setChartMode] = useState<"total" | "picks">("total");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "date", desc: true });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // A player or pair picked in the Players table: the Bets table shows their bets.
+  const [who, setWho] = useState<{ kind: PlayerKind; key: string; label: string } | null>(null);
+  const betsRef = useRef<HTMLElement>(null);
   const today = useToday(tz);
 
   const inPeriod = useMemo(
@@ -153,9 +159,9 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
       }
     };
     // A day picked on the calendar shows that day's bets, whatever the period.
-    const rows = dayRows ?? filtered;
+    const rows = (dayRows ?? filtered).filter((r) => !who || rowIsFor(r, who.kind, who.key));
     return [...rows].sort((a, b) => (sort.desc ? val(b) - val(a) : val(a) - val(b)));
-  }, [filtered, dayRows, sort]);
+  }, [filtered, dayRows, sort, who]);
 
   // The most profitable pick (only once at least two picks have settled bets).
   const settledPicks = picks.filter((p) => p.summary.settled > 0).sort((a, b) => b.summary.profit - a.summary.profit);
@@ -334,6 +340,16 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
         </div>
       </section>
 
+      <PlayerProfit
+        rows={filtered}
+        scope={scope}
+        selected={who}
+        onSelect={(next) => {
+          setWho(next);
+          if (next) betsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
+
       {byCompetition.length > 1 && (
         <section className="card overflow-hidden">
           <h2 className="border-b border-line px-3 py-2 text-sm font-semibold">By competition</h2>
@@ -366,13 +382,18 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
         </section>
       )}
 
-      <section className="card overflow-hidden">
+      <section ref={betsRef} className="card scroll-mt-4 overflow-hidden">
         <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
             Bets
             {selectedDay && (
               <button className="chip gap-1 bg-accent/15 text-accent" onClick={() => setSelectedDay(null)} aria-label="Show all days">
                 {DateTime.fromISO(selectedDay).toFormat("ccc d LLL")} <X className="h-3 w-3" />
+              </button>
+            )}
+            {who && (
+              <button className="chip max-w-[16rem] gap-1 bg-accent/15 text-accent" onClick={() => setWho(null)} aria-label="Show every player's bets">
+                <span className="truncate">{who.label}</span> <X className="h-3 w-3 shrink-0" />
               </button>
             )}
           </h2>
@@ -447,24 +468,6 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function Segmented({ label, value, options, onChange }: { label: string; value: string; options: { id: string; label: string }[]; onChange: (id: string) => void }) {
-  return (
-    <div className="flex rounded-lg border border-line bg-panel p-0.5 text-xs" role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        <button
-          key={o.id}
-          role="radio"
-          aria-checked={value === o.id}
-          className={`rounded-md px-2.5 py-1 ${value === o.id ? "bg-panel-2 font-semibold text-text" : "text-muted hover:text-text"}`}
-          onClick={() => onChange(o.id)}
-        >
-          {o.label}
-        </button>
-      ))}
     </div>
   );
 }
