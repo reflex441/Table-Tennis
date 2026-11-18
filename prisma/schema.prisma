@@ -402,6 +402,9 @@ model Settings {
   autoRecordBets             Boolean  @default(true)
   /// Money per unit (a "1U" bot play stakes this amount).
   unitSize                   Float    @default(10)
+  /// Earlier unit sizes, oldest first: [{ "until": "2026-11-18T04:12:00.000Z", "unitSize": 200 }]. Bets on matches
+  /// before `until` are worth that much a unit in money; later ones `unitSize`. Added when unitSize changes.
+  unitSizeHistory            Json?
   /// Currency symbol shown next to stakes and profit.
   currency                   String   @default("$")
   /// When on, every bet's profit uses averageOdds instead of the bet's own odds.

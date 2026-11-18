@@ -115,7 +115,7 @@ export function NbaTailView({ initial, ownerName }: { initial: NbaTail; ownerNam
             {settled.map((b) => (
               <PickRow key={b.id} bet={b} tz={tz}>
                 <ResultChip result={b.result} />
-                {b.profit !== null && <ProfitAmount units={b.profit} />}
+                {b.profit !== null && <ProfitAmount units={b.profit} at={b.placedAt} />}
               </PickRow>
             ))}
           </ul>

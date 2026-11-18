@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
 import { niceTicks, type CumulativePoint } from "@/lib/bets/daily";
-import { formatMoney, formatUnits } from "@/lib/bets/profit";
+import { formatMoneyOf, formatUnits } from "@/lib/bets/profit";
 import { smoothPath } from "@/lib/chart-path";
 
 const HEIGHT = 300;
@@ -78,7 +78,7 @@ export function ProfitChart({ points, unitSize, currency }: { points: Cumulative
           className={`rounded-lg border px-2.5 py-1 text-sm font-semibold tabular ${end >= 0 ? "border-over/30 bg-over/10 text-over" : "border-under/30 bg-under/10 text-under"}`}
           title="Profit over this period"
         >
-          {formatUnits(end)} <span className="font-normal opacity-80">{formatMoney(end, unitSize, currency)}</span>
+          {formatUnits(end)} <span className="font-normal opacity-80">{formatMoneyOf(end, points[last].cumulativeMoney, unitSize, currency)}</span>
         </span>
       </div>
       <div
@@ -169,12 +169,12 @@ export function ProfitChart({ points, unitSize, currency }: { points: Cumulative
             <p className="mt-1 flex items-center gap-1.5">
               <span className={`h-0.5 w-3 rounded-full ${key(p.cumulative)}`} aria-hidden="true" />
               <span className="tabular text-sm font-semibold text-text">{formatUnits(p.cumulative)}</span>
-              <span className="tabular text-muted">{formatMoney(p.cumulative, unitSize, currency)}</span>
+              <span className="tabular text-muted">{formatMoneyOf(p.cumulative, p.cumulativeMoney, unitSize, currency)}</span>
               <span className="text-muted">total</span>
             </p>
             <p className="mt-0.5 pl-[18px] text-muted">
               <span className="tabular text-text">{p.bets ? formatUnits(p.profit) : "–"}</span>
-              {p.bets > 0 && <span className="tabular"> {formatMoney(p.profit, unitSize, currency)}</span>} that day
+              {p.bets > 0 && <span className="tabular"> {formatMoneyOf(p.profit, p.money, unitSize, currency)}</span>} that day
               {p.bets ? ` · ${p.bets} bet${p.bets === 1 ? "" : "s"}` : ""}
             </p>
           </div>

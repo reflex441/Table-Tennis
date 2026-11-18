@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { DateTime } from "luxon";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { DayPL } from "@/lib/bets/daily";
-import { formatMoney, formatUnits, round2 } from "@/lib/bets/profit";
+import { formatMoneyOf, formatUnits, round2 } from "@/lib/bets/profit";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -39,12 +39,18 @@ export function DailyCalendar({
       cells.push({ day: d.toISODate()!, inMonth: d.month === start.month });
       if (cells.length % 7 === 0 && d >= start.endOf("month")) break;
     }
-    let total = { profit: 0, bets: 0, won: 0, lost: 0 };
+    let total: { profit: number; money: number | null; bets: number; won: number; lost: number } = { profit: 0, money: 0, bets: 0, won: 0, lost: 0 };
     let maxAbs = 0;
     for (const c of cells) {
       const pl = c.inMonth ? days.get(c.day) : undefined;
       if (!pl) continue;
-      total = { profit: round2(total.profit + pl.profit), bets: total.bets + pl.bets, won: total.won + pl.won, lost: total.lost + pl.lost };
+      total = {
+        profit: round2(total.profit + pl.profit),
+        money: total.money === null || pl.money === null ? null : round2(total.money + pl.money),
+        bets: total.bets + pl.bets,
+        won: total.won + pl.won,
+        lost: total.lost + pl.lost,
+      };
       maxAbs = Math.max(maxAbs, Math.abs(pl.profit));
     }
     return { start, cells, total, maxAbs };
@@ -66,7 +72,7 @@ export function DailyCalendar({
             {total.bets ? (
               <>
                 <span className="tabular font-semibold text-text">{formatUnits(total.profit)}</span>{" "}
-                <span className="tabular">{formatMoney(total.profit, unitSize, currency)}</span> · {total.won}W - {total.lost}L
+                <span className="tabular">{formatMoneyOf(total.profit, total.money, unitSize, currency)}</span> · {total.won}W - {total.lost}L
               </>
             ) : (
               "No settled bets"
@@ -101,7 +107,7 @@ export function DailyCalendar({
                 ? `color-mix(in oklab, var(--color-under) ${Math.round(strength * 100)}%, var(--color-panel))`
                 : "var(--color-line)";
           const label = `${DateTime.fromISO(day).toFormat("ccc d LLL")}: ${
-            pl ? `${formatUnits(pl.profit)} (${formatMoney(pl.profit, unitSize, currency)}), ${pl.won}W ${pl.lost}L${pl.void ? ` ${pl.void}V` : ""}` : "no bets"
+            pl ? `${formatUnits(pl.profit)} (${formatMoneyOf(pl.profit, pl.money, unitSize, currency)}), ${pl.won}W ${pl.lost}L${pl.void ? ` ${pl.void}V` : ""}` : "no bets"
           }`;
           return (
             <button
@@ -121,7 +127,7 @@ export function DailyCalendar({
               {pl && (
                 <span className="w-full">
                   <span className="block text-[11px] font-bold leading-tight tabular text-text sm:text-sm">{formatUnits(pl.profit)}</span>
-                  <span className="hidden text-[10px] leading-tight tabular text-text/70 sm:block">{formatMoney(pl.profit, unitSize, currency)}</span>
+                  <span className="hidden text-[10px] leading-tight tabular text-text/70 sm:block">{formatMoneyOf(pl.profit, pl.money, unitSize, currency)}</span>
                 </span>
               )}
             </button>

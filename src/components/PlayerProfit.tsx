@@ -136,7 +136,7 @@ export function PlayerProfit({
                     <td className="hidden px-3 py-1.5 text-right tabular sm:table-cell">{s.summary.winRate === null ? "–" : `${s.summary.winRate}%`}</td>
                     <td className={`px-3 py-1.5 text-right tabular ${roiCol} ${sort === "roi" && s.summary.settled < ROI_MIN_BETS ? "text-muted" : ""}`}>{pct(s.summary.roi)}</td>
                     <td className="px-3 py-1.5 text-right">
-                      <ProfitAmount units={s.summary.profit} />
+                      <ProfitAmount units={s.summary.profit} money={s.summary.profitMoney} />
                     </td>
                   </tr>
                 );

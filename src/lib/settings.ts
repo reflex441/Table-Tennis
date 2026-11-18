@@ -1,8 +1,9 @@
-import type { PrismaClient } from "@/generated/prisma/client";
+import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
 import { parseLeagueLinks } from "@/lib/leagues";
 import { isAlarmSound } from "@/lib/alarm-sounds";
 import { parseBookmakers, parseTipsters } from "@/lib/nba/aliases";
+import { historyAfterChange, parseUnitSizeHistory, type UnitSizePeriod } from "@/lib/bets/unit-size";
 
 /**
  * Make sure the user's settings row exists. `skipDuplicates` compiles to
@@ -55,6 +56,7 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
     alarmVolume: s.alarmVolume,
     alarmSound: isAlarmSound(s.alarmSound) ? s.alarmSound : "siren",
     unitSize: s.unitSize,
+    unitSizeHistory: parseUnitSizeHistory(s.unitSizeHistory),
     currency: s.currency,
     useAverageOdds: s.useAverageOdds,
     averageOdds: s.averageOdds,
@@ -71,8 +73,26 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
   };
 }
 
-export async function updateSettings(prisma: PrismaClient, userId: string, update: SettingsUpdate): Promise<SettingsDTO> {
-  await ensureRow(prisma, userId);
-  await prisma.settings.update({ where: { userId }, data: update });
+export async function updateSettings(prisma: PrismaClient, userId: string, update: SettingsUpdate, now = new Date()): Promise<SettingsDTO> {
+  const current = await ensureRow(prisma, userId);
+  const { unitSizeHistory, ...rest } = update;
+  let history: UnitSizePeriod[] | undefined = unitSizeHistory ? parseUnitSizeHistory(unitSizeHistory) : undefined;
+  if (!history && update.unitSize !== undefined && update.unitSize !== current.unitSize) {
+    // A new unit size: bets before now keep the old one (so what they paid doesn't change).
+    history = historyAfterChange(parseUnitSizeHistory(current.unitSizeHistory), current.unitSize, update.unitSize, now, await hasBetsBefore(prisma, userId, now));
+  }
+  await prisma.settings.update({
+    where: { userId },
+    data: { ...rest, ...(history ? { unitSizeHistory: history.length ? (history as unknown as Prisma.InputJsonValue) : Prisma.DbNull } : {}) },
+  });
   return getSettings(prisma, userId);
+}
+
+/** Any table tennis or NBA bet on a match (or placed) before `now`. */
+async function hasBetsBefore(prisma: PrismaClient, userId: string, now: Date): Promise<boolean> {
+  const [tt, nba] = await Promise.all([
+    prisma.bet.findFirst({ where: { match: { userId, startsAt: { lt: now } } }, select: { id: true } }),
+    prisma.nbaBet.findFirst({ where: { userId, placedAt: { lt: now } }, select: { id: true } }),
+  ]);
+  return Boolean(tt || nba);
 }

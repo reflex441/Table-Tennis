@@ -1185,6 +1185,22 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     expect(players.some((p) => p.name === "Secret S.")).toBe(false);
   });
 
+  it("raising the unit size keeps the old one for earlier bets", async () => {
+    const t0 = new Date("2030-11-18T04:00:00Z");
+    // Setting it up with no bets yet: nothing to remember.
+    expect((await updateSettings(prisma, userId, { unitSize: 200 }, t0)).unitSizeHistory).toEqual([]);
+    await createPastBet(prisma, userId, { player1: "Petas K.", player2: "Adamiak G.", competition: null, startsAt: "2030-11-17T07:30:00Z", timezone: "UTC", playType: "BOT", selection: "OVER", pointsLine: 74.5, stake: 1, odds: 1.9, result: "WON" }, t0);
+    const later = new Date(t0.getTime() + 86_400_000);
+    const raised = await updateSettings(prisma, userId, { unitSize: 300 }, later);
+    expect(raised).toMatchObject({ unitSize: 300, unitSizeHistory: [{ until: later.toISOString(), unitSize: 200 }] });
+    // Other settings leave it alone.
+    expect((await updateSettings(prisma, userId, { currency: "A$" }, later)).unitSizeHistory).toHaveLength(1);
+    // Edited by hand in Settings: the list as given.
+    const edited = await updateSettings(prisma, userId, { unitSizeHistory: [{ until: "2030-11-10T00:00:00Z", unitSize: 150 }] }, later);
+    expect(edited.unitSizeHistory).toEqual([{ until: "2030-11-10T00:00:00.000Z", unitSize: 150 }]);
+    expect((await updateSettings(prisma, userId, { unitSizeHistory: [] }, later)).unitSizeHistory).toEqual([]);
+  });
+
   it("spread picks are saved and split like any other pick", async () => {
     const now = new Date("2030-09-21T12:00:00Z");
     const base = { player1: "Kosmal D.", player2: "Minda M.", competition: "TT ELITE", timezone: "UTC", playType: "PERSONAL" as const, startsAt: "2030-09-20T06:55:00Z" };

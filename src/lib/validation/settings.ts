@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isSafeUrl, type LeagueLink } from "@/lib/leagues";
 import { ALARM_SOUNDS, type AlarmSound } from "@/lib/alarm-sounds";
 import { reminderMinutesSchema } from "./match";
+import type { UnitSizePeriod } from "@/lib/bets/unit-size";
 
 function isValidTimeZone(tz: string): boolean {
   try {
@@ -65,6 +66,15 @@ export const settingsUpdateSchema = z
     alarmVolume: z.number().int().min(1, "At least 1%").max(100, "At most 100%"),
     alarmSound: z.enum(ALARM_SOUNDS),
     unitSize: z.number().positive("Must be more than 0").max(1_000_000),
+    /** Earlier unit sizes (Settings → Units), replacing the list. Changing unitSize alone adds to it by itself. */
+    unitSizeHistory: z
+      .array(
+        z.object({
+          until: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a date"),
+          unitSize: z.number().positive("Must be more than 0").max(1_000_000),
+        }),
+      )
+      .max(20),
     currency: z.string().trim().min(1).max(4),
     useAverageOdds: z.boolean(),
     averageOdds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000),
@@ -120,6 +130,8 @@ export interface SettingsDTO {
   alarmSound: AlarmSound;
   /** Money per betting unit. */
   unitSize: number;
+  /** Earlier unit sizes, oldest first (see unitSizeAt). */
+  unitSizeHistory: UnitSizePeriod[];
   /** Currency symbol, e.g. "$". */
   currency: string;
   /** Use averageOdds for every bet's profit (the bets' own odds are kept). */

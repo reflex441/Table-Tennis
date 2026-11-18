@@ -13,6 +13,8 @@ import { ReminderPicker } from "./ReminderPicker";
 import { api } from "@/lib/client-api";
 import { currentEndpointId, detectPushState, subscribeToPush, unsubscribeFromPush, type PushState } from "@/lib/push-client";
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
+import { fromLocalInputValue } from "@/lib/format";
+import { DateTimeInput } from "./DateTimeInput";
 import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "@/lib/leagues";
 import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
@@ -661,9 +663,117 @@ function UnitsSection() {
         {error && <p className="mt-1 text-xs text-under">{error}</p>}
         <p className="mt-2 text-xs text-muted">
           Example: a +2.5u day = {settings.currency}
-          {(2.5 * settings.unitSize).toFixed(2)}. Bot plays default to the stake on the pick badge (&quot;1U OVER&quot; = 1 unit); personal plays default to 1 unit.
+          {(2.5 * settings.unitSize).toFixed(2)}. Bot plays default to the stake on the pick badge (&quot;1U OVER&quot; = 1 unit); personal plays default to
+          0.75 units. Raising your unit size later doesn&apos;t change your old bets: they keep what a unit was worth then (below), so what they paid
+          stays the same. Units, ROI and win rate don&apos;t depend on it.
         </p>
+        <UnitSizeHistory />
       </Section>
+    </div>
+  );
+}
+
+/**
+ * When each unit size applied: bets before a change keep the old one. Added
+ * by itself when you change the amount; an entry can be removed, or one added
+ * (e.g. you changed it before this was kept).
+ */
+function UnitSizeHistory() {
+  const { settings, update } = useSettings();
+  const tz = settings.timezone;
+  const history = settings.unitSizeHistory;
+  const [adding, setAdding] = useState(false);
+  const [until, setUntil] = useState(() => DateTime.now().setZone(tz).toFormat("yyyy-MM-dd'T'HH:mm"));
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const money = (n: number) => `${settings.currency}${n % 1 ? n.toFixed(2) : n}`;
+  const when = (iso: string) => DateTime.fromISO(iso).setZone(tz).toFormat("ccc d LLL yyyy, h:mm a");
+
+  const save = async (next: { until: string; unitSize: number }[]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await update({ unitSizeHistory: [...next].sort((a, b) => Date.parse(a.until) - Date.parse(b.until)) });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = async () => {
+    const iso = fromLocalInputValue(until, tz);
+    const n = Number(amount.replace(/[^\d.]/g, ""));
+    if (!iso) return setError("Enter the date and time it changed.");
+    if (!Number.isFinite(n) || n <= 0) return setError("Enter what 1 unit was worth before then.");
+    if (history.some((p) => p.until === iso)) return setError("There's already a change at that time.");
+    if (await save([...history, { until: iso, unitSize: Math.round(n * 100) / 100 }])) {
+      setAdding(false);
+      setAmount("");
+    }
+  };
+
+  if (!history.length && !adding) {
+    return (
+      <button className="mt-2 text-xs text-accent hover:underline" onClick={() => setAdding(true)}>
+        Already changed your unit size before? Add what a unit was worth before then
+      </button>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-lg border border-line p-2">
+      <p className="label">What a unit was worth</p>
+      <ul className="divide-y divide-line text-sm">
+        {history.map((p, i) => (
+          <li key={p.until} className="flex items-center justify-between gap-2 py-1.5">
+            <span>
+              <span className="text-muted">{i === 0 ? "Bets before " : `${when(history[i - 1].until)} to `}</span>
+              {when(p.until)}: <span className="font-semibold tabular">{money(p.unitSize)}</span>
+            </span>
+            <button
+              className="rounded-md p-1 text-muted hover:text-under disabled:opacity-50"
+              disabled={busy}
+              onClick={() => void save(history.filter((_, j) => j !== i))}
+              title="Remove: these bets use the next unit size instead"
+              aria-label={`Remove ${money(p.unitSize)} before ${when(p.until)}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </li>
+        ))}
+        {history.length > 0 && (
+          <li className="py-1.5">
+            <span className="text-muted">From {when(history[history.length - 1].until)}: </span>
+            <span className="font-semibold tabular">{money(settings.unitSize)}</span> <span className="text-muted">(now)</span>
+          </li>
+        )}
+      </ul>
+      {adding ? (
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <div>
+            <span className="label">Bets before</span>
+            <DateTimeInput value={until} onChange={setUntil} compact />
+          </div>
+          <label className="w-28">
+            <span className="label">1 unit was</span>
+            <input className="input tabular" inputMode="decimal" value={amount} placeholder="200" onChange={(e) => setAmount(e.target.value)} aria-label="What 1 unit was worth" />
+          </label>
+          <button className="btn-primary" disabled={busy} onClick={() => void add()}>
+            Add
+          </button>
+          <button className="btn-ghost" disabled={busy} onClick={() => setAdding(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button className="mt-1 text-xs text-accent hover:underline" onClick={() => setAdding(true)}>
+          Add an earlier unit size
+        </button>
+      )}
+      {error && <p className="mt-1 text-xs text-under">{error}</p>}
     </div>
   );
 }

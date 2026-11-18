@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
 import { niceTicks, type CumulativePoint } from "@/lib/bets/daily";
-import { formatMoney, formatUnits } from "@/lib/bets/profit";
+import { formatMoneyOf, formatUnits } from "@/lib/bets/profit";
 import { SELECTION_LABEL, type Selection } from "@/lib/selection";
 import { smoothPath } from "@/lib/chart-path";
 
@@ -175,7 +175,7 @@ export function PickCompareChart({ series, unitSize, currency }: { series: PickS
                     <line x1="1" x2="13" y1="3" y2="3" stroke={PICK_SERIES[s.pick].color} strokeWidth="2" strokeDasharray={PICK_SERIES[s.pick].dash} />
                   </svg>
                   <span className="tabular font-semibold text-text">{formatUnits(p.cumulative)}</span>
-                  <span className="tabular text-muted">{formatMoney(p.cumulative, unitSize, currency)}</span>
+                  <span className="tabular text-muted">{formatMoneyOf(p.cumulative, p.cumulativeMoney, unitSize, currency)}</span>
                   <span className="text-muted">{SELECTION_LABEL[s.pick]}</span>
                 </p>
               );

@@ -9,6 +9,8 @@ export interface DayPL {
   won: number;
   lost: number;
   void: number;
+  /** Profit in money, each bet at its unit size (null when the rows don't say). */
+  money: number | null;
 }
 
 type DatedRow = Settleable & { startsAt: string };
@@ -24,8 +26,9 @@ export function dailyPL(rows: DatedRow[], timezone: string): Map<string, DayPL> 
   for (const r of rows) {
     if (r.result === "PENDING" || r.profit === null) continue;
     const day = dayKey(r.startsAt, timezone);
-    const d = days.get(day) ?? { day, profit: 0, bets: 0, won: 0, lost: 0, void: 0 };
+    const d = days.get(day) ?? { day, profit: 0, bets: 0, won: 0, lost: 0, void: 0, money: 0 };
     d.profit = round2(d.profit + r.profit);
+    d.money = d.money === null || r.unitSize === undefined ? null : round2(d.money + r.profit * r.unitSize);
     d.bets++;
     if (r.result === "WON") d.won++;
     else if (r.result === "LOST") d.lost++;
@@ -42,6 +45,9 @@ export interface CumulativePoint {
   /** Running total at the end of this day. */
   cumulative: number;
   bets: number;
+  /** This day's P/L and the running total in money, each bet at its unit size (null when unknown). */
+  money: number | null;
+  cumulativeMoney: number | null;
 }
 
 /**
@@ -54,12 +60,15 @@ export function cumulativeSeries(days: Map<string, DayPL>, from: string, to: str
   const end = DateTime.fromISO(to);
   if (!d.isValid || !end.isValid || d > end) return out;
   let total = 0;
+  let totalMoney: number | null = 0;
   // Bounded: at most ~10 years of days.
   for (let i = 0; d <= end && i < 3700; i++, d = d.plus({ days: 1 })) {
     const key = d.toISODate()!;
     const pl = days.get(key);
     total = round2(total + (pl?.profit ?? 0));
-    out.push({ day: key, profit: pl?.profit ?? 0, cumulative: total, bets: pl?.bets ?? 0 });
+    const money = pl ? pl.money : 0;
+    totalMoney = totalMoney === null || money === null ? null : round2(totalMoney + money);
+    out.push({ day: key, profit: pl?.profit ?? 0, cumulative: total, bets: pl?.bets ?? 0, money, cumulativeMoney: totalMoney });
   }
   return out;
 }

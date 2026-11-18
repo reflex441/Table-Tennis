@@ -32,7 +32,7 @@ describe("daily P/L", () => {
       ],
       TZ,
     );
-    expect(days.get("2026-10-01")).toEqual({ day: "2026-10-01", profit: -0.1, bets: 2, won: 1, lost: 1, void: 0 });
+    expect(days.get("2026-10-01")).toEqual({ day: "2026-10-01", profit: -0.1, bets: 2, won: 1, lost: 1, void: 0, money: null });
     expect(days.get("2026-10-02")).toMatchObject({ profit: 0, bets: 1, void: 1 });
     expect(days.size).toBe(2);
   });

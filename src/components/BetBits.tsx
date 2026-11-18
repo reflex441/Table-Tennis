@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Bot, Check, Pencil, RotateCcw, Split, User, X } from "lucide-react";
 import type { MatchDTO } from "@/lib/types";
-import { defaultStake, formatMoney, formatUnits, round2 } from "@/lib/bets/profit";
+import { defaultStake, formatAmount, formatUnits, round2 } from "@/lib/bets/profit";
+import { unitSizeAt } from "@/lib/bets/unit-size";
 import { api } from "@/lib/client-api";
 import { useSettings } from "./SettingsProvider";
 import { SelectionBadge } from "./MatchBits";
@@ -27,13 +28,31 @@ export function PlayTypeChip({ playType }: { playType: "BOT" | "PERSONAL" }) {
 }
 
 /** Profit in units, with the money amount (units × unit size) to its right. */
-export function ProfitAmount({ units, size = "sm", signed = true }: { units: number | null | undefined; size?: "sm" | "lg"; signed?: boolean }) {
+/**
+ * Units with the money amount next to it. The money is `money` when given (a
+ * total worked out bet by bet), else units x what a unit was worth `at` the
+ * match (see unitSizeAt), else units x today's unit size.
+ */
+export function ProfitAmount({
+  units,
+  money,
+  at,
+  size = "sm",
+  signed = true,
+}: {
+  units: number | null | undefined;
+  money?: number | null;
+  at?: string | Date | null;
+  size?: "sm" | "lg";
+  signed?: boolean;
+}) {
   const { settings } = useSettings();
   const tone = units === null || units === undefined || !signed ? "text-text" : units > 0 ? "text-over" : units < 0 ? "text-under" : "text-muted";
+  const amount = units === null || units === undefined ? null : typeof money === "number" ? money : units * unitSizeAt(settings, at);
   return (
     <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
       <span className={`tabular font-semibold ${tone} ${size === "lg" ? "text-2xl" : ""}`}>{formatUnits(units, signed)}</span>
-      <span className={`tabular text-muted ${size === "lg" ? "text-sm" : "text-[11px]"}`}>{formatMoney(units, settings.unitSize, settings.currency, signed)}</span>
+      <span className={`tabular text-muted ${size === "lg" ? "text-sm" : "text-[11px]"}`}>{formatAmount(amount, settings.currency, signed)}</span>
     </span>
   );
 }
@@ -337,7 +356,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
             <Pencil className="h-3 w-3" />
           </button>
           <ResultChip result={bet.result} />
-          {settled && bet.profit !== null && <ProfitAmount units={bet.profit} />}
+          {settled && bet.profit !== null && <ProfitAmount units={bet.profit} at={match.startsAt} />}
           <span className="ml-auto flex items-center gap-1">
             {anySettled && (
               <button className="btn-ghost px-1.5 py-0.5 text-[11px]" disabled={busy} onClick={() => send({ result: "PENDING" })} aria-label="Mark all picks as pending">
@@ -361,7 +380,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
               <span className="tabular text-text">{formatUnits(l.stake, false)}</span>
               {l.odds ? <span className="tabular text-muted">@ {l.odds.toFixed(2)}</span> : <span className="text-warn">add odds</span>}
               {l.result !== "PENDING" && <ResultChip result={l.result} />}
-              {l.result !== "PENDING" && l.profit !== null && <ProfitAmount units={l.profit} />}
+              {l.result !== "PENDING" && l.profit !== null && <ProfitAmount units={l.profit} at={match.startsAt} />}
               <span className="ml-auto flex items-center gap-1">
                 {l.result === "PENDING" ? (
                   <SettleButtons busy={busy} onSettle={(result) => void send({ leg: { index: i, result } })} />
@@ -400,7 +419,7 @@ export function BetPanel({ match, onChange }: { match: MatchDTO; onChange: (m: M
           </span>
         )}
         <ResultChip result={bet.result} />
-        {settled && bet.profit !== null && <ProfitAmount units={bet.profit} />}
+        {settled && bet.profit !== null && <ProfitAmount units={bet.profit} at={match.startsAt} />}
         {bet.result === "WON" && bet.profit === null && <span className="text-[11px] text-warn">Add the odds to count the profit</span>}
         <span className="ml-auto flex items-center gap-1">
           {settled ? (

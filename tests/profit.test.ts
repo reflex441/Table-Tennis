@@ -136,6 +136,7 @@ describe("bot vs personal classification", () => {
     alarmVolume: 15,
     alarmSound: "siren",
     unitSize: 10,
+    unitSizeHistory: [],
     currency: "$",
     useAverageOdds: false,
     averageOdds: 1.85,

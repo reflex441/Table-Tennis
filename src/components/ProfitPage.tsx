@@ -24,6 +24,7 @@ import { MATCHUP_BUCKETS, MATCHUP_LABEL, matchupBucket, type MatchupBucket } fro
 import { tidyCompetition } from "@/lib/leagues";
 import { SummaryStats, pct } from "./SummaryStats";
 import { Segmented } from "./Segmented";
+import { unitSizeAt } from "@/lib/bets/unit-size";
 import { PlayerProfit, type PlayerKind } from "./PlayerProfit";
 import { rowIsFor } from "@/lib/bets/by-player";
 
@@ -88,9 +89,11 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
   const betsRef = useRef<HTMLElement>(null);
   const today = useToday(tz);
 
+  // Each bet with what a unit was worth on its match's day, so money totals add up what the bets really paid.
+  const sized = useMemo(() => initial.map((r) => ({ ...r, unitSize: unitSizeAt(settings, r.startsAt) })), [initial, settings]);
   const inPeriod = useMemo(
-    () => (period.fromDay === null ? initial : initial.filter((r) => dayKey(r.startsAt, tz) >= period.fromDay!)),
-    [initial, period.fromDay, tz],
+    () => (period.fromDay === null ? sized : sized.filter((r) => dayKey(r.startsAt, tz) >= period.fromDay!)),
+    [sized, period.fromDay, tz],
   );
   const playOk = useCallback((r: BetRowWithMatch) => type === "ALL" || r.playType === type, [type]);
   // Previous matchups of the players (from the O/U record).
@@ -115,7 +118,7 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
   const byCompetition = useMemo(() => summarizeBy(filtered, (r) => tidyCompetition(r.competition) ?? "Unknown competition"), [filtered]);
 
   // Daily P/L for the chosen play type (the calendar can page through any month).
-  const daily = useMemo(() => dailyPL(initial.filter((r) => typeOk(r) && pickOk(r)), tz), [initial, typeOk, pickOk, tz]);
+  const daily = useMemo(() => dailyPL(sized.filter((r) => typeOk(r) && pickOk(r)), tz), [sized, typeOk, pickOk, tz]);
   const series = useMemo(() => {
     const keys = [...daily.keys()].sort();
     const to = today ?? keys[keys.length - 1];
@@ -124,13 +127,13 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
   }, [daily, today, period.fromDay]);
   // One running total per pick, over the same days.
   const pickSeries = useMemo(() => {
-    const perPick = SELECTIONS.map((sel) => ({ sel, days: dailyPL(initial.filter((r) => typeOk(r) && r.selection === sel), tz) }));
+    const perPick = SELECTIONS.map((sel) => ({ sel, days: dailyPL(sized.filter((r) => typeOk(r) && r.selection === sel), tz) }));
     const keys = perPick.flatMap((p) => [...p.days.keys()]).sort();
     const to = today ?? keys[keys.length - 1];
     const from = period.fromDay ?? keys[0];
     if (!from || !to) return [];
     return perPick.map((p) => ({ pick: p.sel, points: cumulativeSeries(p.days, from, to < from ? from : to) }));
-  }, [initial, typeOk, today, period.fromDay, tz]);
+  }, [sized, typeOk, today, period.fromDay, tz]);
   const scope = [
     type === "ALL" ? "all plays" : type === "BOT" ? "bot plays" : "personal plays",
     pick === "ALL" ? null : `${SELECTION_LABEL[pick]} picks`,
@@ -141,8 +144,8 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
 
   // The bets of the day picked on the calendar (same filters as the calendar).
   const dayRows = useMemo(
-    () => (selectedDay ? initial.filter((r) => typeOk(r) && pickOk(r) && dayKey(r.startsAt, tz) === selectedDay) : null),
-    [initial, typeOk, pickOk, selectedDay, tz],
+    () => (selectedDay ? sized.filter((r) => typeOk(r) && pickOk(r) && dayKey(r.startsAt, tz) === selectedDay) : null),
+    [sized, typeOk, pickOk, selectedDay, tz],
   );
 
   const sorted = useMemo(() => {
@@ -180,6 +183,7 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
           <p className="text-sm text-muted">
             In units · {readOnly ? "money amounts use your unit size, " : ""}1u = {settings.currency}
             {settings.unitSize}
+            {settings.unitSizeHistory.length ? ` now (${settings.currency}${settings.unitSizeHistory[settings.unitSizeHistory.length - 1].unitSize} before ${DateTime.fromISO(settings.unitSizeHistory[settings.unitSizeHistory.length - 1].until).setZone(tz).toFormat("d LLL")})` : ""}
             {" "}(change in{" "}
             <Link href="/settings#units" className="underline hover:text-text">
               Settings
@@ -233,7 +237,7 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
       <section className="card grid grid-cols-2 gap-4 p-4 sm:grid-cols-5">
         <div className="col-span-2">
           <p className="label">Profit · {scope}</p>
-          <ProfitAmount units={overall.profit} size="lg" />
+          <ProfitAmount units={overall.profit} money={overall.profitMoney} size="lg" />
         </div>
         <Stat label="ROI" value={pct(overall.roi)} tone={overall.roi === null ? undefined : overall.roi >= 0 ? "text-over" : "text-under"} />
         <Stat label="Win rate" value={overall.winRate === null ? "–" : `${overall.winRate}%`} sub={`${overall.won}W - ${overall.lost}L${overall.void ? ` - ${overall.void}V` : ""}`} />
@@ -372,7 +376,7 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
                     <td className="px-3 py-1.5 text-right tabular">{summary.winRate === null ? "–" : `${summary.winRate}%`}</td>
                     <td className="px-3 py-1.5 text-right tabular">{pct(summary.roi)}</td>
                     <td className="px-3 py-1.5 text-right">
-                      <ProfitAmount units={summary.profit} />
+                      <ProfitAmount units={summary.profit} money={summary.profitMoney} />
                     </td>
                   </tr>
                 ))}
@@ -460,7 +464,7 @@ export function ProfitPage({ initial: fromServer, title = "Profit", readOnly = f
                     <td className="px-3 py-1.5">
                       <ResultChip result={r.result} />
                     </td>
-                    <td className="px-3 py-1.5 text-right">{r.profit !== null ? <ProfitAmount units={r.profit} /> : <span className="text-muted">–</span>}</td>
+                    <td className="px-3 py-1.5 text-right">{r.profit !== null ? <ProfitAmount units={r.profit} at={r.startsAt} /> : <span className="text-muted">–</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -510,7 +514,7 @@ function PlayTypeCard({
         )}
       </div>
       <div className="mt-2">
-        <ProfitAmount units={summary.profit} size="lg" />
+        <ProfitAmount units={summary.profit} money={summary.profitMoney} size="lg" />
       </div>
       <SummaryStats summary={summary} />
       <p className="mt-1 text-[11px] text-muted">
@@ -551,7 +555,7 @@ function DayStats({ day, rows, onClose }: { day: string; rows: BetRowWithMatch[]
       </td>
       <td className="py-1 pr-2 text-right tabular text-muted">{pct(s.roi)}</td>
       <td className="py-1 text-right">
-        <ProfitAmount units={s.profit} />
+        <ProfitAmount units={s.profit} money={s.profitMoney} />
       </td>
     </tr>
   );
@@ -568,7 +572,7 @@ function DayStats({ day, rows, onClose }: { day: string; rows: BetRowWithMatch[]
       ) : (
         <>
           <div className="mt-1">
-            <ProfitAmount units={all.profit} size="lg" />
+            <ProfitAmount units={all.profit} money={all.profitMoney} size="lg" />
           </div>
           <dl className="mt-2 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
             <div>

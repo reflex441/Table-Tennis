@@ -7,6 +7,7 @@ import { api } from "@/lib/client-api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/format";
 import { BOT_IS_OVER_UNDER, SELECTIONS, SELECTION_LABEL, canBeBot, playTypeFor, selectionName, type Selection } from "@/lib/selection";
 import { defaultUnits, restake, round2 } from "@/lib/bets/profit";
+import { unitSizeAt } from "@/lib/bets/unit-size";
 import type { SlipBet, SlipResult } from "@/lib/gemini/betslip";
 import { slipPlayType, type SlipReference } from "@/lib/bets/slip-play";
 import { combineSlipParts, sameSlipPick, type SlipPart } from "@/lib/bets/slip-combine";
@@ -43,6 +44,8 @@ interface Row {
   legs: { stake: number; odds: number | null; result: SlipResult }[] | null;
   /** The same bet seen again on another (overlapping) screenshot, not counted twice. */
   repeats: number;
+  /** What a unit was worth on the slip's date (stakes in money -> units). */
+  unitSize: number;
   status: null | { ok: boolean; message: string };
 }
 
@@ -72,7 +75,7 @@ const samePart = (a: SlipPart, b: SlipPart) => a.stake === b.stake && a.odds ===
  * bet on a second screenshot is a repeat (screenshots of a long list
  * overlap), so it isn't counted twice.
  */
-function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
+function addScanned(rows: Row[], incoming: Row[]): Row[] {
   const out = [...rows];
   for (const r of incoming) {
     const part = r.parts[0];
@@ -100,7 +103,7 @@ function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
       ...t,
       parts,
       legs: c.legs,
-      units: unitSize > 0 ? String(round2(c.stake / unitSize)) : t.units,
+      units: t.unitSize > 0 ? String(round2(c.stake / t.unitSize)) : t.units,
       odds: c.odds !== null ? String(c.odds) : "",
       result: c.result,
       pointsLine: c.pointsLine !== null ? String(c.pointsLine) : "",
@@ -115,7 +118,8 @@ function addScanned(rows: Row[], incoming: Row[], unitSize: number): Row[] {
  * bet on the same pick combines into it). None once you've changed its
  * stake, odds or result: then they no longer add up to it.
  */
-function slipParts(r: Row, unitSize: number): { stake: number; odds: number | null; result: SlipResult }[] | null {
+function slipParts(r: Row): { stake: number; odds: number | null; result: SlipResult }[] | null {
+  const unitSize = r.unitSize;
   if (!r.parts.length || !(unitSize > 0)) return null;
   const c = combineSlipParts(r.parts);
   const odds = r.odds.trim() ? Number(r.odds) : null;
@@ -158,6 +162,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
   const toRow = (b: ScannedBet, batch: number): Row => {
     // Bot when it lines up with an uploaded bot play; others follow the switch above.
     const type = b.reference ? (b.playType ?? "PERSONAL") : playTypeFor(b.selection, playType);
+    // A bet from before you changed your unit size is worth the unit size of then.
+    const unitSize = unitSizeAt(settings, b.startsAt);
     return {
       key: `slip${++counter}`,
       include: true,
@@ -173,13 +179,14 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
       pointsLine: b.pointsLine !== null ? String(b.pointsLine) : "",
       // Stake in money -> units with your unit size.
       // (No stake on the slip: 1u, or 0.75u for a personal play.)
-      units: b.stake !== null && settings.unitSize > 0 ? String(round2(b.stake / settings.unitSize)) : String(defaultUnits(type)),
+      units: b.stake !== null && unitSize > 0 ? String(round2(b.stake / unitSize)) : String(defaultUnits(type)),
       odds: b.odds !== null ? String(b.odds) : "",
       result: b.result,
       resultText: b.resultText,
       parts: b.stake !== null && b.stake > 0 ? [{ stake: b.stake, odds: b.odds, result: b.result, pointsLine: b.pointsLine, batch }] : [],
       legs: null,
       repeats: 0,
+      unitSize,
       status: null,
     };
   };
@@ -189,7 +196,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
 
   const { scanning, errors, scan } = useScreenshotScan<ScannedBet>("/api/bets/scan", "no bets found.", (bets) => {
     const batch = ++batches;
-    setRows((prev) => addScanned(prev, bets.map((b) => toRow(b, batch)), settings.unitSize));
+    setRows((prev) => addScanned(prev, bets.map((b) => toRow(b, batch))));
   });
 
   const validate = (r: Row): string | null => {
@@ -220,8 +227,8 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
         // On your dashboard: same players and time as that match, so the bet is added to it (no copy).
         const own = r.ref?.source === "yours" ? r.ref : null;
         // Settled differently on two lines: one pick per result, stakes in units.
-        const legs = r.legs?.map((l) => ({ stake: round2(l.stake / settings.unitSize), odds: l.odds, result: l.result }));
-        const parts = slipParts(r, settings.unitSize);
+        const legs = r.legs?.map((l) => ({ stake: round2(l.stake / r.unitSize), odds: l.odds, result: l.result }));
+        const parts = slipParts(r);
         const res = await api<{ combined: boolean; samePick: boolean }>("/api/bets/past", {
           method: "POST",
           json: {
@@ -274,7 +281,7 @@ export function SlipScanner({ onClose }: { onClose: () => void }) {
       <p className="text-xs text-muted">
         Upload screenshots of your settled bets from Ladbrokes or Sportsbet. <span className="text-text">Win</span> is counted as won and{" "}
         <span className="text-text">No Return</span> as lost. Stakes are turned into units with your unit size ({settings.currency}
-        {settings.unitSize} = 1u). A bet that lines up with a bot play you uploaded (same players, time and pick) is a{" "}
+        {settings.unitSize} = 1u{settings.unitSizeHistory.length ? "; bets from before you changed it use what a unit was worth then" : ""}). A bet that lines up with a bot play you uploaded (same players, time and pick) is a{" "}
         <span className="text-text">bot play</span>; everything else is a <span className="text-text">personal play</span>. Check the bets, then add
         them.
       </p>

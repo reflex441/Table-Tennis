@@ -12,6 +12,7 @@ import { canonicalBookmaker, knownTipsters } from "@/lib/nba/aliases";
 import { NBA_MARKET_LABEL } from "@/lib/nba/parse";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { ProfitAmount, ResultChip } from "../BetBits";
+import { unitSizeAt } from "@/lib/bets/unit-size";
 import { DailyCalendar } from "../DailyCalendar";
 import { ProfitChart } from "../ProfitChart";
 import { useSettings } from "../SettingsProvider";
@@ -72,16 +73,21 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
     }
   };
 
-  const dated = useMemo(() => bets.map((b) => ({ ...b, startsAt: b.placedAt })), [bets]);
+  // Each bet with what a unit was worth on its day, so money totals add up what the bets really paid.
+  const dated = useMemo(() => bets.map((b) => ({ ...b, startsAt: b.placedAt, unitSize: unitSizeAt(settings, b.placedAt) })), [bets, settings]);
+  const sizedTableTennis = useMemo(() => tableTennis.map((r) => ({ ...r, unitSize: unitSizeAt(settings, r.startsAt) })), [tableTennis, settings]);
   const tipsters = useMemo(() => knownTipsters(settings.nbaTipsters, bets.map((b) => b.tipster)), [settings.nbaTipsters, bets]);
-  const nba = useMemo(() => summarize(bets), [bets]);
-  const tt = useMemo(() => summarize(tableTennis), [tableTennis]);
-  const combined = useMemo(() => summarize([...bets, ...tableTennis]), [bets, tableTennis]);
-  const byTipster = useMemo(() => summarizeBy(bets, (b) => b.tipster), [bets]);
-  const byBook = useMemo(() => summarizeBy(bets, (b) => canonicalBookmaker(b.bookmaker) ?? "Unknown bookmaker"), [bets]);
+  const nba = useMemo(() => summarize(dated), [dated]);
+  const tt = useMemo(() => summarize(sizedTableTennis), [sizedTableTennis]);
+  const combined = useMemo(() => summarize([...dated, ...sizedTableTennis]), [dated, sizedTableTennis]);
+  const byTipster = useMemo(() => summarizeBy(dated, (b) => b.tipster), [dated]);
+  const byBook = useMemo(() => summarizeBy(dated, (b) => canonicalBookmaker(b.bookmaker) ?? "Unknown bookmaker"), [dated]);
 
   const scoped = useMemo(() => dated.filter((b) => !tipster || b.tipster === tipster), [dated, tipster]);
-  const daily = useMemo(() => dailyPL(chart === "combined" && !tipster ? [...scoped, ...tableTennis] : scoped, tz), [scoped, tableTennis, chart, tipster, tz]);
+  const daily = useMemo(
+    () => dailyPL(chart === "combined" && !tipster ? [...scoped, ...sizedTableTennis] : scoped, tz),
+    [scoped, sizedTableTennis, chart, tipster, tz],
+  );
   const series = useMemo(() => {
     const keys = [...daily.keys()].sort();
     const to = today ?? keys[keys.length - 1];
@@ -355,7 +361,7 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       {b.profit !== null ? (
-                        <ProfitAmount units={b.profit} />
+                        <ProfitAmount units={b.profit} at={b.placedAt} />
                       ) : b.result === "WON" ? (
                         <span className="text-[11px] text-warn">add odds</span>
                       ) : (
@@ -391,7 +397,7 @@ export function SummaryCard({ title, icon, summary, action }: { title: string; i
         {action}
       </div>
       <div className="mt-2">
-        <ProfitAmount units={summary.profit} size="lg" />
+        <ProfitAmount units={summary.profit} money={summary.profitMoney} size="lg" />
       </div>
       <SummaryStats summary={summary} />
       <p className="mt-1.5 text-[11px] text-muted">
@@ -448,7 +454,7 @@ export function SummaryTable({
               <td className="px-3 py-1.5 text-right tabular">{summary.winRate === null ? "–" : `${summary.winRate}%`}</td>
               <td className={`px-3 py-1.5 text-right tabular ${summary.roi === null ? "" : summary.roi >= 0 ? "text-over" : "text-under"}`}>{pct(summary.roi)}</td>
               <td className="px-3 py-1.5 text-right">
-                <ProfitAmount units={summary.profit} />
+                <ProfitAmount units={summary.profit} money={summary.profitMoney} />
               </td>
             </tr>
           ))}

@@ -78,16 +78,24 @@ export interface ProfitSummary {
   profit: number;
   /** Profit / staked × 100. */
   roi: number | null;
+  /**
+   * Profit in money, each bet at the unit size of its match's day (see
+   * unitSizeAt); null when the rows don't say their unit size (then it's
+   * the profit x today's unit size).
+   */
+  profitMoney: number | null;
   avgOdds: number | null;
   /** Won bets still missing odds (profit unknown). */
   missingOdds: number;
 }
 
-/** What the totals need from a bet (table tennis or NBA). */
-export type Settleable = Pick<BetRow, "stake" | "odds" | "result" | "profit">;
+/** What the totals need from a bet (table tennis or NBA); `unitSize` = what a unit was worth for it, in money. */
+export type Settleable = Pick<BetRow, "stake" | "odds" | "result" | "profit"> & { unitSize?: number };
 
 export function summarize(rows: Settleable[]): ProfitSummary {
   let pending = 0, won = 0, lost = 0, voided = 0, staked = 0, profit = 0, missingOdds = 0, oddsSum = 0, oddsCount = 0;
+  let money = 0;
+  let moneyKnown = true;
   for (const r of rows) {
     if (r.odds) {
       oddsSum += r.odds;
@@ -106,6 +114,8 @@ export function summarize(rows: Settleable[]): ProfitSummary {
     else voided++;
     if (r.result !== "VOID") staked += r.stake;
     profit += r.profit ?? 0;
+    if (r.unitSize === undefined) moneyKnown = false;
+    else money += (r.profit ?? 0) * r.unitSize;
   }
   const decided = won + lost;
   return {
@@ -119,6 +129,7 @@ export function summarize(rows: Settleable[]): ProfitSummary {
     staked: round2(staked),
     profit: round2(profit),
     roi: staked ? round2((profit / staked) * 100) : null,
+    profitMoney: moneyKnown ? round2(money) : null,
     avgOdds: oddsCount ? round2(oddsSum / oddsCount) : null,
     missingOdds,
   };
@@ -161,7 +172,18 @@ export function formatUnits(n: number | null | undefined, signed = true): string
 /** "$23.50" style money amount for a number of units. */
 export function formatMoney(units: number | null | undefined, unitSize: number, currency: string, signed = true): string {
   if (units === null || units === undefined) return "–";
-  const v = round2(units * unitSize);
+  return formatAmount(units * unitSize, currency, signed);
+}
+
+/** The money amount: `money` when known (worked out bet by bet), else units x `unitSize`. */
+export function formatMoneyOf(units: number | null | undefined, money: number | null | undefined, unitSize: number, currency: string, signed = true): string {
+  return typeof money === "number" && units !== null && units !== undefined ? formatAmount(money, currency, signed) : formatMoney(units, unitSize, currency, signed);
+}
+
+/** "+$23.50" for an amount of money. */
+export function formatAmount(money: number | null | undefined, currency: string, signed = true): string {
+  if (money === null || money === undefined) return "–";
+  const v = round2(money);
   const sign = v < 0 ? "-" : signed && v > 0 ? "+" : "";
   return `${sign}${currency}${Math.abs(v).toFixed(2)}`;
 }
