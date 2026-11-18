@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isSafeUrl, type LeagueLink } from "@/lib/leagues";
 import { ALARM_SOUNDS, type AlarmSound } from "@/lib/alarm-sounds";
 import { reminderMinutesSchema } from "./match";
-import type { UnitSizePeriod } from "@/lib/bets/unit-size";
+import type { TipsterUnitSize, UnitSizePeriod } from "@/lib/bets/unit-size";
 
 function isValidTimeZone(tz: string): boolean {
   try {
@@ -75,6 +75,17 @@ export const settingsUpdateSchema = z
         }),
       )
       .max(20),
+    /** NBA: each tipster's own unit size (Settings → NBA), replacing the list. */
+    nbaUnitSizes: z
+      .array(
+        z.object({
+          tipster: z.string().trim().min(1, "Enter the tipster").max(40),
+          unitSize: z.number().positive("Must be more than 0").max(1_000_000),
+          since: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a date"),
+          history: z.array(z.object({ until: z.string().refine((v) => !Number.isNaN(Date.parse(v))), unitSize: z.number().positive().max(1_000_000) })).max(20),
+        }),
+      )
+      .max(50),
     currency: z.string().trim().min(1).max(4),
     useAverageOdds: z.boolean(),
     averageOdds: z.number().gt(1, "Decimal odds must be above 1.00").max(1000),
@@ -132,6 +143,8 @@ export interface SettingsDTO {
   unitSize: number;
   /** Earlier unit sizes, oldest first (see unitSizeAt). */
   unitSizeHistory: UnitSizePeriod[];
+  /** NBA: tipsters with their own unit size (see tipsterUnitSizeAt). */
+  nbaUnitSizes: TipsterUnitSize[];
   /** Currency symbol, e.g. "$". */
   currency: string;
   /** Use averageOdds for every bet's profit (the bets' own odds are kept). */

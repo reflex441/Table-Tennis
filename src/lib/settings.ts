@@ -3,7 +3,7 @@ import type { SettingsDTO, SettingsUpdate } from "@/lib/validation/settings";
 import { parseLeagueLinks } from "@/lib/leagues";
 import { isAlarmSound } from "@/lib/alarm-sounds";
 import { parseBookmakers, parseTipsters } from "@/lib/nba/aliases";
-import { historyAfterChange, parseUnitSizeHistory, type UnitSizePeriod } from "@/lib/bets/unit-size";
+import { historyAfterChange, parseTipsterUnitSizes, parseUnitSizeHistory, type UnitSizePeriod } from "@/lib/bets/unit-size";
 
 /**
  * Make sure the user's settings row exists. `skipDuplicates` compiles to
@@ -57,6 +57,7 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
     alarmSound: isAlarmSound(s.alarmSound) ? s.alarmSound : "siren",
     unitSize: s.unitSize,
     unitSizeHistory: parseUnitSizeHistory(s.unitSizeHistory),
+    nbaUnitSizes: parseTipsterUnitSizes(s.nbaUnitSizes),
     currency: s.currency,
     useAverageOdds: s.useAverageOdds,
     averageOdds: s.averageOdds,
@@ -75,7 +76,7 @@ export async function getSettings(prisma: PrismaClient, userId: string): Promise
 
 export async function updateSettings(prisma: PrismaClient, userId: string, update: SettingsUpdate, now = new Date()): Promise<SettingsDTO> {
   const current = await ensureRow(prisma, userId);
-  const { unitSizeHistory, ...rest } = update;
+  const { unitSizeHistory, nbaUnitSizes, ...rest } = update;
   let history: UnitSizePeriod[] | undefined = unitSizeHistory ? parseUnitSizeHistory(unitSizeHistory) : undefined;
   if (!history && update.unitSize !== undefined && update.unitSize !== current.unitSize) {
     // A new unit size: bets before now keep the old one (so what they paid doesn't change).
@@ -83,7 +84,11 @@ export async function updateSettings(prisma: PrismaClient, userId: string, updat
   }
   await prisma.settings.update({
     where: { userId },
-    data: { ...rest, ...(history ? { unitSizeHistory: history.length ? (history as unknown as Prisma.InputJsonValue) : Prisma.DbNull } : {}) },
+    data: {
+      ...rest,
+      ...(history ? { unitSizeHistory: history.length ? (history as unknown as Prisma.InputJsonValue) : Prisma.DbNull } : {}),
+      ...(nbaUnitSizes ? { nbaUnitSizes: (() => { const list = parseTipsterUnitSizes(nbaUnitSizes); return list.length ? (list as unknown as Prisma.InputJsonValue) : Prisma.DbNull; })() } : {}),
+    },
   });
   return getSettings(prisma, userId);
 }

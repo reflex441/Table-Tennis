@@ -9,6 +9,7 @@ import { NBA_MARKET_LABEL } from "@/lib/nba/parse";
 import type { NbaTail, NbaTailBet } from "@/lib/nba/tailing";
 import { ProfitAmount, ResultChip } from "../BetBits";
 import { useSettings } from "../SettingsProvider";
+import { tipsterUnitSizeAt } from "@/lib/bets/unit-size";
 import { useNotifications } from "../NotificationProvider";
 import { BasketballIcon } from "./BasketballIcon";
 import { SummaryCard, SummaryTable } from "./NbaPage";
@@ -28,8 +29,10 @@ export function NbaTailView({ initial, ownerName }: { initial: NbaTail; ownerNam
   const open = bets.filter((b) => b.result === "PENDING");
   const notCopied = open.filter((b) => !b.copied);
   const settled = bets.filter((b) => b.result !== "PENDING").slice(0, 50);
-  const summary = useMemo(() => summarize(bets), [bets]);
-  const byTipster = useMemo(() => summarizeBy(bets, (b) => b.tipster), [bets]);
+  // Money at what a unit is worth to you for that tipster then (Settings → NBA).
+  const sized = useMemo(() => bets.map((b) => ({ ...b, unitSize: tipsterUnitSizeAt(settings, b.tipster, b.placedAt) })), [bets, settings]);
+  const summary = useMemo(() => summarize(sized), [sized]);
+  const byTipster = useMemo(() => summarizeBy(sized, (b) => b.tipster), [sized]);
 
   const copy = async (ids: string[] | null, key: string) => {
     setBusy(key);
@@ -115,7 +118,7 @@ export function NbaTailView({ initial, ownerName }: { initial: NbaTail; ownerNam
             {settled.map((b) => (
               <PickRow key={b.id} bet={b} tz={tz}>
                 <ResultChip result={b.result} />
-                {b.profit !== null && <ProfitAmount units={b.profit} at={b.placedAt} />}
+                {b.profit !== null && <ProfitAmount units={b.profit} money={b.profit * tipsterUnitSizeAt(settings, b.tipster, b.placedAt)} />}
               </PickRow>
             ))}
           </ul>

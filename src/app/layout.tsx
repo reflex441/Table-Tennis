@@ -45,6 +45,7 @@ const FALLBACK_SETTINGS: SettingsDTO = {
   alarmSound: "siren",
   unitSize: 10,
   unitSizeHistory: [],
+  nbaUnitSizes: [],
   currency: "$",
   useAverageOdds: false,
   averageOdds: 1.85,

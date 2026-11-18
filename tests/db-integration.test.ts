@@ -1199,6 +1199,13 @@ describe.skipIf(!url)("PostgreSQL integration", () => {
     const edited = await updateSettings(prisma, userId, { unitSizeHistory: [{ until: "2030-11-10T00:00:00Z", unitSize: 150 }] }, later);
     expect(edited.unitSizeHistory).toEqual([{ until: "2030-11-10T00:00:00.000Z", unitSize: 150 }]);
     expect((await updateSettings(prisma, userId, { unitSizeHistory: [] }, later)).unitSizeHistory).toEqual([]);
+    // NBA tipsters with their own unit size.
+    const nba = await updateSettings(prisma, userId, { nbaUnitSizes: [{ tipster: " ADP ", unitSize: 200, since: "2030-11-19T00:00:00Z", history: [] }, { tipster: "Tyvan", unitSize: 300, since: "1970-01-01T00:00:00Z", history: [] }] }, later);
+    expect(nba.nbaUnitSizes).toEqual([
+      { tipster: "ADP", unitSize: 200, since: "2030-11-19T00:00:00.000Z", history: [] },
+      { tipster: "Tyvan", unitSize: 300, since: "1970-01-01T00:00:00.000Z", history: [] },
+    ]);
+    expect((await updateSettings(prisma, userId, { nbaUnitSizes: [] }, later)).nbaUnitSizes).toEqual([]);
   });
 
   it("spread picks are saved and split like any other pick", async () => {

@@ -15,6 +15,7 @@ import { currentEndpointId, detectPushState, subscribeToPush, unsubscribeFromPus
 import { formatMoney, formatUnits } from "@/lib/bets/profit";
 import { fromLocalInputValue } from "@/lib/format";
 import { DateTimeInput } from "./DateTimeInput";
+import { ALL_TIME, changeTipsterUnitSize, type TipsterUnitSize } from "@/lib/bets/unit-size";
 import { SUGGESTED_LEAGUES, isSafeUrl, normalizeLeague, type LeagueLink } from "@/lib/leagues";
 import { signOut } from "@/lib/sign-out";
 import type { PublicUser } from "@/lib/auth/accounts";
@@ -1537,7 +1538,138 @@ function NbaSection() {
         </button>
         {msg && <span className={`text-xs ${msg.ok ? "text-over" : "text-under"}`}>{msg.text}</span>}
       </div>
+      <TipsterUnitSizes known={tipsters.map((t) => t.name)} />
     </Section>
+  );
+}
+
+/**
+ * NBA: a different unit size for some tipsters (e.g. ADP $200, Tyvan $300).
+ * From when it's set (their earlier bets keep what they paid), or for all
+ * their bets. Saved straight away.
+ */
+function TipsterUnitSizes({ known }: { known: string[] }) {
+  const { settings, update } = useSettings();
+  const list = settings.nbaUnitSizes;
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [tipster, setTipster] = useState("");
+  const [amount, setAmount] = useState("");
+  const [allBets, setAllBets] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const money = (n: number) => `${settings.currency}${n % 1 ? n.toFixed(2) : n}`;
+  const day = (iso: string) => DateTime.fromISO(iso).setZone(settings.timezone).toFormat("d LLL yyyy");
+  const parse = (v: string) => {
+    const n = Number(v.replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  };
+
+  const save = async (next: TipsterUnitSize[]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await update({ nbaUnitSizes: next });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = async () => {
+    const name = tipster.trim();
+    const n = parse(amount);
+    if (!name) return setError("Enter the tipster, e.g. ADP.");
+    if (!n) return setError("Enter what 1 unit is for them, e.g. 200.");
+    if (list.some((t) => t.tipster.toLowerCase() === name.toLowerCase())) return setError(`${name} already has a unit size - change it above.`);
+    const since = allBets ? ALL_TIME : new Date().toISOString();
+    if (await save([...list, { tipster: name, unitSize: n, since, history: [] }])) {
+      setTipster("");
+      setAmount("");
+      setAllBets(false);
+    }
+  };
+
+  const change = async (t: TipsterUnitSize) => {
+    const n = parse(drafts[t.tipster] ?? "");
+    if (!n) return setError("Enter what 1 unit is, e.g. 300.");
+    if (await save(list.map((x) => (x === t ? changeTipsterUnitSize(x, n, new Date()) : x)))) {
+      setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== t.tipster)));
+    }
+  };
+
+  return (
+    <div className="mt-5" id="nba-units">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Unit size per tipster</h3>
+      <p className="mb-2 text-xs text-muted">
+        If you stake some tipsters differently (e.g. ADP {money(200)} a unit, Tyvan {money(300)}), their NBA bets are worth that much a unit in money.
+        Tipsters not listed use your unit size ({money(settings.unitSize)}). Units, ROI and win rate stay the same.
+      </p>
+      {list.length > 0 && (
+        <ul className="mb-2 divide-y divide-line rounded-lg border border-line text-sm">
+          {list.map((t) => {
+            const draft = drafts[t.tipster];
+            return (
+              <li key={t.tipster} className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+                <span className="w-24 truncate font-semibold">{t.tipster}</span>
+                <span className="text-muted">1u =</span>
+                <input
+                  className="input h-8 w-24 py-0.5 tabular"
+                  inputMode="decimal"
+                  value={draft ?? String(t.unitSize)}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [t.tipster]: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && draft !== undefined && void change(t)}
+                  aria-label={`${t.tipster} unit size`}
+                />
+                {draft !== undefined && parse(draft) !== t.unitSize && (
+                  <button className="btn-primary h-8 py-0.5" disabled={busy} onClick={() => void change(t)}>
+                    Save
+                  </button>
+                )}
+                <span className="text-[11px] text-muted">
+                  {t.since === ALL_TIME ? "all their bets" : `from ${day(t.since)} (earlier bets: your unit size)`}
+                  {t.history.map((h) => ` · ${money(h.unitSize)} before ${day(h.until)}`).join("")}
+                </span>
+                <button
+                  className="ml-auto rounded-md p-1 text-muted hover:text-under disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => void save(list.filter((x) => x !== t))}
+                  title="Remove: their bets use your unit size again"
+                  aria-label={`Remove ${t.tipster}'s unit size`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="w-32">
+          <span className="label">Tipster</span>
+          <input className="input" list="nba-unit-tipsters" placeholder="ADP" value={tipster} onChange={(e) => setTipster(e.target.value)} aria-label="Tipster" />
+          <datalist id="nba-unit-tipsters">
+            {[...new Set(known.filter(Boolean))].map((k) => (
+              <option key={k} value={k} />
+            ))}
+          </datalist>
+        </label>
+        <label className="w-28">
+          <span className="label">1 unit =</span>
+          <input className="input tabular" inputMode="decimal" placeholder="200" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Tipster unit size" />
+        </label>
+        <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
+          <input type="checkbox" checked={allBets} onChange={(e) => setAllBets(e.target.checked)} />
+          Also for their earlier bets
+        </label>
+        <button className="btn-ghost" disabled={busy} onClick={() => void add()}>
+          Add
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs text-under">{error}</p>}
+    </div>
   );
 }
 

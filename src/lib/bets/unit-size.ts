@@ -59,3 +59,53 @@ export function historyAfterChange(history: UnitSizePeriod[], from: number, to: 
   if (!hasEarlierBets) return history;
   return [...history, { until: now.toISOString(), unitSize: from }].slice(-MAX_PERIODS);
 }
+
+/**
+ * NBA: a tipster's own unit size (e.g. ADP $200, Tyvan $300). Their bets
+ * from `since` on are worth `unitSize` a unit, with earlier changes kept in
+ * `history` like yours; before `since` (and for tipsters not listed) it's
+ * your unit size.
+ */
+export interface TipsterUnitSize {
+  tipster: string;
+  unitSize: number;
+  since: string;
+  history: UnitSizePeriod[];
+}
+
+/** `since` for "all their bets, earlier ones too". */
+export const ALL_TIME = "1970-01-01T00:00:00.000Z";
+
+const sameTipster = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+export function parseTipsterUnitSizes(json: unknown): TipsterUnitSize[] {
+  if (!Array.isArray(json)) return [];
+  const out: TipsterUnitSize[] = [];
+  for (const t of json) {
+    if (!t || typeof t !== "object") continue;
+    const { tipster, unitSize, since, history } = t as Record<string, unknown>;
+    if (typeof tipster !== "string" || !tipster.trim() || typeof unitSize !== "number" || !(unitSize > 0)) continue;
+    if (out.some((o) => sameTipster(o.tipster, tipster))) continue;
+    const from = typeof since === "string" && !Number.isNaN(Date.parse(since)) ? new Date(since).toISOString() : ALL_TIME;
+    out.push({ tipster: tipster.trim(), unitSize, since: from, history: parseUnitSizeHistory(history) });
+  }
+  return out;
+}
+
+export function findTipsterUnitSize(list: TipsterUnitSize[] | undefined, tipster: string | null | undefined): TipsterUnitSize | null {
+  return (tipster && list?.find((t) => sameTipster(t.tipster, tipster))) || null;
+}
+
+/** What a unit was worth for this tipster's bet at `at`. */
+export function tipsterUnitSizeAt(s: UnitSettings & { nbaUnitSizes?: TipsterUnitSize[] }, tipster: string | null | undefined, at: string | Date | null | undefined): number {
+  const own = findTipsterUnitSize(s.nbaUnitSizes, tipster);
+  const t = at instanceof Date ? at.getTime() : at ? Date.parse(at) : NaN;
+  if (!own || (!Number.isNaN(t) && t < Date.parse(own.since))) return unitSizeAt(s, at);
+  return unitSizeAt({ unitSize: own.unitSize, unitSizeHistory: own.history }, at);
+}
+
+/** A tipster's unit size changed: their bets before now keep the old one (unless it was only just set). */
+export function changeTipsterUnitSize(t: TipsterUnitSize, unitSize: number, now: Date): TipsterUnitSize {
+  const justSet = !t.history.length && now.getTime() - Date.parse(t.since) < CORRECTION_MS;
+  return { ...t, unitSize, history: justSet ? [] : historyAfterChange(t.history, t.unitSize, unitSize, now, true) };
+}

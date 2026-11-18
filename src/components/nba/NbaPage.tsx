@@ -12,7 +12,7 @@ import { canonicalBookmaker, knownTipsters } from "@/lib/nba/aliases";
 import { NBA_MARKET_LABEL } from "@/lib/nba/parse";
 import type { NbaBetDTO } from "@/lib/nba/service";
 import { ProfitAmount, ResultChip } from "../BetBits";
-import { unitSizeAt } from "@/lib/bets/unit-size";
+import { findTipsterUnitSize, tipsterUnitSizeAt, unitSizeAt } from "@/lib/bets/unit-size";
 import { DailyCalendar } from "../DailyCalendar";
 import { ProfitChart } from "../ProfitChart";
 import { useSettings } from "../SettingsProvider";
@@ -74,7 +74,8 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
   };
 
   // Each bet with what a unit was worth on its day, so money totals add up what the bets really paid.
-  const dated = useMemo(() => bets.map((b) => ({ ...b, startsAt: b.placedAt, unitSize: unitSizeAt(settings, b.placedAt) })), [bets, settings]);
+  // NBA bets: the tipster's own unit size when you've set one (Settings → NBA).
+  const dated = useMemo(() => bets.map((b) => ({ ...b, startsAt: b.placedAt, unitSize: tipsterUnitSizeAt(settings, b.tipster, b.placedAt) })), [bets, settings]);
   const sizedTableTennis = useMemo(() => tableTennis.map((r) => ({ ...r, unitSize: unitSizeAt(settings, r.startsAt) })), [tableTennis, settings]);
   const tipsters = useMemo(() => knownTipsters(settings.nbaTipsters, bets.map((b) => b.tipster)), [settings.nbaTipsters, bets]);
   const nba = useMemo(() => summarize(dated), [dated]);
@@ -139,7 +140,9 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
           </h1>
           <p className="text-xs text-muted">
             Tipsters&apos; picks, tracked in units · 1u = {settings.currency}
-            {settings.unitSize} · separate from table tennis
+            {settings.unitSize}
+            {settings.nbaUnitSizes.length ? ` (${settings.nbaUnitSizes.map((t) => `${t.tipster} ${settings.currency}${t.unitSize}`).join(", ")})` : ""} · separate from table
+            tennis
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
             <Zap className="h-3 w-3 text-accent" /> Player props, moneylines, spreads and totals are settled automatically from ESPN about an hour after the game ends (or press Check results).
@@ -207,7 +210,16 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
         {byTipster.length === 0 ? (
           <p className="px-3 py-8 text-center text-sm text-muted">No NBA bets yet - scan a tipster&apos;s picks or add one.</p>
         ) : (
-          <SummaryTable rows={byTipster} label="Tipster" active={tipster} onSelect={(k) => setTipster(tipster === k ? null : k)} />
+          <SummaryTable
+            rows={byTipster}
+            label="Tipster"
+            active={tipster}
+            onSelect={(k) => setTipster(tipster === k ? null : k)}
+            note={(k) => {
+              const own = findTipsterUnitSize(settings.nbaUnitSizes, k);
+              return own ? `1u = ${settings.currency}${own.unitSize}` : null;
+            }}
+          />
         )}
       </section>
 
@@ -361,7 +373,7 @@ export function NbaPage({ initial, tableTennis, firstVisit = false }: { initial:
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       {b.profit !== null ? (
-                        <ProfitAmount units={b.profit} at={b.placedAt} />
+                        <ProfitAmount units={b.profit} money={b.profit === null ? null : b.profit * b.unitSize} />
                       ) : b.result === "WON" ? (
                         <span className="text-[11px] text-warn">add odds</span>
                       ) : (
@@ -412,11 +424,14 @@ export function SummaryTable({
   label,
   active,
   onSelect,
+  note,
 }: {
   rows: { key: string; summary: ProfitSummary }[];
   label: string;
   active?: string | null;
   onSelect?: (key: string) => void;
+  /** Small text after the name (e.g. a tipster's unit size). */
+  note?: (key: string) => string | null;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -442,6 +457,7 @@ export function SummaryTable({
                 ) : (
                   key
                 )}
+                {note?.(key) && <span className="ml-1.5 text-[11px] font-normal text-muted">{note(key)}</span>}
               </td>
               <td className="px-3 py-1.5 text-right tabular">
                 {summary.bets}

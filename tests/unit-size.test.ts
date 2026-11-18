@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyAfterChange, parseUnitSizeHistory, unitSizeAt } from "@/lib/bets/unit-size";
+import { ALL_TIME, changeTipsterUnitSize, historyAfterChange, parseTipsterUnitSizes, parseUnitSizeHistory, tipsterUnitSizeAt, unitSizeAt } from "@/lib/bets/unit-size";
 import { computeProfit, formatMoneyOf, summarize, type BetResult } from "@/lib/bets/profit";
 import { cumulativeSeries, dailyPL } from "@/lib/bets/daily";
 
@@ -83,5 +83,42 @@ describe("money totals add up what each bet paid", () => {
       [1, 200],
       [0, -100],
     ]);
+  });
+});
+
+describe("NBA: a unit size per tipster", () => {
+  const now = new Date("2026-11-19T00:00:00.000Z");
+  const s = {
+    unitSize: 300,
+    unitSizeHistory: [{ until: switchAt, unitSize: 200 }],
+    nbaUnitSizes: parseTipsterUnitSizes([
+      { tipster: "ADP", unitSize: 200, since: now.toISOString(), history: [] },
+      { tipster: "Tyvan", unitSize: 300, since: ALL_TIME, history: [] },
+      { tipster: "A1", unitSize: 300, since: now.toISOString(), history: [] },
+      { tipster: "adp", unitSize: 999, since: ALL_TIME, history: [] }, // same tipster twice: the first counts
+    ]),
+  };
+
+  it("their bets from when it was set use it; earlier ones and other tipsters use yours", () => {
+    expect(s.nbaUnitSizes).toHaveLength(3);
+    expect(tipsterUnitSizeAt(s, "ADP", "2026-11-20T00:00:00Z")).toBe(200);
+    expect(tipsterUnitSizeAt(s, "adp ", "2026-11-20T00:00:00Z")).toBe(200); // however it's written
+    expect(tipsterUnitSizeAt(s, "ADP", "2026-11-10T00:00:00Z")).toBe(200); // before: yours then ($200)
+    expect(tipsterUnitSizeAt(s, "A1", "2026-11-18T12:00:00Z")).toBe(300); // before it was set: yours then ($300)
+    expect(tipsterUnitSizeAt(s, "A1", "2026-11-10T00:00:00Z")).toBe(200);
+    expect(tipsterUnitSizeAt(s, "Tyvan", "2026-11-10T00:00:00Z")).toBe(300); // "also their earlier bets"
+    expect(tipsterUnitSizeAt(s, "Someone", "2026-11-20T00:00:00Z")).toBe(300);
+    expect(tipsterUnitSizeAt(s, null, "2026-11-10T00:00:00Z")).toBe(200);
+  });
+
+  it("changing a tipster's unit size keeps the old one for their earlier bets", () => {
+    const adp = s.nbaUnitSizes[0];
+    const later = new Date(now.getTime() + 7 * 86_400_000);
+    const raised = changeTipsterUnitSize(adp, 250, later);
+    expect(raised).toMatchObject({ unitSize: 250, history: [{ until: later.toISOString(), unitSize: 200 }] });
+    const t = { ...s, nbaUnitSizes: [raised] };
+    expect([tipsterUnitSizeAt(t, "ADP", "2026-11-21T00:00:00Z"), tipsterUnitSizeAt(t, "ADP", "2026-11-27T00:00:00Z")]).toEqual([200, 250]);
+    // Fixed right after setting it: just the new amount.
+    expect(changeTipsterUnitSize(adp, 220, new Date(now.getTime() + 60_000))).toMatchObject({ unitSize: 220, history: [] });
   });
 });
