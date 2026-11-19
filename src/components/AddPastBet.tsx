@@ -16,8 +16,12 @@ import { LeagueSelect } from "./LeagueSelect";
 import { PlayerSearch } from "./PlayerSearch";
 import { leagueIndexOf, type PastSuggestions } from "@/lib/bets/past-games";
 import { guessCompetition } from "@/lib/bets/league-index";
+import { unitSizeAt } from "@/lib/bets/unit-size";
 
 type Result = "WON" | "LOST" | "VOID" | "PENDING";
+
+/** The match hasn't started yet (checked when saving). */
+const inFuture = (iso: string) => Date.parse(iso) > Date.now();
 
 /**
  * Profit page: record bets on matches that were already played (no alarm),
@@ -91,15 +95,54 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
     }
   };
 
+  // The stake in units or in money: whichever you typed last; the other follows (at what a unit was worth on the match's day).
+  const [money, setMoney] = useState<string | null>(null);
+  const unitSize = unitSizeAt(settings, fromLocalInputValue(f.startsAt, tz));
+  const moneyNum = money === null ? null : Number(money.replace(/[^\d.]/g, ""));
+  const unitsFromMoney = moneyNum && moneyNum > 0 && unitSize > 0 ? Math.round((moneyNum / unitSize) * 10_000) / 10_000 : null;
+  const unitsNum = Number(f.stake);
+  const unitsShown = money === null ? f.stake : unitsFromMoney === null ? "" : String(unitsFromMoney);
+  const moneyShown = money ?? (f.stake.trim() && Number.isFinite(unitsNum) && unitsNum > 0 ? String(round2(unitsNum * unitSize)) : "");
+
+  // The same bet on several accounts at different odds ($100 @ 1.90 + $80 @ 1.87): one stake, at the odds the
+  // total pays out at ((100 x 1.90 + 80 x 1.87) / 180 = 1.8867). Null = one bet.
+  const [accounts, setAccounts] = useState<{ money: string; odds: string }[] | null>(null);
+  const amount = (v: string) => {
+    const n = Number(v.replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const placed = (accounts ?? []).map((a) => ({ money: amount(a.money), odds: amount(a.odds) })).filter((a) => a.money > 0);
+  const totalMoney = round2(placed.reduce((sum, a) => sum + a.money, 0));
+  const combinedUnits = totalMoney > 0 && unitSize > 0 ? Math.round((totalMoney / unitSize) * 10_000) / 10_000 : null;
+  const combinedOdds = placed.length && placed.every((a) => a.odds > 1) ? Math.round((placed.reduce((sum, a) => sum + a.money * a.odds, 0) / totalMoney) * 10_000) / 10_000 : null;
+  const startAccounts = () => setAccounts([{ money: moneyShown, odds: f.odds }, { money: "", odds: "" }]);
+  const setAccount = (i: number, patch: Partial<{ money: string; odds: string }>) => setAccounts((list) => list && list.map((a, j) => (j === i ? { ...a, ...patch } : a)));
+  const removeAccount = (i: number) => {
+    const rest = (accounts ?? []).filter((_, j) => j !== i);
+    if (rest.length > 1) return setAccounts(rest);
+    // Back to one bet.
+    const only = rest[0];
+    setAccounts(null);
+    if (only) {
+      setMoney(only.money.trim() ? only.money : null);
+      set({ odds: only.odds });
+    }
+  };
+
   const save = async () => {
     const startsAt = fromLocalInputValue(f.startsAt, tz);
-    const stake = Number(f.stake);
-    const odds = f.odds.trim() ? Number(f.odds) : null;
+    const stake = accounts ? (combinedUnits ?? NaN) : money === null ? Number(f.stake) : (unitsFromMoney ?? NaN);
+    const odds = accounts ? combinedOdds : f.odds.trim() ? Number(f.odds) : null;
+    if (accounts) {
+      if (!placed.length) return setError("Enter how much you bet on each account.");
+      if (placed.some((a) => a.odds && a.odds <= 1)) return setError("Odds must be decimal odds above 1.00 (e.g. 1.90).");
+      if (f.result === "WON" && placed.some((a) => !a.odds)) return setError("Enter the odds of each bet so the win can be counted.");
+    }
     const line = f.pointsLine.trim() ? Number(f.pointsLine) : null;
     if (!f.player1.trim() || !f.player2.trim()) return setError("Enter both players.");
     if (!startsAt) return setError("Enter the date and time of the match.");
-    if (new Date(startsAt).getTime() > Date.now()) return setError("That's in the future - add upcoming matches with Upload or Manual so you get the alarm.");
-    if (!Number.isFinite(stake) || stake <= 0) return setError("Units must be a number above 0.");
+    if (inFuture(startsAt)) return setError("That's in the future - add upcoming matches with Upload or Manual so you get the alarm.");
+    if (!Number.isFinite(stake) || stake <= 0) return setError(money === null && !accounts ? "Units must be a number above 0." : "Enter the amount you staked, e.g. 150.");
     if (odds === null && f.result === "WON") return setError("Enter the odds so the profit of a win can be counted.");
     if (odds !== null && (!Number.isFinite(odds) || odds <= 1)) return setError("Odds must be decimal odds above 1.00 (e.g. 1.85).");
     if (line !== null && !Number.isFinite(line)) return setError("The line must be a number, e.g. 74.5 (or -4.5 for a spread).");
@@ -117,7 +160,14 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
           playType: f.playType,
           selection: f.selection || null,
           pointsLine: line,
-          stake: round2(stake),
+          // Kept to 4 decimals so an amount typed in money ($145 at $300 a unit) stays exact.
+          stake: Math.round(stake * 10_000) / 10_000,
+          // Typed in money: the single bets it's made of, so the same bets on a scanned slip later aren't counted twice.
+          ...(accounts
+            ? { parts: placed.map((a) => ({ stake: Math.round((a.money / unitSize) * 10_000) / 10_000, odds: a.odds > 1 ? a.odds : null, result: f.result })) }
+            : money !== null && unitsFromMoney
+              ? { parts: [{ stake: unitsFromMoney, odds, result: f.result }] }
+              : {}),
           odds,
           result: f.result,
         },
@@ -217,17 +267,108 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
         </label>
         <label className="w-20">
           <span className="label">Units</span>
-          <input className="input py-1.5 tabular" inputMode="decimal" value={f.stake} onChange={(e) => set({ stake: e.target.value })} aria-label="Units" />
+          <input
+            className="input py-1.5 tabular"
+            inputMode="decimal"
+            value={accounts ? (combinedUnits === null ? "" : String(combinedUnits)) : unitsShown}
+            disabled={Boolean(accounts)}
+            onChange={(e) => {
+              set({ stake: e.target.value });
+              setMoney(null);
+            }}
+            aria-label="Units"
+          />
+        </label>
+        <label className="w-32">
+          <span className="label" title="Type the amount you staked and it's turned into units">
+            {settings.currency} · 1u = {settings.currency}
+            {unitSize}
+          </span>
+          <input
+            className="input py-1.5 tabular"
+            inputMode="decimal"
+            placeholder={String(unitSize)}
+            value={accounts ? (totalMoney ? String(totalMoney) : "") : moneyShown}
+            disabled={Boolean(accounts)}
+            onChange={(e) => setMoney(e.target.value)}
+            aria-label={`Stake in ${settings.currency}`}
+          />
         </label>
         <label className="w-24">
           <span className="label">Odds</span>
-          <input className="input py-1.5 tabular" inputMode="decimal" placeholder="1.85" value={f.odds} onChange={(e) => set({ odds: e.target.value })} aria-label="Odds" />
+          <input
+            className="input py-1.5 tabular"
+            inputMode="decimal"
+            placeholder={accounts ? "combined" : "1.85"}
+            value={accounts ? (combinedOdds === null ? "" : String(combinedOdds)) : f.odds}
+            disabled={Boolean(accounts)}
+            onChange={(e) => set({ odds: e.target.value })}
+            aria-label="Odds"
+          />
         </label>
+        {!accounts && (
+          <button type="button" className="pb-2 text-[11px] text-accent hover:underline" onClick={startAccounts} title="The same bet on several accounts at different odds">
+            + Another account
+          </button>
+        )}
         <div>
           <span className="label">Result</span>
           {seg(f.result, [["WON", "Won"], ["LOST", "Lost"], ["VOID", "Void"], ["PENDING", "Not settled"]] as const, (v) => set({ result: v }), "Result")}
         </div>
       </div>
+      {accounts && (
+        <div className="mt-3 rounded-lg border border-line p-2" aria-label="Bets on different accounts">
+          <p className="label">The same bet on different accounts · combined into one</p>
+          <div className="flex flex-col gap-1.5">
+            {accounts.map((a, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="w-12 text-xs text-muted">Bet {i + 1}</span>
+                <span className="text-muted">{settings.currency}</span>
+                <input
+                  className="input w-24 py-1 tabular"
+                  inputMode="decimal"
+                  placeholder="100"
+                  value={a.money}
+                  onChange={(e) => setAccount(i, { money: e.target.value })}
+                  aria-label={`Bet ${i + 1} amount`}
+                />
+                <span className="text-muted">@</span>
+                <input
+                  className="input w-20 py-1 tabular"
+                  inputMode="decimal"
+                  placeholder="1.90"
+                  value={a.odds}
+                  onChange={(e) => setAccount(i, { odds: e.target.value })}
+                  aria-label={`Bet ${i + 1} odds`}
+                />
+                <button type="button" className="rounded-md p-1 text-muted hover:text-under" onClick={() => removeAccount(i)} aria-label={`Remove bet ${i + 1}`}>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            {accounts.length < 10 && (
+              <button type="button" className="text-accent hover:underline" onClick={() => setAccounts([...accounts, { money: "", odds: "" }])}>
+                + Another account
+              </button>
+            )}
+            {combinedUnits !== null && (
+              <span className="text-muted">
+                = {settings.currency}
+                {totalMoney} → <span className="font-semibold text-text">{combinedUnits}u</span>
+                {combinedOdds !== null && (
+                  <>
+                    {" "}
+                    @ <span className="font-semibold text-text">{combinedOdds}</span> (pays {settings.currency}
+                    {round2(placed.reduce((sum, a) => sum + a.money * a.odds, 0)).toFixed(2)} if it wins)
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {error && <p className="mt-2 text-xs text-under">{error}</p>}
       <div className="mt-4 flex items-center gap-2">
         <button className="btn-primary" disabled={busy} onClick={() => void save()}>
