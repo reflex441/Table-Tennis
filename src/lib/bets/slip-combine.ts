@@ -77,3 +77,16 @@ export function combineSlipParts(parts: SlipPart[]): CombinedSlip {
   const result: BetResult = !settled ? "PENDING" : net > 0 ? "WON" : net < 0 ? "LOST" : "VOID";
   return { stake: all.stake, odds: null, result, pointsLine: biggest.pointsLine, legs: groups };
 }
+
+/**
+ * The same bet on several accounts ($100 @ 1.90 + $80 @ 1.87) as one: the
+ * total stake, the odds the total pays out at ((190 + 149.6) / 180 = 1.8867)
+ * and that payout. Odds and payout are null until every bet has its odds.
+ */
+export function combineStakes(bets: { stake: number; odds: number | null }[]): { stake: number; odds: number | null; payout: number | null } {
+  const placed = bets.filter((b) => b.stake > 0);
+  const stake = Math.round(placed.reduce((sum, b) => sum + b.stake, 0) * 100) / 100;
+  const priced = placed.length > 0 && placed.every((b) => b.odds !== null && b.odds > 1);
+  const payout = priced ? Math.round(placed.reduce((sum, b) => sum + b.stake * b.odds!, 0) * 100) / 100 : null;
+  return { stake, odds: payout !== null && stake > 0 ? round4(placed.reduce((sum, b) => sum + b.stake * b.odds!, 0) / stake) : null, payout };
+}

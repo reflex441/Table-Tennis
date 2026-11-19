@@ -110,3 +110,14 @@ describe("bot plays are Over / Under only", () => {
     expect(slipPlayType({ playType: "BOT", selection: null }, "OVER")).toBe("BOT");
   });
 });
+
+describe("the same bet on several accounts", () => {
+  it("one stake at the odds the total pays out at", async () => {
+    const { combineStakes } = await import("@/lib/bets/slip-combine");
+    expect(combineStakes([{ stake: 100, odds: 1.9 }, { stake: 80, odds: 1.87 }])).toEqual({ stake: 180, odds: 1.8867, payout: 339.6 });
+    // Empty rows don't count; a bet without odds leaves the odds open.
+    expect(combineStakes([{ stake: 100, odds: 1.9 }, { stake: 0, odds: null }])).toEqual({ stake: 100, odds: 1.9, payout: 190 });
+    expect(combineStakes([{ stake: 100, odds: 1.9 }, { stake: 50, odds: null }])).toEqual({ stake: 150, odds: null, payout: null });
+    expect(combineStakes([])).toEqual({ stake: 0, odds: null, payout: null });
+  });
+});

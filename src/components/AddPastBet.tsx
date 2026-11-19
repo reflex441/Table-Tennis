@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Plus, ScanText, X } from "lucide-react";
+import { Calculator, Check, Loader2, Plus, ScanText, X } from "lucide-react";
 import { SlipScanner } from "./SlipScanner";
+import { BetCalculator } from "./BetCalculator";
+import { combineStakes } from "@/lib/bets/slip-combine";
 import { DateTime } from "luxon";
 import { api } from "@/lib/client-api";
 import { fromLocalInputValue } from "@/lib/format";
@@ -28,11 +30,15 @@ const inFuture = (iso: string) => Date.parse(iso) > Date.now();
  * typed in by hand or read from bookmaker bet-slip screenshots.
  */
 export function AddPastBet() {
-  const [open, setOpen] = useState<null | "form" | "slips">(null);
+  const [open, setOpen] = useState<null | "form" | "slips" | "calc">(null);
   if (open === "form") return <PastBetForm onClose={() => setOpen(null)} />;
   if (open === "slips") return <SlipScanner onClose={() => setOpen(null)} />;
+  if (open === "calc") return <BetCalculator onClose={() => setOpen(null)} />;
   return (
     <div className="flex flex-wrap justify-end gap-2">
+      <button className="btn-ghost" onClick={() => setOpen("calc")}>
+        <Calculator className="h-4 w-4" /> Bet calculator
+      </button>
       <button className="btn-ghost" onClick={() => setOpen("slips")}>
         <ScanText className="h-4 w-4" /> Scan bet slips
       </button>
@@ -112,9 +118,10 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
     return Number.isFinite(n) && n > 0 ? n : 0;
   };
   const placed = (accounts ?? []).map((a) => ({ money: amount(a.money), odds: amount(a.odds) })).filter((a) => a.money > 0);
-  const totalMoney = round2(placed.reduce((sum, a) => sum + a.money, 0));
+  const combined = combineStakes(placed.map((a) => ({ stake: a.money, odds: a.odds || null })));
+  const totalMoney = combined.stake;
   const combinedUnits = totalMoney > 0 && unitSize > 0 ? Math.round((totalMoney / unitSize) * 10_000) / 10_000 : null;
-  const combinedOdds = placed.length && placed.every((a) => a.odds > 1) ? Math.round((placed.reduce((sum, a) => sum + a.money * a.odds, 0) / totalMoney) * 10_000) / 10_000 : null;
+  const combinedOdds = combined.odds;
   const startAccounts = () => setAccounts([{ money: moneyShown, odds: f.odds }, { money: "", odds: "" }]);
   const setAccount = (i: number, patch: Partial<{ money: string; odds: string }>) => setAccounts((list) => list && list.map((a, j) => (j === i ? { ...a, ...patch } : a)));
   const removeAccount = (i: number) => {
@@ -361,7 +368,7 @@ function PastBetForm({ onClose }: { onClose: () => void }) {
                   <>
                     {" "}
                     @ <span className="font-semibold text-text">{combinedOdds}</span> (pays {settings.currency}
-                    {round2(placed.reduce((sum, a) => sum + a.money * a.odds, 0)).toFixed(2)} if it wins)
+                    {(combined.payout ?? 0).toFixed(2)} if it wins)
                   </>
                 )}
               </span>
